@@ -31,12 +31,19 @@ public final class ApolloDebugScreen extends GuiScreen {
 		this.buttonList.add(new GuiButton(1, this.width - 154, this.height - 24, 150, 20,
 				"Verbose log: " + (Apollo.isDebug() ? "ON" : "OFF")));
 		this.buttonList.add(new GuiButton(0, 4, this.height - 24, 100, 20, "Back"));
+		this.buttonList.add(new GuiButton(2, 108, this.height - 24, 110, 20, "Preview features"));
+		this.buttonList.add(new GuiButton(3, 222, this.height - 24, 80, 20, "Clear preview"));
 	}
 
 	@Override
 	protected void actionPerformed(GuiButton b) {
 		if (b.id == 0) {
 			this.mc.displayGuiScreen(parent);
+		} else if (b.id == 2) {
+			ApolloPreview.run(this.mc);
+			this.mc.displayGuiScreen(null);
+		} else if (b.id == 3) {
+			ApolloPreview.clear();
 		} else if (b.id == 1) {
 			boolean on = !Apollo.isDebug();
 			Apollo.setDebug(on);

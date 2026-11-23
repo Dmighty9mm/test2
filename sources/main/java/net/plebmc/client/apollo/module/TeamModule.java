@@ -64,6 +64,10 @@ public final class TeamModule extends ApolloModule {
                 return members.get(uuid);
         }
 
+        public int size() {
+                return members.size();
+        }
+
         @Override
         public void reset() {
                 members.clear();

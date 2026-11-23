@@ -30,23 +30,30 @@ public final class ModMenuScreen extends GuiScreen {
 	public void initGui() {
 		this.buttonList.clear();
 		List<Mod> mods = PlebClient.mods().all();
-		int colW = 150;
 		int gap = 4;
 		int rowH = 20 + gap;
-		int rows = (mods.size() + 1) / 2;
-		int x0 = this.width / 2 - colW - gap / 2;
-		int y0 = Math.max(34, this.height / 2 - (rows * rowH + 2 * rowH) / 2);
+		// two columns when they fit on screen, else three narrower ones
+		int cols = 2;
+		int colW = 150;
+		if (34 + ((mods.size() + 1) / 2 + 2) * rowH + 6 > this.height && this.width >= 3 * 126 + 8) {
+			cols = 3;
+			colW = 126;
+		}
+		int rows = (mods.size() + cols - 1) / cols;
+		int x0 = this.width / 2 - (cols * colW + (cols - 1) * gap) / 2;
+		int y0 = Math.max(30, this.height / 2 - (rows * rowH + 2 * rowH) / 2);
 		for (int i = 0; i < mods.size(); i++) {
 			Mod m = mods.get(i);
-			String state = m.isBlockedByServer() ? "Blocked by server" : m.isEnabled() ? "ON" : "OFF";
-			GuiButton b = new GuiButton(i, x0 + (i % 2) * (colW + gap), y0 + (i / 2) * rowH, colW, 20,
+			String state = m.isBlockedByServer() ? "Blocked" : m.isEnabled() ? "ON" : "OFF";
+			GuiButton b = new GuiButton(i, x0 + (i % cols) * (colW + gap), y0 + (i / cols) * rowH, colW, 20,
 					m.name() + ": " + state);
 			b.enabled = !m.isBlockedByServer();
 			this.buttonList.add(b);
 		}
 		int by = y0 + rows * rowH + 6;
-		this.buttonList.add(new GuiButton(ID_EDITOR, x0, by, colW, 20, "Edit HUD layout"));
-		this.buttonList.add(new GuiButton(ID_DEBUG, x0 + colW + gap, by, colW, 20, "Apollo debug"));
+		int half = this.width / 2;
+		this.buttonList.add(new GuiButton(ID_EDITOR, half - 150 - gap / 2, by, 150, 20, "Edit HUD layout"));
+		this.buttonList.add(new GuiButton(ID_DEBUG, half + gap / 2, by, 150, 20, "Apollo debug"));
 		this.buttonList.add(new GuiButton(ID_DONE, this.width / 2 - 100, by + rowH, 200, 20, "Done"));
 	}
 

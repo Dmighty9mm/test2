@@ -65,6 +65,7 @@ public final class HudEditorScreen extends GuiScreen {
 		// topmost (last drawn) element under the cursor
 		Mod hit = null;
 		int[] hitRect = null;
+		int hitW = 0;
 		for (Mod m : PlebClient.mods().all()) {
 			if (!m.hasHud() || !m.isEnabled()) {
 				continue;
@@ -77,11 +78,12 @@ public final class HudEditorScreen extends GuiScreen {
 			if (mouseX >= p[0] && mouseX < p[0] + box.width && mouseY >= p[1] && mouseY < p[1] + box.height) {
 				hit = m;
 				hitRect = p;
+				hitW = box.width;
 			}
 		}
 		if (hit != null) {
 			dragging = hit;
-			grabDX = mouseX - hitRect[0];
+			grabDX = mouseX - (hitRect[0] + (hit.centerAnchored() ? hitW / 2 : 0));
 			grabDY = mouseY - hitRect[1];
 		}
 	}

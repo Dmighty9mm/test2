@@ -192,6 +192,16 @@ public final class ProtoJson {
                 throw new ProtoException(f.name + ": expected number");
         }
 
+        /** 64-bit pattern as an unsigned decimal (TeaVM has no Long.toUnsignedString). */
+        static String unsigned64(long v) {
+                if (v >= 0) {
+                        return String.valueOf(v);
+                }
+                long q = (v >>> 1) / 5;
+                long r = v - q * 10;
+                return String.valueOf(q) + r;
+        }
+
         /** Unsigned decimal to its 64-bit pattern (TeaVM has no Long.parseUnsignedLong). */
         static long parseUnsigned64(ProtoSchema.Field f, String str) {
                 if (str.isEmpty() || str.length() > 20
@@ -501,7 +511,7 @@ public final class ProtoJson {
                         return String.valueOf(((Number) v).longValue());
                 case 'L':
                 case 'X':
-                        return Long.toUnsignedString(((Number) v).longValue());
+                        return unsigned64(((Number) v).longValue());
                 default:
                         return v;
                 }

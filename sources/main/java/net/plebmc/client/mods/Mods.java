@@ -312,4 +312,135 @@ public final class Mods {
                         return isActive() ? 1f : 0f;
                 }
         }
+
+        // ==================== squad / performance ====================
+
+        /**
+         * Compass: a heading strip (top center by default) with a colored pip
+         * for every teammate and waypoint the server sent, so you can see where
+         * your squad is even when they're behind you.
+         */
+        public static final class Compass extends Mod {
+                public static final int WIDTH = 181;
+                public static final int HEIGHT = 18;
+                /** Degrees shown either side of straight ahead. */
+                public static final float SPAN = 90f;
+
+                /** One pip: world bearing (vanilla yaw that faces it), color, short label, distance. */
+                public static final class Marker {
+                        public final float bearing;
+                        public final int argb;
+                        public final String label;
+                        public final int distance;
+                        public final boolean waypoint;
+
+                        public Marker(float bearing, int argb, String label, int distance, boolean waypoint) {
+                                this.bearing = bearing;
+                                this.argb = argb;
+                                this.label = label;
+                                this.distance = distance;
+                                this.waypoint = waypoint;
+                        }
+                }
+
+                private List<Marker> markers = new ArrayList<>();
+
+                public Compass() {
+                        super("compass", "Compass", "Heading strip with your squad and waypoints", true, 0.5f, 0.09f);
+                }
+
+                public void setMarkers(List<Marker> m) {
+                        markers = m == null ? new ArrayList<Marker>() : m;
+                }
+
+                @Override
+                public boolean hasHud() {
+                        return true;
+                }
+
+                @Override
+                public boolean centerAnchored() {
+                        return true;
+                }
+
+                /** Signed angle from {@code yaw} to {@code bearing}, -180..180. */
+                public static float relative(float bearing, float yaw) {
+                        float d = (bearing - yaw) % 360f;
+                        if (d > 180f) {
+                                d -= 360f;
+                        } else if (d < -180f) {
+                                d += 360f;
+                        }
+                        return d;
+                }
+
+                private static final String[] NAMES = { "S", "SW", "W", "NW", "N", "NE", "E", "SE" };
+
+                @Override
+                public HudBox layout(ClientView v, HudBox.Measure m) {
+                        HudBox b = new HudBox();
+                        int mid = WIDTH / 2;
+                        float yaw = v.yaw();
+                        b.rect(0, 0, WIDTH, HEIGHT, 0x50000000);
+                        // ticks every 15 degrees, letters every 45
+                        for (int deg = 0; deg < 360; deg += 15) {
+                                float rel = relative(deg, yaw);
+                                if (Math.abs(rel) > SPAN) {
+                                        continue;
+                                }
+                                int x = mid + Math.round(rel * (mid - 4) / SPAN);
+                                if (deg % 45 == 0) {
+                                        String n = NAMES[deg / 45];
+                                        boolean card = n.length() == 1;
+                                        b.text(n, x, 5, card ? (n.equals("N") ? 0xFFFF5555 : 0xFFFFFFFF) : 0xFFAAAAAA, true);
+                                } else {
+                                        b.rect(x, HEIGHT - 5, 1, 3, 0x90FFFFFF);
+                                }
+                        }
+                        // squad + waypoint pips
+                        for (int i = 0; i < markers.size(); i++) {
+                                Marker mk = markers.get(i);
+                                float rel = relative(mk.bearing, yaw);
+                                boolean edge = Math.abs(rel) > SPAN;
+                                float clamped = Math.max(-SPAN, Math.min(SPAN, rel));
+                                int x = mid + Math.round(clamped * (mid - 4) / SPAN);
+                                int c = mk.argb | 0xFF000000;
+                                if (mk.waypoint) {
+                                        // diamond
+                                        b.rect(x - 1, 0, 3, 1, c);
+                                        b.rect(x - 2, 1, 5, 2, c);
+                                        b.rect(x - 1, 3, 3, 1, c);
+                                } else {
+                                        b.rect(x - 2, 0, 5, 4, edge ? (c & 0x00FFFFFF) | 0x90000000 : c);
+                                        b.rect(x - 1, 4, 3, 1, c);
+                                }
+                        }
+                        // center notch
+                        b.rect(mid, HEIGHT - 2, 1, 2, 0xFFFFFF55);
+                        b.rect(mid - 1, HEIGHT - 1, 3, 1, 0xFFFFFF55);
+                        return b;
+                }
+        }
+
+        /**
+         * Squad ping: Sneak + F sends the "swap hands" action newer servers
+         * use for pings (1.8 has no off hand, so the key does nothing else).
+         */
+        public static final class SquadPing extends Mod {
+                public SquadPing() {
+                        super("squad-ping", "Squad Ping", "Sneak + F marks a spot for your squad", true, 0f, 0f);
+                }
+        }
+
+        /**
+         * FPS Boost: switches the heavy video settings to their fastest
+         * values while on (clouds, particles, fancy graphics, smooth lighting,
+         * entity shadows, FXAA, frame cap) and puts your own values back when
+         * turned off.
+         */
+        public static final class FpsBoost extends Mod {
+                public FpsBoost() {
+                        super("fps-boost", "FPS Boost", "Fastest video settings (restored when off)", false, 0f, 0f);
+                }
+        }
 }

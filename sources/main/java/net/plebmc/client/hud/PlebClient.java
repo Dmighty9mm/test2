@@ -191,7 +191,43 @@ public final class PlebClient {
 		if (key == mc.gameSettings.keyBindSprint.getKeyCode()) {
 			mods.toggleSprint.onSprintKey();
 		}
+		if (key == KeyboardConstants.KEY_F && mc.gameSettings.keyBindSneak.isKeyDown()) {
+			squadPing();
+		}
 		return false;
+	}
+
+	private static long lastPing;
+
+	/**
+	 * Sneak + F: PlebNite (and other modern servers) mark the block you look
+	 * at for your squad when you press the swap-hands key while sneaking.
+	 * 1.8 has no off hand, so this sends that action itself: the player
+	 * digging packet with action 6 (SWAP_ITEM_WITH_OFFHAND in 1.9+), which the
+	 * server's version translator passes through. Only sent to servers that
+	 * speak Apollo (never to a plain 1.8 server, which doesn't know action 6).
+	 */
+	static boolean squadPing() {
+		if (!mods.squadPing.isActive() || mc.isSingleplayer() || !Apollo.isServerApollo()) {
+			return false;
+		}
+		long now = System.currentTimeMillis();
+		if (now - lastPing < 300L) {
+			return false;
+		}
+		lastPing = now;
+		NetHandlerPlayClient nh = mc.getNetHandler();
+		if (nh == null || nh.getNetworkManager() == null) {
+			return false;
+		}
+		// action 6, block position 0/0/0 (packed long), face 0 (down): what a 1.9+ client sends
+		byte[] body = { 6, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+		try {
+			return nh.getNetworkManager().sendRawPacket(0x07, body);
+		} catch (Throwable t) {
+			LOG.warn("squad ping failed: " + t);
+			return false;
+		}
 	}
 
 	/** In-world attack (0) or use (1) click. */
@@ -251,6 +287,11 @@ public final class PlebClient {
 		int guiW = res.getScaledWidth();
 		int guiH = res.getScaledHeight();
 		try {
+			FpsBoost.sync(mc, mods.fpsBoost.isActive());
+		} catch (Throwable t) {
+			LOG.warn("FPS boost failed: " + t);
+		}
+		try {
 			Apollo.tick();
 			long now = Apollo.now();
 			Entity cam = mc.getRenderViewEntity();
@@ -267,7 +308,7 @@ public final class PlebClient {
 			float fov = mc.entityRenderer.currentProjMatrixFOV > 1f ? mc.entityRenderer.currentProjMatrixFOV
 					: mc.gameSettings.fovSetting;
 			ApolloOverlay.INSTANCE.render(guiW, guiH, now, have, ex, ey, ez, yaw, pitch, fov, mc.displayWidth,
-					mc.displayHeight);
+					mc.displayHeight, partialTicks);
 			if (!(mc.currentScreen instanceof HudEditorScreen) && !mc.gameSettings.showDebugInfo) {
 				for (Mod m : mods.all()) {
 					if (m.hasHud() && m.isActive()) {

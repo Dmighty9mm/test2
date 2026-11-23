@@ -442,6 +442,11 @@ public class GlStateManager {
 		}
 	}
 
+	/** PlebMc: whether fog is on, so a pass that turns it off can restore it. */
+	public static final boolean isFogEnabled() {
+		return stateFog;
+	}
+
 	public static final void enableFog() {
 		stateFog = true;
 	}
@@ -676,6 +681,11 @@ public class GlStateManager {
 			_wglClearDepth(depth);
 			clearDepth = depth;
 		}
+	}
+
+	/** PlebMc: the current clear color {r, g, b, a}, so offscreen passes can restore it. */
+	public static final float[] getClearColor() {
+		return new float[] { clearColorR, clearColorG, clearColorB, clearColorA };
 	}
 
 	public static final void clearColor(float red, float green, float blue, float alpha) {

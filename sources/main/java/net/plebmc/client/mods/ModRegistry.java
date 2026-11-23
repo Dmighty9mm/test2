@@ -32,6 +32,9 @@ public final class ModRegistry {
         public final Mods.ToggleSprint toggleSprint = add(new Mods.ToggleSprint());
         public final Mods.Zoom zoom = add(new Mods.Zoom());
         public final Mods.Fullbright fullbright = add(new Mods.Fullbright());
+        public final Mods.Compass compass = add(new Mods.Compass());
+        public final Mods.SquadPing squadPing = add(new Mods.SquadPing());
+        public final Mods.FpsBoost fpsBoost = add(new Mods.FpsBoost());
 
         private <T extends Mod> T add(T m) {
                 mods.add(m);
@@ -98,7 +101,7 @@ public final class ModRegistry {
 
         /** Top-left pixel of a HUD box, clamped fully on screen. */
         public static int[] place(Mod m, int boxW, int boxH, int screenW, int screenH) {
-                int x = Math.round(m.fx() * screenW);
+                int x = Math.round(m.fx() * screenW) - (m.centerAnchored() ? boxW / 2 : 0);
                 int y = Math.round(m.fy() * screenH);
                 x = Math.max(0, Math.min(x, screenW - boxW));
                 y = Math.max(0, Math.min(y, screenH - boxH));

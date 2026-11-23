@@ -161,6 +161,25 @@ public class EaglercraftNetworkManager {
 		PlatformNetworking.writePlayPacket(bytes);
 	}
 	
+	/**
+	 * PlebMc: sends a play packet from its id and already-encoded body, for
+	 * the few serverbound actions newer servers understand that have no 1.8
+	 * packet class (the swap-hands action behind squad pings).
+	 */
+	public boolean sendRawPacket(int packetId, byte[] body) {
+		if(!isChannelOpen()) {
+			return false;
+		}
+		temporaryBuffer.clear();
+		temporaryBuffer.writeVarIntToBuffer(packetId);
+		temporaryBuffer.writeBytes(body);
+		int len = temporaryBuffer.writerIndex();
+		byte[] bytes = new byte[len];
+		temporaryBuffer.getBytes(0, bytes);
+		PlatformNetworking.writePlayPacket(bytes);
+		return true;
+	}
+
 	public void setNetHandler(INetHandler nethandler) {
 		this.nethandler = nethandler;
 	}

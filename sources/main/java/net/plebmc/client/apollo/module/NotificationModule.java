@@ -89,6 +89,10 @@ public final class NotificationModule extends ApolloModule {
                 return new ArrayList<>(active);
         }
 
+        public int size() {
+                return active.size();
+        }
+
         @Override
         public void reset() {
                 active.clear();

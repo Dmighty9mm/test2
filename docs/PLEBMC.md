@@ -117,12 +117,44 @@ Open the mod menu with **Right Shift** in game.
 | Toggle Sprint | `toggle-sneak` | off | tap sprint; server option `toggle-sprint=false` blocks it |
 | Zoom | `zoom` | on | hold **C** (Eaglercraft's zoom key, scroll to adjust); blocked when the server disables `zoom` |
 | Fullbright | `lighting` | off | server option `full-bright=false` blocks it; a server brightness rule wins |
+| Compass | `compass` | on | heading strip (top center) with a pip for every teammate and waypoint |
+| Squad Ping | `squad-ping` | on | **Sneak + F** sends the swap-hands action modern servers use for pings (Apollo servers only) |
+| FPS Boost | `fps-boost` | off | fastest video settings while on; your own values come back when it's off |
 
 "Edit HUD layout" lets you drag every enabled HUD element. Positions are saved as
 screen fractions in browser storage (`plebmc.mods`), so they survive resizes and
 GUI-scale changes. "Apollo debug" shows each module's state and the last 100
 messages (green handled, orange ignored, red error, cyan sent). "Verbose log"
 prints every plugin message to the browser console.
+
+## Squad and match features (PlebNite)
+
+How each PlebNite feature reaches the screen on this 1.8 client. All of them come from the
+server through the normal Apollo modules; "Apollo debug > Preview features" fakes a set of
+them around you in singleplayer so you can check every overlay without a server.
+
+| Feature | Apollo module | What this client draws |
+|---|---|---|
+| Teammate markers | team | colored chevron above each teammate (through walls), name + distance when out of range, and a pip on the Compass |
+| Teammate glow / knocked red | glow | a 1.9-style outline in the glow color, through walls (offscreen mask, grown and hollowed). Off while shaders are on |
+| Teammate nametags | nametag | the server's lines (health, KNOCKED) replace the vanilla nametag |
+| Ping waypoints, Teammate DOWN | waypoint | sky beam in the world, label + distance on screen, pip on the Compass |
+| Knocked beam | beam | sky beam in the world (HUD column fallback with shaders on) |
+| Cooldown icons | cooldown | item icon (modern item names mapped to 1.8, or guessed from the name: grapple, axe, bow), a clockwise sweep and seconds left |
+| Match timer | stopwatch | top center, under the Compass |
+| Vignette | vignette | the server's texture (vanilla vignette if missing) blended like the vanilla vignette at the server's opacity |
+| TNT countdown | tnt_countdown | seconds above primed TNT from the server's fuse (thrown TNT 40 ticks); the TNT's flash and swell follow that fuse |
+| Pop-ups | notification | top-right toasts with an accent bar and a time-left bar |
+
+**Sneak + F.** PlebNite marks a spot when a player swaps hands while sneaking. A 1.8
+client has no off hand, so the Squad Ping mod sends the 1.9+ "swap item with off hand"
+action itself (player digging packet, action 6). The version translator in front of the
+server passes it through as a swap. It is only sent to servers that speak Apollo, because
+a real 1.8 server doesn't know action 6.
+
+**Apollo protocol version.** Message tables come from lunar-apollo-protobuf 1.0.2. Newer
+fields are skipped and counted; any newer message type shows in the debug screen as
+orange "unknown".
 
 ## Testing with a real server (Spigot/Paper 1.8.8 + Apollo + EaglerXBungee)
 

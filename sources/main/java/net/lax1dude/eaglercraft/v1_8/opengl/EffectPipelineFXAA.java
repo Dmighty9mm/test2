@@ -124,6 +124,17 @@ public class EffectPipelineFXAA {
 		_wglBindFramebuffer(_GL_FRAMEBUFFER, null);
 	}
 
+	private static boolean active = false;
+
+	/**
+	 * PlebMc: re-binds the framebuffer the world is being drawn into (the FXAA
+	 * target while FXAA is on, else the default one) after drawing into an
+	 * offscreen buffer mid-frame.
+	 */
+	public static void rebindWorldTarget() {
+		_wglBindFramebuffer(_GL_FRAMEBUFFER, active ? framebuffer : null);
+	}
+
 	public static void begin(int width, int height) {
 		if(currentWidth != width || currentHeight != height) {
 			currentWidth = width;
@@ -137,6 +148,7 @@ public class EffectPipelineFXAA {
 		}
 
 		_wglBindFramebuffer(_GL_FRAMEBUFFER, framebuffer);
+		active = true;
 
 		GlStateManager.clearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		GlStateManager.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -145,6 +157,7 @@ public class EffectPipelineFXAA {
 
 	public static void end() {
 		_wglBindFramebuffer(_GL_FRAMEBUFFER, null);
+		active = false;
 
 		EaglercraftGPU.bindGLShaderProgram(shaderProgram);
 

@@ -62,6 +62,11 @@ public abstract class Mod {
                 return enabled && !isBlockedByServer();
         }
 
+        /** True when the saved x is the box's center (stays centered across screen sizes). */
+        public boolean centerAnchored() {
+                return false;
+        }
+
         /** HUD mods draw a box; functional mods (zoom, fullbright) return false. */
         public boolean hasHud() {
                 return false;
