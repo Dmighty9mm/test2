@@ -1,0 +1,211 @@
+# PlebMc: Apollo server API and client mods (EaglercraftX 1.8)
+
+PlebMc is this EaglercraftX 1.8 client with two additions:
+
+1. The client side of the **Apollo** server API, so a Bukkit/Spigot/Paper server
+   running the Apollo plugin (or speaking its JSON protocol) can drive waypoints,
+   notifications, titles, cooldowns, borders, nametags, glow and the other modules
+   below, and can force-disable client mods.
+2. PvP/QoL client mods with a mod menu, a draggable HUD editor and an Apollo debug
+   screen.
+
+> **Identity.** `lunar:apollo` and `apollo:json` are protocol identifiers needed
+> for compatibility, and they are the only places those names appear. The client
+> never presents itself as another client: the Apollo handshake carries only the
+> Minecraft version (`v1_8`), with no client brand, client version or installed-mod
+> list. `MC|Brand` stays Eaglercraft's own, and the UI says "PlebMc" /
+> "Server API". No third-party names, logos or assets ship in the UI.
+
+> **No cheats.** Nothing here gives an unfair advantage: no reach, killaura, xray,
+> ESP or similar. Apollo's only "staff mod" is X-ray, so the client refuses it.
+> Glow outlines, nametags and markers are drawn only when the server sends them.
+
+## Layout
+
+All PlebMc code lives in its own package, `sources/main/java/net/plebmc/client/`.
+Vanilla classes only get one-line hooks (in `patches/minecraft/...`).
+
+| Package | What it does |
+|---|---|
+| `network/PluginChannels` | 1.8 plugin channels: `REGISTER`/`UNREGISTER`, dispatch, payload caps (32767 B out, 1 MiB in), channel names up to 20 chars, per-connection reset |
+| `apollo/proto` | hand-written protobuf reader/writer, `google.protobuf.Any`, proto3 JSON (`"@type"`, snake/camel keys, durations, Value/Struct, timestamps). Pure `java.util`, TeaVM-safe |
+| `apollo/Apollo` | channels, handshake on join, message router, debug log (last 100 messages), `OverrideConfigurableSettingsMessage` (module enable + options) |
+| `apollo/module` | one class per module: state, expiry, flood caps, `reset()` on disconnect or when the server disables it |
+| `mods` | FPS, CPS, keystrokes, coordinates, armor, potion effects, ping, clock, toggle sprint, zoom, fullbright; saved toggles + HUD positions |
+| `hud` | drawing (vanilla `Gui.drawRect` + `FontRenderer` only), Apollo overlays, entity hooks, mod menu, HUD editor, debug screen |
+
+### Vanilla hooks
+
+Every hook calls `net.plebmc.client.hud.PlebClient` or `PlebEntities`:
+
+| Vanilla class | Hook | Purpose |
+|---|---|---|
+| `Minecraft.startGame` | `PlebClient.init` | load mods + Apollo |
+| `Minecraft.runTick` (key press, no screen) | `PlebClient.onKeyDown` | Right Shift menu, toggle sprint |
+| `Minecraft.clickMouse` / `rightClickMouse` | `PlebClient.onWorldClick` | CPS counter |
+| `Minecraft.clickMouse` (miss) | `PlebClient.missPenalty` | Apollo combat `disable-miss-penalty` |
+| `Minecraft.loadWorld(null)` | `PlebClient.onLeave` | reset every module on disconnect |
+| `S01PacketJoinGame.processPacket` | `PlebClient.onJoin` | send `REGISTER` + Apollo handshake |
+| `S3FPacketCustomPayload.processPacket` | `PlebClient.onPayload` | incoming plugin messages |
+| `GuiIngame.renderGameOverlay` | `PlebClient.renderHud` | HUD mods + Apollo overlays |
+| `EntityRenderer.getFOVModifier` | `PlebClient.zoomAllowed` | the built-in C zoom follows the Zoom mod / server block |
+| `EntityRenderer.updateLightmap` | `PlebClient.gamma` | fullbright + server brightness rule |
+| `EntityRenderer.renderWorldPass` | `PlebEntities.renderGlow` | glow outlines |
+| `EntityPlayerSP` | `sprintHeld`, `borderBlocks` | toggle sprint, Apollo border cancel |
+| `FontRenderer` | `PlebClient.filterText` | nick hider |
+| `RendererLivingEntity` / `Render` | `nametag`, `nametagRange`, `flipped`, `applyFireColor` | nametags, server nametag distance, flipped mobs, colored fire |
+| `RenderPlayer` / `LayerArmorBase` | `applyLimbs`, `armorHidden` | hidden body parts and armor |
+| `RenderTNTPrimed` | `tntLabel` | TNT countdown |
+| `LayerSheepWool` | `rainbowSheep` | rainbow sheep |
+
+### Safety rules
+
+- Every payload is decoded defensively. Malformed data, unknown message types and
+  messages for disabled modules are logged in the debug screen and dropped. A bad
+  payload never throws into the game loop or disconnects you (fuzzed with 25k
+  mutated payloads in `ApolloProtoTest`).
+- Unknown fields from newer protocol versions are skipped and counted.
+- Every module keeps bounded state (for example 256 waypoints, 1024 nametag overrides).
+- Disconnecting or switching server clears every module, all server rules and
+  every mod override.
+
+## Modules
+
+| Tier | Module | Shown in game | Notes |
+|---|---|---|---|
+| 1 | waypoint | yes | beam + label + distance, through walls |
+| 1 | notification | yes | top-right toasts |
+| 1 | title | yes | title/subtitle with server scale and fades |
+| 1 | cooldown | yes | countdown tiles above the hotbar |
+| 1 | team | yes | colored marker + name above teammates |
+| 1 | nametag | yes | server lines replace the vanilla nametag |
+| 1 | border | yes | wall edges near you, distance warning, blocks movement when cancelled |
+| 1 | server_rule | yes | brightness override, nametag render distance |
+| 1 | mod_setting | yes | `"<mod>.enabled" = false` force-disables a client mod |
+| 1 | rich_presence | yes | mod menu status line and debug screen |
+| 2 | beam | yes | colored column |
+| 2 | glow | yes | colored outline around the player, through walls |
+| 2 | hologram | yes | floating text lines (64-block range) |
+| 2 | colored_fire | yes | tinted fire on burning players |
+| 2 | glint | options | options stored |
+| 2 | limb | yes | hidden body parts and armor pieces |
+| 2 | vignette | yes | darkened edges at the server opacity |
+| 2 | stopwatch | yes | top-center timer |
+| 2 | tnt_countdown | yes | seconds above primed TNT (server fuse if set) |
+| 2 | nick_hider | yes | your name is replaced everywhere text is drawn |
+| 3 | chat | yes | live lines bottom-left |
+| 3 | combat | yes | `disable-miss-penalty` removes the 1.8 miss cooldown when the server asks |
+| 3 | entity | yes | flipped entities, rainbow sheep |
+| 3 | staff_mod | refused | X-ray only, refused by the no-cheats rule (`IGNORED_POLICY`) |
+| 3 | transfer | answered | pings answer TIMED_OUT, transfers REJECTED (a browser cannot open raw TCP) |
+| - | pay_now / tebex | declined | no embedded store checkout |
+
+## Client mods
+
+Open the mod menu with **Right Shift** in game.
+
+| Mod | Id (server option key) | Default | Notes |
+|---|---|---|---|
+| FPS | `fps` | on | |
+| CPS | `cps` | on | left \| right |
+| Keystrokes | `keystrokes` | on | WASD, LMB/RMB with CPS, jump |
+| Coordinates | `coordinates` | on | XYZ + facing |
+| Armor | `armorstatus` | off | durability |
+| Potion effects | `potion-effects` | off | name, level, time left |
+| Ping | `ping` | off | from the tab list latency |
+| Clock | `clock` | off | local time |
+| Toggle Sprint | `toggle-sneak` | off | tap sprint; server option `toggle-sprint=false` blocks it |
+| Zoom | `zoom` | on | hold **C** (Eaglercraft's zoom key, scroll to adjust); blocked when the server disables `zoom` |
+| Fullbright | `lighting` | off | server option `full-bright=false` blocks it; a server brightness rule wins |
+
+"Edit HUD layout" lets you drag every enabled HUD element. Positions are saved as
+screen fractions in browser storage (`plebmc.mods`), so they survive resizes and
+GUI-scale changes. "Apollo debug" shows each module's state and the last 100
+messages (green handled, orange ignored, red error, cyan sent). "Verbose log"
+prints every plugin message to the browser console.
+
+## Testing with a real server (Spigot/Paper 1.8.8 + Apollo + EaglerXBungee)
+
+Requirements: Java 8 for the 1.8.8 server, Java 17+ for BungeeCord.
+
+1. **Server.** Put a Spigot or Paper 1.8.8 jar in `server/`, run it once, accept
+   the EULA, then in `server.properties` set `online-mode=false`, `server-port=25566`.
+   In `spigot.yml` set `settings.bungeecord: true`.
+2. **Apollo.** Put the Apollo Bukkit plugin jar (`apollo-bukkit-*.jar`, from the
+   Apollo GitHub releases) in `server/plugins/`. For the commands below also add
+   Apollo's example plugin (`apollo-example-bukkit-proto`, or `-json` to test
+   `apollo:json`). Restart.
+3. **BungeeCord + EaglerXBungee.** Run BungeeCord with
+   `gateway/EaglercraftXBungee/EaglerXBungee-Latest.jar` in its `plugins/`. In
+   BungeeCord `config.yml` point the default server at `localhost:25566` and set
+   `ip_forward: true`. EaglerXBungee listens for browser clients on its configured
+   websocket port (default `ws://localhost:8081`). Plugin messages pass through
+   BungeeCord to the server unchanged.
+4. **Client.** Open the compiled client, Multiplayer, add `ws://localhost:8081`, join.
+5. Press **Right Shift > Apollo debug**: the header should say "server speaks
+   Apollo", and `OverrideConfigurableSettingsMessage` should be listed as handled.
+
+## Test command list (Apollo example plugin)
+
+Run as an op in chat. The expected result is in the last column.
+
+| Command | Module | Expected |
+|---|---|---|
+| `/waypoint display` / `remove` / `reset` | waypoint | beams + labels; removed; all gone |
+| `/notification display` / `reset` | notification | toast top-right for about 5 s |
+| `/title display` / `displayInterpolated` / `reset` | title | big centered title; scale animates |
+| `/cooldown displayItem` / `remove` / `reset` | cooldown | ender pearl tile counting down 15 s |
+| `/border display` / `remove` / `reset` | border | colored edges nearby; you cannot walk in/out when cancelled |
+| `/team create` / `delete` | team | colored markers above teammates |
+| `/nametag override` / `reset` | nametag | multi-line nametag above the player |
+| `/richpresence override` / `reset` | rich_presence | mod menu status line |
+| `/serverrule nametagrenderdistance 32` | server_rule | nametags vanish beyond 32 blocks |
+| `/modsettings disable` / `reset` | mod_setting | Fullbright shows "Blocked by server"; reset restores |
+| `/beam display` / `remove` / `reset` | beam | colored column |
+| `/glow override <player>` / `reset` | glow | colored outline around that player |
+| `/hologram display` / `remove` / `reset` | hologram | floating lines |
+| `/coloredfire override <player>` | colored_fire | that player's fire is tinted |
+| `/limb hideArmor <player>` / `hideBody <player>` | limb | armor / body parts disappear |
+| `/vignette display` / `reset` | vignette | darkened edges |
+| `/stopwatch stopwatch start` / `stop` / `reset` | stopwatch | top-center timer |
+| `/tntcountdown set` then light TNT | tnt_countdown | seconds above the TNT |
+| `/nickhider override` / `reset` | nick_hider | your name shows as the nick |
+| `/chat display` | chat | live line counting down bottom-left |
+| `/combat disablemisspenalty true` | combat | swinging at air no longer delays your next hit |
+| `/entity flipEntities` / `rainbowSheep` | entity | upside-down mobs / rainbow sheep |
+| `/staffmod enable` | staff_mod | **refused** (orange `IGNORED_POLICY` line) |
+| `/transfer ping` / `transfer` | transfer | server receives TIMED_OUT / REJECTED |
+
+To block zoom from your own plugin over JSON on `apollo:json`:
+
+```json
+{"@type":"type.googleapis.com/lunarclient.apollo.configurable.v1.OverrideConfigurableSettingsMessage",
+ "configurable_settings":[{"apollo_module":"mod_setting","enable":true,
+   "properties":{"zoom.enabled":false}}]}
+```
+
+## Automated tests
+
+`sh tests/plebmc/run_tests.sh` (JDK only, no Minecraft files needed):
+
+| Test | Checks | What |
+|---|---|---|
+| `PluginChannelsTest` | 33 | 1.8 REGISTER/UNREGISTER, channel rules, caps, reset |
+| `ApolloProtoTest` | 116 | decoder vs real serialized messages (`fixtures.txt`), byte-identical re-encode, JSON, 25k fuzz |
+| `ApolloClientTest` | 44 | handshake (`v1_8`), routing, enable/disable, overrides, policy refusals, expiry, reset |
+| `ClientModsTest` | 28 | HUD layouts, saved layout, every server override of the client mods |
+
+## Licenses
+
+- **EaglercraftX 1.8 (this repository):** `LICENSE` is "Copyright (c) 2022-2024
+  lax1dude, ayunami2000. All Rights Reserved." It is not an open-source license.
+  Keep the notice, `CREDITS` and the in-game credits. Redistributing a modified
+  client publicly is up to lax1dude's terms, not this document.
+- **Minecraft / MCP:** this repository must not contain decompiled Minecraft code,
+  the Minecraft jar or MCP files. They stay in `mcp918/` (gitignored); only patch
+  files are committed.
+- **Apollo** (github.com/LunarClient/Apollo, the server plugin and its examples):
+  MIT. No Apollo code is included; message and field names/numbers are protocol
+  facts used for interoperability.
+- **`lunar-apollo-protobuf`** (npm, GPLv3) is not vendored. It was only read to
+  extract field numbers and used as an independent encoder for test fixtures.
