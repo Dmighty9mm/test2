@@ -67,7 +67,11 @@
 + 			j -= 10;
 + 		}
 
-> INSERT  19 : 30  @  19
+> INSERT  14 : 15  @  14
+
++ 		net.plebmc.client.hud.PlebClient.renderHud(scaledresolution, partialTicks);
+
+> INSERT  5 : 16  @  5
 
 + 	public void renderGameOverlayCrosshairs(int scaledResWidth, int scaledResHeight) {
 + 		if (this.showCrosshair()) {

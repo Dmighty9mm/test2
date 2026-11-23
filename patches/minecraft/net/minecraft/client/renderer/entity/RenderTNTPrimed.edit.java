@@ -28,7 +28,14 @@
 
 ~ 		if (light && !deferred) {
 
-> INSERT  18 : 24  @  18
+> INSERT  17 : 21  @  17
+
++ 		String plebTnt = net.plebmc.client.hud.PlebEntities.tntLabel(entitytntprimed);
++ 		if (plebTnt != null) {
++ 			this.renderLivingLabel(entitytntprimed, plebTnt, d0, d1 + 0.5D, d2, 64);
++ 		}
+
+> INSERT  1 : 7  @  1
 
 + 		if (light && deferred) {
 + 			DeferredStateManager.setEmissionConstant(0.0f);

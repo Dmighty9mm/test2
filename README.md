@@ -19,6 +19,21 @@
  - **Any portion of Mod Coder Pack and it's config files**
  - **Data that can be used alone to reconstruct portions of the game's source code**
 
+## PlebMc: Apollo server API and PvP/QoL mods
+
+This fork adds **PlebMc**: client support for servers running the Apollo server
+API (waypoints, notifications, titles, cooldowns, teams, nametags, borders, glow,
+holograms, limbs, TNT countdown, nick hider and more) plus client mods (FPS, CPS,
+keystrokes, coordinates, armor, potions, ping, clock, toggle sprint, zoom,
+fullbright) with a mod menu (**Right Shift**), a draggable HUD editor and an Apollo
+debug screen. Servers can disable any mod through Apollo. There are no cheats.
+
+All PlebMc code is in `sources/main/java/net/plebmc/`; vanilla classes only get
+one-line hooks in 13 patch files. Build exactly as described below (the build tools
+need the official **1.8.8** client jar in `mcp918/`). Details, the Spigot + Apollo +
+EaglerXBungee test setup and the test command list are in
+[docs/PLEBMC.md](docs/PLEBMC.md). Unit tests: `sh tests/plebmc/run_tests.sh`.
+
 ## Getting Started:
 
 ### To compile the latest version of the client, on Windows:

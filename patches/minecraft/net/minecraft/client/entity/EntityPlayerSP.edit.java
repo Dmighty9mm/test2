@@ -28,7 +28,18 @@
 
 + 		this.statWriter = statWriter;
 
-> CHANGE  116 : 123  @  116 : 117
+> INSERT  17 : 25  @  17
+
++ 	public void moveEntity(double x, double y, double z) {
++ 		if (net.plebmc.client.hud.PlebClient.borderBlocks(this.posX, this.posZ, this.posX + x, this.posZ + z)) {
++ 			x = 0.0D;
++ 			z = 0.0D;
++ 		}
++ 		super.moveEntity(x, y, z);
++ 	}
++ 
+
+> CHANGE  99 : 106  @  99 : 100
 
 ~ 		if (((sendQueue.getNetworkManager() instanceof ClientIntegratedServerNetworkManager)
 ~ 				|| (sendQueue.getNetworkManager() instanceof LANClientNetworkManager))
@@ -37,5 +48,10 @@
 ~ 		} else {
 ~ 			this.sendQueue.addToSendQueue(new C01PacketChatMessage(message));
 ~ 		}
+
+> CHANGE  358 : 360  @  358 : 359
+
+~ 				&& !this.isPotionActive(Potion.blindness)
+~ 				&& (this.mc.gameSettings.keyBindSprint.isKeyDown() || net.plebmc.client.hud.PlebClient.sprintHeld())) {
 
 > EOF

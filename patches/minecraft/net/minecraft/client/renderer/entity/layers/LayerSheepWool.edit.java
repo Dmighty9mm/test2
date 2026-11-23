@@ -13,7 +13,12 @@
 
 > DELETE  1  @  1 : 2
 
-> CHANGE  20 : 21  @  20 : 21
+> CHANGE  17 : 19  @  17 : 18
+
+~ 			if (entitysheep.hasCustomName() && "jeb_".equals(entitysheep.getCustomNameTag())
+~ 					|| net.plebmc.client.hud.PlebEntities.rainbowSheep(entitysheep)) {
+
+> CHANGE  2 : 3  @  2 : 3
 
 ~ 				int j = EnumDyeColor.META_LOOKUP.length;
 

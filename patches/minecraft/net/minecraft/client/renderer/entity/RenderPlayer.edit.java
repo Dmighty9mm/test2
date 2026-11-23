@@ -62,7 +62,11 @@
 ~ 				modelplayer_.bipedRightArmwear.showModel = clientPlayer.isWearing(EnumPlayerModelParts.RIGHT_SLEEVE);
 ~ 			}
 
-> CHANGE  50 : 60  @  50 : 58
+> INSERT  3 : 4  @  3
+
++ 			net.plebmc.client.hud.PlebEntities.applyLimbs(clientPlayer, modelplayer);
+
+> CHANGE  47 : 57  @  47 : 55
 
 ~ 		if (!zombieModel) {
 ~ 			float f = 1.0F;
