@@ -53,7 +53,7 @@ public final class Mods {
 
         public static final class Fps extends TextMod {
                 public Fps() {
-                        super("fps", "FPS", "Frames per second", true, 0.005f, 0.01f);
+                        super("fps", "FPS", "Frames per second", true, 0.005f, 0.10f);
                 }
 
                 @Override
@@ -64,7 +64,7 @@ public final class Mods {
 
         public static final class Cps extends TextMod {
                 public Cps() {
-                        super("cps", "CPS", "Clicks per second (left | right)", true, 0.005f, 0.05f);
+                        super("cps", "CPS", "Clicks per second (left | right)", true, 0.005f, 0.14f);
                 }
 
                 @Override
@@ -75,7 +75,7 @@ public final class Mods {
 
         public static final class Coordinates extends TextMod {
                 public Coordinates() {
-                        super("coordinates", "Coordinates", "Position and facing", true, 0.005f, 0.09f);
+                        super("coordinates", "Coordinates", "Position and facing", true, 0.005f, 0.18f);
                 }
 
                 @Override
@@ -114,7 +114,7 @@ public final class Mods {
 
         public static final class Ping extends TextMod {
                 public Ping() {
-                        super("ping", "Ping", "Connection latency", false, 0.005f, 0.22f);
+                        super("ping", "Ping", "Connection latency", false, 0.90f, 0.05f);
                 }
 
                 @Override
@@ -196,7 +196,7 @@ public final class Mods {
                 static final int GAP = 2;
 
                 public Keystrokes() {
-                        super("keystrokes", "Keystrokes", "WASD, mouse buttons and jump", true, 0.005f, 0.30f);
+                        super("keystrokes", "Keystrokes", "WASD, mouse buttons and jump", true, 0.005f, 0.37f);
                 }
 
                 @Override

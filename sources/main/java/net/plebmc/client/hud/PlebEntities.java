@@ -7,6 +7,7 @@ import net.lax1dude.eaglercraft.v1_8.EaglercraftUUID;
 import net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.AbstractClientPlayer;
+import net.minecraft.client.model.ModelBiped;
 import net.minecraft.client.model.ModelPlayer;
 import net.minecraft.client.renderer.RenderGlobal;
 import net.minecraft.client.renderer.entity.RenderManager;
@@ -176,36 +177,47 @@ public final class PlebEntities {
 
 	// ==================== limbs ====================
 
-	/** RenderPlayer.setModelVisibilities end: hides the body parts the server hid. */
-	public static void applyLimbs(AbstractClientPlayer p, ModelPlayer m) {
+	/** RenderPlayer.setModelVisibilities: hides the body parts the server hid. */
+	public static void applyLimbs(AbstractClientPlayer p, ModelBiped m) {
 		LimbModule lm = Apollo.module(LimbModule.class);
 		if (lm == null || !lm.isEnabled()) {
 			return;
 		}
 		String id = uuid(p);
+		ModelPlayer mp = m instanceof ModelPlayer ? (ModelPlayer) m : null;
 		if (lm.isBodyPartHidden(id, 1)) {
 			m.bipedHead.showModel = false;
 			m.bipedHeadwear.showModel = false;
 		}
 		if (lm.isBodyPartHidden(id, 2)) {
 			m.bipedBody.showModel = false;
-			m.bipedBodyWear.showModel = false;
+			if (mp != null) {
+				mp.bipedBodyWear.showModel = false;
+			}
 		}
 		if (lm.isBodyPartHidden(id, 3)) {
 			m.bipedLeftArm.showModel = false;
-			m.bipedLeftArmwear.showModel = false;
+			if (mp != null) {
+				mp.bipedLeftArmwear.showModel = false;
+			}
 		}
 		if (lm.isBodyPartHidden(id, 4)) {
 			m.bipedRightArm.showModel = false;
-			m.bipedRightArmwear.showModel = false;
+			if (mp != null) {
+				mp.bipedRightArmwear.showModel = false;
+			}
 		}
 		if (lm.isBodyPartHidden(id, 5)) {
 			m.bipedLeftLeg.showModel = false;
-			m.bipedLeftLegwear.showModel = false;
+			if (mp != null) {
+				mp.bipedLeftLegwear.showModel = false;
+			}
 		}
 		if (lm.isBodyPartHidden(id, 6)) {
 			m.bipedRightLeg.showModel = false;
-			m.bipedRightLegwear.showModel = false;
+			if (mp != null) {
+				mp.bipedRightLegwear.showModel = false;
+			}
 		}
 	}
 

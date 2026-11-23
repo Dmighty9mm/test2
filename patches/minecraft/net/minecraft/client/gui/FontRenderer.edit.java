@@ -107,7 +107,11 @@
 ~ 			tessellator.draw();
 ~ 
 
-> CHANGE  27 : 35  @  27 : 34
+> INSERT  13 : 14  @  13
+
++ 		text = net.plebmc.client.hud.PlebClient.filterText(text);
+
+> CHANGE  14 : 22  @  14 : 21
 
 ~ //		try {
 ~ //			Bidi bidi = new Bidi((new ArabicShaping(8)).shape(parString1), 127);

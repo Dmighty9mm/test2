@@ -141,9 +141,10 @@
 
 ~ 	public float getFOVModifier(float partialTicks, boolean parFlag) {
 
-> CHANGE  6 : 7  @  6 : 7
+> CHANGE  6 : 8  @  6 : 7
 
-~ 				f = this.mc.isZoomKey ? this.mc.adjustedZoomValue : this.mc.gameSettings.fovSetting;
+~ 				f = net.plebmc.client.hud.PlebClient.zoomAllowed(this.mc.isZoomKey) ? this.mc.adjustedZoomValue
+~ 						: this.mc.gameSettings.fovSetting;
 
 > CHANGE  169 : 173  @  169 : 172
 
@@ -179,7 +180,11 @@
 + 	}
 + 
 
-> CHANGE  117 : 118  @  117 : 118
+> CHANGE  76 : 77  @  76 : 77
+
+~ 					float f16 = net.plebmc.client.hud.PlebClient.gamma(this.mc.gameSettings.gammaSetting);
+
+> CHANGE  40 : 41  @  40 : 41
 
 ~ 					this.lightmapColors[i] = short1 << 24 | j | k << 8 | l << 16;
 
@@ -385,7 +390,11 @@
 
 + 		GlStateManager.shadeModel(7424);
 
-> INSERT  16 : 19  @  16
+> INSERT  7 : 8  @  7
+
++ 			net.plebmc.client.hud.PlebEntities.renderGlow(partialTicks);
+
+> INSERT  9 : 12  @  9
 
 + 				if (isDynamicLights) {
 + 					GlStateManager.disableExtensionPipeline();

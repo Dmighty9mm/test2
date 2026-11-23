@@ -284,8 +284,9 @@
 
 + 		SkinPreviewRenderer.initialize();
 
-> INSERT  2 : 14  @  2
+> INSERT  2 : 15  @  2
 
++ 		net.plebmc.client.hud.PlebClient.init(this);
 + 		this.eagskullCommand = new SkullCommand(this);
 + 		this.voiceOverlay = new GuiVoiceOverlay(this);
 + 		ScaledResolution voiceRes = new ScaledResolution(this);
@@ -562,7 +563,15 @@
 
 > DELETE  110  @  110 : 114
 
-> CHANGE  108 : 109  @  108 : 148
+> CHANGE  29 : 30  @  29 : 30
+
+~ 				if (this.playerController.isNotCreative() && net.plebmc.client.hud.PlebClient.missPenalty()) {
+
+> CHANGE  16 : 17  @  16 : 17
+
+~ 					if (this.playerController.isNotCreative() && net.plebmc.client.hud.PlebClient.missPenalty()) {
+
+> CHANGE  61 : 62  @  61 : 101
 
 ~ 		Display.toggleFullscreen();
 
@@ -663,8 +672,9 @@
 ~ 							DebugFramebufferView.switchView(1);
 ~ 						}
 
-> CHANGE  5 : 6  @  5 : 6
+> CHANGE  4 : 6  @  4 : 6
 
+~ 					} else if (!net.plebmc.client.hud.PlebClient.onKeyDown(k)) {
 ~ 						if (k == 1 || (k > -1 && k == this.gameSettings.keyBindClose.getKeyCode())) {
 
 > INSERT  11 : 18  @  11
@@ -690,7 +700,15 @@
 + 			}
 + 
 
-> INSERT  92 : 93  @  92
+> INSERT  44 : 45  @  44
+
++ 					net.plebmc.client.hud.PlebClient.onWorldClick(0);
+
+> INSERT  4 : 5  @  4
+
++ 					net.plebmc.client.hud.PlebClient.onWorldClick(1);
+
+> INSERT  44 : 45  @  44
 
 + 			this.eagskullCommand.tick();
 
@@ -755,7 +773,11 @@
 ~ 							((GuiScreenIntegratedServerBusy) t).failMessage, u));
 ~ 				}));
 
-> INSERT  12 : 13  @  12
+> INSERT  8 : 9  @  8
+
++ 			net.plebmc.client.hud.PlebClient.onLeave();
+
+> INSERT  4 : 5  @  4
 
 + 			session.reset();
 

@@ -25,7 +25,13 @@
 
 > DELETE  1  @  1 : 2
 
-> CHANGE  47 : 48  @  47 : 48
+> INSERT  42 : 45  @  42
+
++ 		if (net.plebmc.client.hud.PlebEntities.armorHidden(entitylivingbaseIn, parInt1)) {
++ 			return;
++ 		}
+
+> CHANGE  5 : 6  @  5 : 6
 
 ~ 			this.func_177179_a((T) modelbase, parInt1);
 

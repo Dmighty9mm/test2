@@ -142,12 +142,30 @@
 
 ~ 	public void renderLivingAt(T entityLivingBaseIn, double x, double y, double z) {
 
-> CHANGE  35 : 37  @  35 : 36
+> CHANGE  15 : 17  @  15 : 17
+
+~ 			if (net.plebmc.client.hud.PlebEntities.flipped(entitylivingbase) || s != null
+~ 					&& (s.equals("Dinnerbone") || s.equals("Grumm")) && (!(entitylivingbase instanceof EntityPlayer)
+
+> CHANGE  18 : 20  @  18 : 19
 
 ~ 		for (int i = 0, l = this.layerRenderers.size(); i < l; ++i) {
 ~ 			LayerRenderer layerrenderer = this.layerRenderers.get(i);
 
-> INSERT  30 : 34  @  30
+> CHANGE  24 : 34  @  24 : 25
+
+~ 			float f = (float) net.plebmc.client.hud.PlebEntities
+~ 					.nametagRange(entitylivingbase.isSneaking() ? 32.0F : 64.0F);
+~ 			java.util.List<String> apolloTag = net.plebmc.client.hud.PlebEntities.nametag(entitylivingbase);
+~ 			if (apolloTag != null) {
+~ 				for (int line = 0; line < apolloTag.size() && d3 < (double) (f * f); ++line) {
+~ 					this.renderLivingLabel(entitylivingbase, apolloTag.get(line), d0,
+~ 							d1 + 0.25D * (apolloTag.size() - 1 - line), d2, (int) f);
+~ 				}
+~ 				return;
+~ 			}
+
+> INSERT  5 : 9  @  5
 
 + 					if (DeferredStateManager.isInDeferredPass()) {
 + 						NameTagRenderer.renderNameTag(entitylivingbase, null, d0, d1, d2, -69);

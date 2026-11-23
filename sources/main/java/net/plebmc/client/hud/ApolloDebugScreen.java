@@ -1,5 +1,6 @@
 package net.plebmc.client.hud;
 
+import java.io.IOException;
 import java.util.List;
 
 import net.lax1dude.eaglercraft.v1_8.Mouse;
@@ -93,7 +94,7 @@ public final class ApolloDebugScreen extends GuiScreen {
 	}
 
 	@Override
-	public void handleMouseInput() {
+	public void handleMouseInput() throws IOException {
 		super.handleMouseInput();
 		int d = Mouse.getEventDWheel();
 		if (d != 0) {

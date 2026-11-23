@@ -9,4 +9,8 @@
 
 + 
 
+> INSERT  66 : 67  @  66
+
++ 		net.plebmc.client.hud.PlebClient.onJoin();
+
 > EOF

@@ -53,11 +53,19 @@
 ~ 		EaglerTextureAtlasSprite textureatlassprite = texturemap.getAtlasSprite("minecraft:blocks/fire_layer_0");
 ~ 		EaglerTextureAtlasSprite textureatlassprite1 = texturemap.getAtlasSprite("minecraft:blocks/fire_layer_1");
 
-> CHANGE  18 : 19  @  18 : 19
+> CHANGE  12 : 13  @  12 : 13
+
+~ 		net.plebmc.client.hud.PlebEntities.applyFireColor(entity);
+
+> CHANGE  5 : 6  @  5 : 6
 
 ~ 			EaglerTextureAtlasSprite textureatlassprite2 = i % 2 == 0 ? textureatlassprite : textureatlassprite1;
 
-> CHANGE  150 : 152  @  150 : 152
+> INSERT  29 : 30  @  29
+
++ 		GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+
+> CHANGE  121 : 123  @  121 : 123
 
 ~ 			if (!DeferredStateManager.isInDeferredPass() && this.renderManager.options.field_181151_V
 ~ 					&& this.shadowSize > 0.0F && !entityIn.isInvisible() && this.renderManager.isRenderShadow()) {
