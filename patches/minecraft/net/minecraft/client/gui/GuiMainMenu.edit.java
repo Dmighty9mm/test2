@@ -203,7 +203,11 @@
 + 		}
 + 
 
-> CHANGE  8 : 11  @  8 : 10
+> INSERT  5 : 6  @  5
+
++ 		net.plebmc.client.hud.PlebMenu.initMainMenu(this, this.buttonList, i);
+
+> CHANGE  3 : 6  @  3 : 5
 
 ~ 		this.buttonList.add(new GuiButton(4, this.width / 2 + 2, i + 72 + 12, 98, 20,
 ~ 				I18n.format("menu.editProfile", new Object[0])));
@@ -245,9 +249,12 @@
 
 ~ 		this.buttonResetDemo.enabled = this.mc.gameSettings.hasCreatedDemoWorld;
 
-> CHANGE  2 : 3  @  2 : 3
+> CHANGE  2 : 6  @  2 : 3
 
 ~ 	protected void actionPerformed(GuiButton parGuiButton) {
+~ 		if (net.plebmc.client.hud.PlebMenu.mainMenuAction(this, parGuiButton)) {
+~ 			return;
+~ 		}
 
 > CHANGE  9 : 10  @  9 : 10
 

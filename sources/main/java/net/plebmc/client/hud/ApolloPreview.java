@@ -59,10 +59,14 @@ final class ApolloPreview {
 		note("&cFIRST BLOOD!", "You drew first blood! +15 coins", "6s");
 		note("&6Kill streak: 3", "You're on a 3 kill streak!", "6s");
 		note("&e&lMode: Arsenal", "Modifier: Low Gravity", "7s");
+		// cosmetics: what the PlebMc shop plugin would send
+		net.plebmc.client.cosmetics.Cosmetics.handle("{\"type\":\"state\",\"coins\":3200,"
+				+ "\"owned\":[\"tophat\",\"crown\",\"flame\"],\"equipped\":{\"hat\":\"crown\",\"trail\":\"flame\"}}");
 	}
 
 	/** Takes everything the preview put on screen away again. */
 	static void clear() {
+		net.plebmc.client.cosmetics.Cosmetics.reset();
 		String[] resets = { "team.v1.ResetTeamMembersMessage", "glow.v1.ResetGlowEffectsMessage",
 				"nametag.v1.ResetNametagsMessage", "waypoint.v1.ResetWaypointsMessage",
 				"beam.v1.ResetBeaconBeamsMessage", "cooldown.v1.ResetCooldownsMessage",

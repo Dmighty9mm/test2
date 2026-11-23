@@ -6,8 +6,8 @@ set -e
 OUT="${TMPDIR:-/tmp}/plebmc-tests"
 rm -rf "$OUT" && mkdir -p "$OUT"
 SRC=sources/main/java/net/plebmc/client
-javac -d "$OUT" $(find "$SRC/apollo" "$SRC/mods" "$SRC/network" -name '*.java') tests/plebmc/*.java
-for t in PluginChannelsTest ApolloProtoTest ApolloClientTest ClientModsTest; do
+javac -d "$OUT" $(find "$SRC/apollo" "$SRC/mods" "$SRC/network" "$SRC/cosmetics" -name '*.java') tests/plebmc/*.java
+for t in PluginChannelsTest ApolloProtoTest ApolloClientTest ClientModsTest CosmeticsTest; do
 	echo "== $t"
 	java -cp "$OUT" "$t"
 done

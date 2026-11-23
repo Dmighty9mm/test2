@@ -98,6 +98,17 @@ public final class PlebClient {
 		Apollo.setLog(log);
 		try {
 			Apollo.init();
+			net.plebmc.client.cosmetics.Cosmetics.init(new PluginChannels.Log() {
+				@Override
+				public void info(String msg) {
+					LOG.info(msg);
+				}
+
+				@Override
+				public void warn(String msg) {
+					LOG.warn(msg);
+				}
+			});
 			mods.load(STORE);
 		} catch (Throwable t) {
 			LOG.warn("mod/Apollo init failed: " + t);

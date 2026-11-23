@@ -156,6 +156,34 @@ a real 1.8 server doesn't know action 6.
 fields are skipped and counted; any newer message type shows in the debug screen as
 orange "unknown".
 
+## PlebMc server, FPS and resolution
+
+- The title screen has **Join PlebMc** (connects to `wss://eagler.plebmc.top`) and **Discord** (https://discord.gg/bR89zXFH9h). PlebMc is always first in the server list (a default entry, so it can't be deleted).
+- **Resolution** (mod menu): draws the game at 100/85/75/60/50% of the window's pixels and stretches it back up. Most browsers are limited by fill rate, so this is the biggest FPS lever.
+- **FPS Boost** (mod menu): 75% resolution (unless you picked lower), ignores high-DPI scaling, turns vsync off, caps render distance at 8 chunks, and switches clouds, particles, fancy graphics, smooth lighting, entity shadows and FXAA to their fastest values. Turning it off restores your own values. Measured in the test browser: 17 FPS off, 27 FPS on, same view.
+
+## Cosmetics shop protocol
+
+Cosmetics (hats and trails) are bought with the server's coins. The server owns the balance, ownership and what is equipped; the client only displays them and sends requests. Messages are UTF-8 JSON objects on the plugin channel `plebmc:shop`. The client sends `REGISTER plebmc:shop` when it joins (Bukkit needs this before it will deliver messages to the client). Open the shop from the mod menu (Right Shift, **Cosmetics**). "Try on" works everywhere and is local only.
+
+**Client to server**
+
+| Message | When |
+| --- | --- |
+| `{"type":"open"}` | On join and when the shop opens: send a `state` back. |
+| `{"type":"buy","id":"crown"}` | Buy an item. Check the price and balance, take the coins, reply with `result` and a fresh `state`. |
+| `{"type":"equip","category":"hat","id":"crown"}` | Equip an owned item (`"id":null` takes the slot off). Reply with `state`, and send the change to nearby players as `players`. |
+
+**Server to client**
+
+| Message | Meaning |
+| --- | --- |
+| `{"type":"state","coins":1250,"owned":["tophat"],"equipped":{"hat":"tophat","trail":"flame"},"catalog":[...]}` | Balance, owned ids, equipped slots. Every field is optional; a missing field keeps its last value. `catalog` replaces the built-in list. |
+| `{"type":"players","players":{"<uuid>":{"hat":"crown","trail":"rainbow"},"<uuid2>":null}}` | What other players wear (so everyone sees each other's cosmetics). `null` or `{}` removes a player. `"clear":true` drops everyone first (send on world change). |
+| `{"type":"result","ok":false,"message":"Not enough coins","coins":100}` | Answer to buy/equip, shown in the shop. `coins` is optional. |
+
+Catalog item: `{"id":"gold_tophat","name":"Gold Top Hat","category":"hat","render":"tophat","price":900,"color":"#FFD700","description":"..."}`. `category` is `hat` or `trail`. `render` is the look the client draws: hats `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`; trails `flame`, `hearts`, `notes`, `rainbow`, `cloud`, `portal`, `emerald`, `snow`. `color` tints a hat (optional). Items with a `render` this client doesn't know are hidden, so newer items don't break older clients. Without a catalog the client shows the built-in one (ids equal to the render names, prices 250 to 2,500).
+
 ## Testing with a real server (Spigot/Paper 1.8.8 + Apollo + EaglerXBungee)
 
 Requirements: Java 8 for the 1.8.8 server, Java 17+ for BungeeCord.

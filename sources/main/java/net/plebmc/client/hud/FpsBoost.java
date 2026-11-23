@@ -1,5 +1,6 @@
 package net.plebmc.client.hud;
 
+import net.lax1dude.eaglercraft.v1_8.internal.PlatformInput;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.settings.GameSettings;
 import net.plebmc.client.apollo.proto.Json;
@@ -19,11 +20,66 @@ final class FpsBoost {
 	}
 
 	private static Boolean applied;
+	private static double userScale = -1;
+	private static double appliedScale = -1;
+	private static boolean appliedCap;
+
+	/** Resolution steps offered in the mod menu. */
+	static final double[] SCALES = { 1.0, 0.85, 0.75, 0.6, 0.5 };
+	/** What the boost lowers the resolution to (unless the player picked lower). */
+	static final double BOOST_SCALE = 0.75;
+	/** The boost's render distance cap, in chunks. */
+	static final int BOOST_DISTANCE = 8;
+
+	/** The player's own resolution choice (1.0 = full). */
+	static double userScale() {
+		if (userScale < 0) {
+			userScale = 1.0;
+			String raw = PlebClient.STORE.get("renderScale");
+			if (raw != null) {
+				try {
+					userScale = Math.max(0.25, Math.min(1.0, Double.parseDouble(raw)));
+				} catch (NumberFormatException e) {
+					userScale = 1.0;
+				}
+			}
+		}
+		return userScale;
+	}
+
+	/** Moves to the next resolution step (wraps around). */
+	static void cycleScale() {
+		double cur = userScale();
+		int next = 0;
+		for (int i = 0; i < SCALES.length; i++) {
+			if (Math.abs(SCALES[i] - cur) < 0.01) {
+				next = (i + 1) % SCALES.length;
+				break;
+			}
+		}
+		userScale = SCALES[next];
+		PlebClient.STORE.set("renderScale", String.valueOf(userScale));
+	}
+
+	/** The resolution the game draws at right now. */
+	static double effectiveScale(boolean boost) {
+		return boost ? Math.min(userScale(), BOOST_SCALE) : userScale();
+	}
 
 	/** Called every frame from the HUD hook; does work only when the mod's state changes. */
 	static void sync(Minecraft mc, boolean want) {
 		if (mc.gameSettings == null) {
 			return;
+		}
+		double scale = effectiveScale(want);
+		if (scale != appliedScale || want != appliedCap) {
+			appliedScale = scale;
+			appliedCap = want;
+			try {
+				PlatformInput.setRenderScale(scale, want);
+			} catch (Throwable t) {
+				// a runtime without resolution scaling
+			}
 		}
 		if (applied == null) {
 			// first frame: a saved copy means the boost was on when the page closed
@@ -44,6 +100,8 @@ final class FpsBoost {
 			saved.put("shadows", gs.field_181151_V);
 			saved.put("fxaa", (double) gs.fxaa);
 			saved.put("fps", (double) gs.limitFramerate);
+			saved.put("vsync", gs.enableVsync);
+			saved.put("rd", (double) gs.renderDistanceChunks);
 			PlebClient.STORE.set(KEY, Json.write(saved));
 			reload = gs.fancyGraphics || gs.ambientOcclusion != 0;
 			gs.clouds = 0;
@@ -53,6 +111,12 @@ final class FpsBoost {
 			gs.field_181151_V = false;
 			gs.fxaa = 2;
 			gs.limitFramerate = 260;
+			// vsync holds the browser to the screen's refresh rate; off, frames are drawn as fast as they can be
+			gs.enableVsync = false;
+			if (gs.renderDistanceChunks > BOOST_DISTANCE) {
+				gs.renderDistanceChunks = BOOST_DISTANCE;
+				reload = true;
+			}
 		} else {
 			String raw = PlebClient.STORE.get(KEY);
 			PlebClient.STORE.set(KEY, null);
@@ -92,6 +156,13 @@ final class FpsBoost {
 			}
 			if (gs.limitFramerate == 260) {
 				gs.limitFramerate = num(m, "fps", gs.limitFramerate);
+			}
+			if (!gs.enableVsync) {
+				gs.enableVsync = bool(m, "vsync", gs.enableVsync);
+			}
+			if (gs.renderDistanceChunks == BOOST_DISTANCE && num(m, "rd", BOOST_DISTANCE) > BOOST_DISTANCE) {
+				gs.renderDistanceChunks = num(m, "rd", BOOST_DISTANCE);
+				reload = true;
 			}
 		}
 		gs.saveOptions();

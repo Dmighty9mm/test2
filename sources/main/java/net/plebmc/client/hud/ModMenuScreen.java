@@ -19,6 +19,8 @@ public final class ModMenuScreen extends GuiScreen {
 	private static final int ID_EDITOR = 1000;
 	private static final int ID_DEBUG = 1001;
 	private static final int ID_DONE = 1002;
+	private static final int ID_COSMETICS = 1003;
+	private static final int ID_SCALE = 1004;
 
 	private final GuiScreen parent;
 
@@ -52,9 +54,11 @@ public final class ModMenuScreen extends GuiScreen {
 		}
 		int by = y0 + rows * rowH + 6;
 		int half = this.width / 2;
-		this.buttonList.add(new GuiButton(ID_EDITOR, half - 150 - gap / 2, by, 150, 20, "Edit HUD layout"));
-		this.buttonList.add(new GuiButton(ID_DEBUG, half + gap / 2, by, 150, 20, "Apollo debug"));
-		this.buttonList.add(new GuiButton(ID_DONE, this.width / 2 - 100, by + rowH, 200, 20, "Done"));
+		this.buttonList.add(new GuiButton(ID_COSMETICS, half - 152, by, 100, 20, "§6Cosmetics"));
+		this.buttonList.add(new GuiButton(ID_EDITOR, half - 50, by, 100, 20, "Edit HUD"));
+		this.buttonList.add(new GuiButton(ID_DEBUG, half + 52, by, 100, 20, "Apollo debug"));
+		this.buttonList.add(new GuiButton(ID_SCALE, half - 152, by + rowH, 150, 20, scaleLabel()));
+		this.buttonList.add(new GuiButton(ID_DONE, half + 2, by + rowH, 150, 20, "Done"));
 	}
 
 	@Override
@@ -69,9 +73,22 @@ public final class ModMenuScreen extends GuiScreen {
 			this.mc.displayGuiScreen(new HudEditorScreen(this));
 		} else if (b.id == ID_DEBUG) {
 			this.mc.displayGuiScreen(new ApolloDebugScreen(this));
+		} else if (b.id == ID_COSMETICS) {
+			this.mc.displayGuiScreen(new CosmeticsScreen(this));
+		} else if (b.id == ID_SCALE) {
+			FpsBoost.cycleScale();
+			this.initGui();
 		} else if (b.id == ID_DONE) {
 			close();
 		}
+	}
+
+	/** "Resolution: 75%", noting when FPS Boost lowers it further. */
+	private static String scaleLabel() {
+		boolean boost = PlebClient.mods().fpsBoost.isActive();
+		int user = (int) Math.round(FpsBoost.userScale() * 100);
+		int eff = (int) Math.round(FpsBoost.effectiveScale(boost) * 100);
+		return "Resolution: " + user + "%" + (eff != user ? " §7(" + eff + "%)" : "");
 	}
 
 	@Override

@@ -145,8 +145,8 @@ public class PlatformInput {
 			public void handleEvent(MouseEvent evt) {
 				evt.preventDefault();
 				evt.stopPropagation();
-				mouseX = (int)(getOffsetX(evt) * win.getDevicePixelRatio());
-				mouseY = (int)((canvas.getClientHeight() - getOffsetY(evt)) * win.getDevicePixelRatio());
+				mouseX = (int)(getOffsetX(evt) * pixelRatio());
+				mouseY = (int)((canvas.getClientHeight() - getOffsetY(evt)) * pixelRatio());
 				mouseDX += evt.getMovementX();
 				mouseDY += -evt.getMovementY();
 				if(hasBeenActive()) {
@@ -315,8 +315,35 @@ public class PlatformInput {
 	@JSBody(params = { "doc" }, script = "return (doc.visibilityState === \"visible\");")
 	private static native boolean getVisibilityState(JSObject doc);
 
-	public static void update() {
+	private static double renderScale = 1.0;
+	private static boolean capDevicePixelRatio = false;
+
+	/**
+	 * PlebMc: draw the game at a fraction of the screen's resolution (the
+	 * canvas is stretched back up, pixelated). Fill rate is what limits most
+	 * browsers, so 75% resolution is close to 1.8x fewer pixels per frame.
+	 * capDpr also ignores high-DPI scaling (a 2x laptop screen renders 4x
+	 * the pixels otherwise).
+	 */
+	public static void setRenderScale(double scale, boolean capDpr) {
+		renderScale = Math.max(0.25, Math.min(1.0, scale));
+		capDevicePixelRatio = capDpr;
+	}
+
+	public static double getRenderScale() {
+		return renderScale;
+	}
+
+	private static double pixelRatio() {
 		double r = win.getDevicePixelRatio();
+		if (capDevicePixelRatio && r > 1.0) {
+			r = 1.0;
+		}
+		return r * renderScale;
+	}
+
+	public static void update() {
+		double r = pixelRatio();
 		int w = PlatformRuntime.parent.getClientWidth();
 		int h = PlatformRuntime.parent.getClientHeight();
 		int w2 = windowWidth = (int)(w * r);
@@ -491,11 +518,11 @@ public class PlatformInput {
 	}
 
 	public static int mouseGetEventX() {
-		return currentEvent == null ? -1 : (int)(currentEvent.getClientX() * win.getDevicePixelRatio());
+		return currentEvent == null ? -1 : (int)(currentEvent.getClientX() * pixelRatio());
 	}
 
 	public static int mouseGetEventY() {
-		return currentEvent == null ? -1 : (int)((canvas.getClientHeight() - currentEvent.getClientY()) * win.getDevicePixelRatio());
+		return currentEvent == null ? -1 : (int)((canvas.getClientHeight() - currentEvent.getClientY()) * pixelRatio());
 	}
 
 	public static int mouseGetEventDWheel() {

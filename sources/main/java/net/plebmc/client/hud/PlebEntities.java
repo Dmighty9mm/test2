@@ -156,6 +156,7 @@ public final class PlebEntities {
 			return;
 		}
 		try {
+			CosmeticTrails.update(mc);
 			WorldFx.renderBeams(mc, partialTicks);
 		} catch (Throwable t) {
 			// drawing must never break the frame

@@ -217,6 +217,14 @@ public class PlatformInput {
 		return glfwWindowShouldClose(win);
 	}
 
+	public static void setRenderScale(double scale, boolean capDpr) {
+		// PlebMc: resolution scaling is a browser feature; the desktop runtime ignores it
+	}
+
+	public static double getRenderScale() {
+		return 1.0;
+	}
+
 	public static void setVSync(boolean enable) {
 		vsync = enable;
 	}

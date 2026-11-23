@@ -440,7 +440,7 @@ public final class Mods {
          */
         public static final class FpsBoost extends Mod {
                 public FpsBoost() {
-                        super("fps-boost", "FPS Boost", "Fastest video settings (restored when off)", false, 0f, 0f);
+                        super("fps-boost", "FPS Boost", "75% resolution, no vsync, fast settings (undone when off)", false, 0f, 0f);
                 }
         }
 }
