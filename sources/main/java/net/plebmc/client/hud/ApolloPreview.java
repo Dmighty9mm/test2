@@ -61,7 +61,13 @@ final class ApolloPreview {
 		note("&e&lMode: Arsenal", "Modifier: Low Gravity", "7s");
 		// cosmetics: what the PlebMc shop plugin would send
 		net.plebmc.client.cosmetics.Cosmetics.handle("{\"type\":\"state\",\"coins\":3200,"
-				+ "\"owned\":[\"tophat\",\"crown\",\"flame\"],\"equipped\":{\"hat\":\"crown\",\"trail\":\"flame\"}}");
+				+ "\"owned\":[\"tophat\",\"crown\",\"flame\"],\"equipped\":{\"hat\":\"crown\",\"trail\":\"flame\"},"
+				+ "\"dailyResetIn\":18720,\"loginStreak\":4,\"quests\":["
+				+ "{\"id\":\"login\",\"name\":\"Daily login\",\"description\":\"Day 4 of your streak\",\"period\":\"login\",\"progress\":1,\"goal\":1,\"reward\":125,\"done\":true},"
+				+ "{\"id\":\"kills\",\"name\":\"Get 5 kills\",\"description\":\"Eliminate players in matches\",\"period\":\"daily\",\"progress\":3,\"goal\":5,\"reward\":100},"
+				+ "{\"id\":\"play\",\"name\":\"Play 30 minutes\",\"description\":\"Be online on PlebMc\",\"period\":\"daily\",\"progress\":12,\"goal\":30,\"reward\":75},"
+				+ "{\"id\":\"wins\",\"name\":\"Win 3 matches\",\"description\":\"Be the last one standing\",\"period\":\"weekly\",\"progress\":1,\"goal\":3,\"reward\":500}]}");
+		net.plebmc.client.cosmetics.Cosmetics.handle("{\"type\":\"notify\",\"title\":\"\u00a7aQuest complete!\",\"message\":\"Daily login: +125 PlebMc Coins\"}");
 	}
 
 	/** Takes everything the preview put on screen away again. */

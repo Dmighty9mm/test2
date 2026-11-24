@@ -164,7 +164,7 @@ orange "unknown".
 
 ## Cosmetics shop protocol
 
-Cosmetics (hats and trails) are bought with the server's coins. The server owns the balance, ownership and what is equipped; the client only displays them and sends requests. Messages are UTF-8 JSON objects on the plugin channel `plebmc:shop`. The client sends `REGISTER plebmc:shop` when it joins (Bukkit needs this before it will deliver messages to the client). Open the shop from the mod menu (Right Shift, **Cosmetics**). "Try on" works everywhere and is local only.
+Cosmetics (hats and trails) are bought with the server's coins (on PlebMc: PlebMc Coins, earned from quests, a daily login reward and time online). The server owns the balance, ownership and what is equipped; the client only displays them and sends requests. Messages are UTF-8 JSON objects on the plugin channel `plebmc:shop`. The client sends `REGISTER plebmc:shop` when it joins (Bukkit needs this before it will deliver messages to the client). Open the shop from the mod menu (Right Shift, **Cosmetics**). "Try on" works everywhere and is local only.
 
 **Client to server**
 
@@ -181,14 +181,17 @@ Cosmetics (hats and trails) are bought with the server's coins. The server owns 
 | `{"type":"state","coins":1250,"owned":["tophat"],"equipped":{"hat":"tophat","trail":"flame"},"catalog":[...]}` | Balance, owned ids, equipped slots. Every field is optional; a missing field keeps its last value. `catalog` replaces the built-in list. |
 | `{"type":"players","players":{"<uuid>":{"hat":"crown","trail":"rainbow"},"<uuid2>":null}}` | What other players wear (so everyone sees each other's cosmetics). `null` or `{}` removes a player. `"clear":true` drops everyone first (send on world change). |
 | `{"type":"result","ok":false,"message":"Not enough coins","coins":100}` | Answer to buy/equip, shown in the shop. `coins` is optional. |
+| `{"type":"notify","title":"§aQuest complete!","message":"Get 3 kills: +75 PlebMc Coins","coins":425}` | A popup (top right, like Apollo notifications). `coins` optional. |
+
+`state` can also carry the Quests tab: `"currency":"PlebMc Coins"`, `"dailyResetIn":18720` and `"weeklyResetIn":...` (seconds), `"loginStreak":4`, and `"quests":[{"id":"kills_3","name":"Get 3 kills","description":"...","period":"daily","progress":1,"goal":3,"reward":75,"done":false}]` (`period` is `daily`, `weekly` or `login`).
 
 Catalog item: `{"id":"gold_tophat","name":"Gold Top Hat","category":"hat","render":"tophat","price":900,"color":"#FFD700","description":"..."}`. `category` is `hat` or `trail`. `render` is the look the client draws: hats `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`; trails `flame`, `hearts`, `notes`, `rainbow`, `cloud`, `portal`, `emerald`, `snow`. `color` tints a hat (optional). Items with a `render` this client doesn't know are hidden, so newer items don't break older clients. Without a catalog the client shows the built-in one (ids equal to the render names, prices 250 to 2,500).
 
 ### Server plugin
 
-`plugins/PlebMcShop` is a ready server plugin for this protocol (Spigot/Paper 1.13+): a
-configurable catalog, `players.yml` storage, and coins from a PlaceholderAPI placeholder
-plus a console command (set up for Battle Royale X coins), Vault, or its own balances.
+`plugins/PlebMcShop` is a ready server plugin for this protocol (Spigot/Paper 1.13+): its
+own PlebMc Coins (separate from other economies), daily/weekly quests, a daily login
+streak, playtime coins, a configurable catalog and `players.yml` storage.
 See `plugins/PlebMcShop/README.md`.
 
 ## Testing with a real server (Spigot/Paper 1.8.8 + Apollo + EaglerXBungee)

@@ -60,6 +60,36 @@ public final class Cosmetics {
 		}
 	}
 
+	/** One quest from the server: do something {@link #goal} times, get {@link #reward} coins. */
+	public static final class Quest {
+		public final String id;
+		public final String name;
+		public final String description;
+		/** "daily", "weekly" or "login". */
+		public final String period;
+		public final long progress;
+		public final long goal;
+		public final long reward;
+		public final boolean done;
+
+		public Quest(String id, String name, String description, String period, long progress, long goal, long reward,
+				boolean done) {
+			this.id = id;
+			this.name = name;
+			this.description = description;
+			this.period = period;
+			this.progress = progress;
+			this.goal = goal;
+			this.reward = reward;
+			this.done = done;
+		}
+	}
+
+	/** Receives coin/quest popups (set by the HUD; null in tests). */
+	public interface Toasts {
+		void show(String title, String message);
+	}
+
 	/** Every look this client knows how to draw. A catalog item with another render id is hidden. */
 	public static final String[] RENDERS = { "tophat", "crown", "halo", "partyhat", "beanie", "horns", "flame",
 			"hearts", "notes", "rainbow", "cloud", "portal", "emerald", "snow" };
@@ -84,6 +114,12 @@ public final class Cosmetics {
 	private static List<Item> catalog = DEFAULT_CATALOG;
 	private static boolean serverCatalog;
 	private static long coins = -1;
+	private static String currency = "PlebMc Coins";
+	private static List<Quest> quests = Collections.emptyList();
+	private static long dailyResetAt;
+	private static long weeklyResetAt;
+	private static int loginStreak;
+	private static Toasts toasts;
 	private static boolean serverSupport;
 	private static final Set<String> owned = new HashSet<>();
 	private static final Map<String, String> equipped = new HashMap<>();
@@ -128,6 +164,11 @@ public final class Cosmetics {
 		catalog = DEFAULT_CATALOG;
 		serverCatalog = false;
 		coins = -1;
+		currency = "PlebMc Coins";
+		quests = Collections.emptyList();
+		dailyResetAt = 0;
+		weeklyResetAt = 0;
+		loginStreak = 0;
 		serverSupport = false;
 		owned.clear();
 		equipped.clear();
@@ -173,6 +214,29 @@ public final class Cosmetics {
 				equipped.clear();
 				readSlots((Map<?, ?>) m.get("equipped"), equipped);
 			}
+			if (m.get("currency") instanceof String) {
+				currency = (String) m.get("currency");
+			}
+			if (m.get("quests") instanceof List) {
+				List<Quest> qs = new ArrayList<>();
+				for (Object e : (List<?>) m.get("quests")) {
+					Quest q = readQuest(e);
+					if (q != null) {
+						qs.add(q);
+					}
+				}
+				quests = Collections.unmodifiableList(qs);
+			}
+			long now = System.currentTimeMillis();
+			if (m.containsKey("dailyResetIn")) {
+				dailyResetAt = now + 1000L * Math.max(0, num(m.get("dailyResetIn"), 0));
+			}
+			if (m.containsKey("weeklyResetIn")) {
+				weeklyResetAt = now + 1000L * Math.max(0, num(m.get("weeklyResetIn"), 0));
+			}
+			if (m.containsKey("loginStreak")) {
+				loginStreak = (int) Math.max(0, num(m.get("loginStreak"), 0));
+			}
 			if (m.get("catalog") instanceof List) {
 				List<Item> items = new ArrayList<>();
 				for (Object e : (List<?>) m.get("catalog")) {
@@ -204,6 +268,15 @@ public final class Cosmetics {
 						others.remove(uuid);
 					}
 				}
+			}
+		} else if ("notify".equals(type)) {
+			if (m.containsKey("coins")) {
+				coins = Math.max(0, num(m.get("coins"), 0));
+			}
+			String title = str(m.get("title"), "");
+			String text = str(m.get("message"), "");
+			if (toasts != null && !(title.isEmpty() && text.isEmpty())) {
+				toasts.show(title, text);
 			}
 		} else if ("result".equals(type)) {
 			message = str(m.get("message"), null);
@@ -257,6 +330,22 @@ public final class Cosmetics {
 				(int) Math.max(0, num(m.get("price"), 0)), color);
 	}
 
+	private static Quest readQuest(Object o) {
+		if (!(o instanceof Map)) {
+			return null;
+		}
+		Map<?, ?> m = (Map<?, ?>) o;
+		String id = str(m.get("id"), null);
+		if (id == null) {
+			return null;
+		}
+		long goal = Math.max(1, num(m.get("goal"), 1));
+		long progress = Math.max(0, Math.min(goal, num(m.get("progress"), 0)));
+		boolean done = Boolean.TRUE.equals(m.get("done")) || progress >= goal;
+		return new Quest(id, str(m.get("name"), id), str(m.get("description"), ""), str(m.get("period"), "daily"),
+				done ? goal : progress, goal, Math.max(0, num(m.get("reward"), 0)), done);
+	}
+
 	public static boolean knownRender(String r) {
 		for (String k : RENDERS) {
 			if (k.equals(r)) {
@@ -306,6 +395,33 @@ public final class Cosmetics {
 	/** The coin balance, or -1 before the server sent one. */
 	public static long coins() {
 		return coins;
+	}
+
+	/** What the server calls its coins ("PlebMc Coins" by default). */
+	public static String currency() {
+		return currency;
+	}
+
+	public static List<Quest> quests() {
+		return quests;
+	}
+
+	/** Seconds until the daily quests change, or -1 if unknown. */
+	public static long dailyResetSeconds() {
+		return dailyResetAt == 0 ? -1 : Math.max(0, (dailyResetAt - System.currentTimeMillis()) / 1000);
+	}
+
+	/** Seconds until the weekly quests change, or -1 if unknown. */
+	public static long weeklyResetSeconds() {
+		return weeklyResetAt == 0 ? -1 : Math.max(0, (weeklyResetAt - System.currentTimeMillis()) / 1000);
+	}
+
+	public static int loginStreak() {
+		return loginStreak;
+	}
+
+	public static void setToasts(Toasts t) {
+		toasts = t;
 	}
 
 	public static List<Item> catalog() {

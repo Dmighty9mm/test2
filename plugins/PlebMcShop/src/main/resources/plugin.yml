@@ -2,8 +2,8 @@ name: PlebMcShop
 version: 1.0.0
 main: net.plebmc.shop.PlebMcShop
 api-version: '1.13'
-description: Coin shop for the PlebMc client's hats and trails (plebmc:shop channel)
-softdepend: [PlaceholderAPI, Vault, BattleRoyaleX]
+description: PlebMc Coins, quests and the cosmetics shop for the PlebMc client (plebmc:shop channel)
+
 commands:
   plebshop:
     description: Manage PlebMc client cosmetics

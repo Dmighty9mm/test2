@@ -1,19 +1,63 @@
-# PlebMcShop - the coin shop behind the PlebMc client's Cosmetics menu
-# (Right Shift > Cosmetics). Only players on the PlebMc client see hats and trails.
+# PlebMcShop - PlebMc Coins, quests and the cosmetics shop behind the PlebMc client's
+# "Shop & Quests" menu (Right Shift). PlebMc Coins are separate from every other economy
+# on the server. Only players on the PlebMc client can see and spend them.
 # Run /plebshop reload after editing.
 
-coins:
-  # command  = read the balance from a PlaceholderAPI placeholder and take coins with a
-  #            console command (set up for Battle Royale X coins below)
-  # vault    = use the Vault economy (EssentialsX money etc.)
-  # internal = this plugin keeps its own coins (/plebshop coins give <player> <amount>)
-  mode: command
-  balance-placeholder: '%battleroyalex_coins%'
-  # %player% = name, %uuid% = uuid, %amount% = price. Run as console.
-  take-command: 'brx coins remove %player% %amount%'
+currency-name: 'PlebMc Coins'
 
-# Put the item on right after buying it.
+# Quest days and the daily login use this time zone. Empty = the server's.
+timezone: 'America/Chicago'
+
+# Coins for joining once a day. The streak goes up each day you come back within
+# streak-reset-hours and starts over after the last reward.
+login-rewards:
+  enabled: true
+  rewards: [50, 75, 100, 125, 150, 200, 300]
+  cooldown-hours: 20
+  streak-reset-hours: 48
+
+# Coins for time online.
+playtime:
+  enabled: true
+  every-minutes: 15
+  coins: 10
+  notify: true
+
+# Quests. Each day daily-count quests are picked from "daily" (the same ones for
+# everyone), and each week (from Monday) weekly-count from "weekly". Rewards are paid
+# the moment a quest is finished.
+# Types counted by this plugin:
+#   kill  = kill a player          match = a match ended for you (you died or won)
+#   death = die                    play  = one minute online
+#   login = a day with a login reward
+# Any other type (like "win") is counted with /plebshop progress <player> <type> [amount],
+# so other plugins can feed quests. For Battle Royale X wins, add this line to
+# Executed-Commands > Player-Win in plugins/BattleRoyaleX/config.yml:
+#   - plebshop progress %player% win
+quests:
+  reset-hour: 0
+  daily-count: 3
+  weekly-count: 2
+  daily:
+    kills_3:   {name: 'Get 3 kills', description: 'Eliminate players in matches', type: kill, goal: 3, reward: 75}
+    kills_8:   {name: 'Get 8 kills', description: 'Eliminate players in matches', type: kill, goal: 8, reward: 150}
+    matches_3: {name: 'Play 3 matches', description: 'Finish 3 matches', type: match, goal: 3, reward: 75}
+    matches_6: {name: 'Play 6 matches', description: 'Finish 6 matches', type: match, goal: 6, reward: 125}
+    win_1:     {name: 'Win a match', description: 'Be the last one standing', type: win, goal: 1, reward: 150}
+    play_30:   {name: 'Play for 30 minutes', description: 'Be online on PlebMc', type: play, goal: 30, reward: 60}
+    play_60:   {name: 'Play for an hour', description: 'Be online on PlebMc', type: play, goal: 60, reward: 100}
+  weekly:
+    kills_40:   {name: 'Get 40 kills', description: 'Eliminate players this week', type: kill, goal: 40, reward: 600}
+    wins_5:     {name: 'Win 5 matches', description: 'Be the last one standing 5 times', type: win, goal: 5, reward: 750}
+    matches_25: {name: 'Play 25 matches', description: 'Finish 25 matches this week', type: match, goal: 25, reward: 500}
+    play_300:   {name: 'Play for 5 hours', description: 'Be online on PlebMc this week', type: play, goal: 300, reward: 500}
+    login_5:    {name: 'Log in on 5 days', description: 'Claim your daily login 5 times', type: login, goal: 5, reward: 400}
+
+# Put an item on right after buying it.
 equip-on-buy: true
+
+# Players not on the PlebMc client get quest and login rewards as chat lines instead of popups.
+chat-for-other-clients: true
 
 # Worlds where nobody's hat or trail is shown (e.g. your match worlds). Empty = shown everywhere.
 hidden-in-worlds: []
@@ -27,8 +71,12 @@ messages:
   not-for-sale: '%item% can''t be bought.'
   no-permission: 'You can''t buy %item%.'
   unknown-item: 'That item isn''t in the shop.'
-  coins-unavailable: 'The shop can''t read your coins right now.'
-  purchase-failed: 'The purchase didn''t go through. No coins were taken.'
+  quest-title: '&aQuest complete!'
+  quest-message: '%quest%: +%coins% %currency%'
+  login-title: '&6Daily login'
+  login-message: 'Day %streak%: +%coins% %currency%'
+  playtime-title: '&bThanks for playing'
+  playtime-message: '+%coins% %currency%'
 
 # The shop. Each item:
 #   category: hat or trail
@@ -40,23 +88,23 @@ messages:
 #   permission: optional, needed to buy it
 # The id (the key) is what's saved, so don't rename ids players already own.
 items:
-  tophat:      {name: 'Top Hat', category: hat, render: tophat, price: 3000, description: 'A classy black top hat'}
-  gold_tophat: {name: 'Gold Top Hat', category: hat, render: tophat, price: 12000, color: '#E8B923', description: 'For the richest plebs'}
-  crown:       {name: 'Crown', category: hat, render: crown, price: 15000, description: 'Gold crown for champions'}
-  diamond_crown: {name: 'Diamond Crown', category: hat, render: crown, price: 30000, color: '#5DE2E7', description: 'The rarest crown there is'}
-  halo:        {name: 'Halo', category: hat, render: halo, price: 8000, description: 'A glowing ring over your head'}
-  partyhat:    {name: 'Party Hat', category: hat, render: partyhat, price: 2000, description: 'Striped cone hat'}
-  beanie:      {name: 'Blue Beanie', category: hat, render: beanie, price: 1500, color: '#3A7BD5', description: 'Warm knitted beanie'}
-  red_beanie:  {name: 'Red Beanie', category: hat, render: beanie, price: 1500, color: '#C0392B', description: 'Warm knitted beanie'}
-  green_beanie: {name: 'Green Beanie', category: hat, render: beanie, price: 1500, color: '#27AE60', description: 'Warm knitted beanie'}
-  horns:       {name: 'Devil Horns', category: hat, render: horns, price: 6000, description: 'Two red horns'}
+  tophat:      {name: 'Top Hat', category: hat, render: tophat, price: 1500, description: 'A classy black top hat'}
+  gold_tophat: {name: 'Gold Top Hat', category: hat, render: tophat, price: 6000, color: '#E8B923', description: 'For the richest plebs'}
+  crown:       {name: 'Crown', category: hat, render: crown, price: 8000, description: 'Gold crown for champions'}
+  diamond_crown: {name: 'Diamond Crown', category: hat, render: crown, price: 15000, color: '#5DE2E7', description: 'The rarest crown there is'}
+  halo:        {name: 'Halo', category: hat, render: halo, price: 5000, description: 'A glowing ring over your head'}
+  partyhat:    {name: 'Party Hat', category: hat, render: partyhat, price: 1000, description: 'Striped cone hat'}
+  beanie:      {name: 'Blue Beanie', category: hat, render: beanie, price: 800, color: '#3A7BD5', description: 'Warm knitted beanie'}
+  red_beanie:  {name: 'Red Beanie', category: hat, render: beanie, price: 800, color: '#C0392B', description: 'Warm knitted beanie'}
+  green_beanie: {name: 'Green Beanie', category: hat, render: beanie, price: 800, color: '#27AE60', description: 'Warm knitted beanie'}
+  horns:       {name: 'Devil Horns', category: hat, render: horns, price: 3500, description: 'Two red horns'}
   dropzone_crown: {name: 'Drop Zone Crown', category: hat, render: crown, price: -1, color: '#4FC3F7', description: 'Season 1 Battle Pass reward'}
 
-  flame:   {name: 'Flame Trail', category: trail, render: flame, price: 5000, description: 'Fire at your feet'}
-  hearts:  {name: 'Heart Trail', category: trail, render: hearts, price: 3000, description: 'Hearts follow you'}
-  notes:   {name: 'Music Trail', category: trail, render: notes, price: 3000, description: 'Music notes as you walk'}
-  rainbow: {name: 'Rainbow Trail', category: trail, render: rainbow, price: 15000, description: 'A rainbow dust trail'}
-  cloud:   {name: 'Cloud Trail', category: trail, render: cloud, price: 2500, description: 'Puffs of cloud'}
-  portal:  {name: 'Ender Trail', category: trail, render: portal, price: 7500, description: 'Ender portal sparkles'}
-  emerald: {name: 'Emerald Trail', category: trail, render: emerald, price: 4000, description: 'Green sparkles'}
-  snow:    {name: 'Snow Trail', category: trail, render: snow, price: 4000, description: 'Snowflakes'}
+  flame:   {name: 'Flame Trail', category: trail, render: flame, price: 2500, description: 'Fire at your feet'}
+  hearts:  {name: 'Heart Trail', category: trail, render: hearts, price: 1500, description: 'Hearts follow you'}
+  notes:   {name: 'Music Trail', category: trail, render: notes, price: 1500, description: 'Music notes as you walk'}
+  rainbow: {name: 'Rainbow Trail', category: trail, render: rainbow, price: 7500, description: 'A rainbow dust trail'}
+  cloud:   {name: 'Cloud Trail', category: trail, render: cloud, price: 1200, description: 'Puffs of cloud'}
+  portal:  {name: 'Ender Trail', category: trail, render: portal, price: 3500, description: 'Ender portal sparkles'}
+  emerald: {name: 'Emerald Trail', category: trail, render: emerald, price: 2000, description: 'Green sparkles'}
+  snow:    {name: 'Snow Trail', category: trail, render: snow, price: 2000, description: 'Snowflakes'}

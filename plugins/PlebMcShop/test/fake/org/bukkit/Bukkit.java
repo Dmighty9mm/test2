@@ -8,6 +8,8 @@ public final class Bukkit {
     public static final List<String> commands = new ArrayList<>();
     public static Consumer<String> commandHandler = c -> {};
     public static final List<Runnable> later = new ArrayList<>();
+    public static final List<Runnable> timers = new ArrayList<>();
+    public static void runLater() { List<Runnable> l = new ArrayList<>(later); later.clear(); for (Runnable r : l) r.run(); }
     public static org.bukkit.plugin.messaging.PluginMessageListener incoming;
     public static Object listener;
     public static Server getServer() { return null; }
@@ -43,7 +45,7 @@ public final class Bukkit {
     public static org.bukkit.scheduler.BukkitScheduler getScheduler() {
         return new org.bukkit.scheduler.BukkitScheduler() {
             public org.bukkit.scheduler.BukkitTask runTaskLater(org.bukkit.plugin.Plugin p, Runnable r, long d) { later.add(r); return () -> {}; }
-            public org.bukkit.scheduler.BukkitTask runTaskTimer(org.bukkit.plugin.Plugin p, Runnable r, long d, long q) { return () -> {}; }
+            public org.bukkit.scheduler.BukkitTask runTaskTimer(org.bukkit.plugin.Plugin p, Runnable r, long d, long q) { timers.add(r); return () -> {}; }
         };
     }
 }

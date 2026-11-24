@@ -23,6 +23,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -34,8 +35,9 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 /**
- * Server side of the PlebMc client's cosmetics shop (hats and trails bought
- * with coins). Speaks the JSON protocol on the {@code plebmc:shop} plugin
+ * Server side of the PlebMc client's shop: PlebMc Coins (separate from any
+ * other economy) earned from a daily login reward, time online and daily/weekly
+ * quests, spent on hats and trails. Speaks the JSON protocol on the {@code plebmc:shop} plugin
  * channel described in docs/PLEBMC.md ("Cosmetics shop protocol"). The
  * server owns the coins, what each player owns and what they wear; the
  * client only shows it and asks.
@@ -49,7 +51,8 @@ public final class PlebMcShop extends JavaPlugin implements Listener, PluginMess
 	private final Gson gson = new GsonBuilder().serializeNulls().create();
 	private Store store;
 	private Catalog catalog;
-	private Coins coins;
+	private Quests quests;
+	private String currency = "PlebMc Coins";
 	private Set<String> hiddenWorlds = new HashSet<>();
 	private String prefix = "";
 	private final Map<UUID, Long> lastAction = new HashMap<>();
@@ -63,7 +66,9 @@ public final class PlebMcShop extends JavaPlugin implements Listener, PluginMess
 		Bukkit.getMessenger().registerIncomingPluginChannel(this, CHANNEL, this);
 		Bukkit.getPluginManager().registerEvents(this, this);
 		Bukkit.getScheduler().runTaskTimer(this, store::saveIfDirty, 20L * 30, 20L * 30);
-		getLogger().info(catalog.all().size() + " cosmetics, coins from " + coins.mode());
+		Bukkit.getScheduler().runTaskTimer(this, this::everyMinute, 20L * 60, 20L * 60);
+		getLogger().info(catalog.all().size() + " cosmetics, " + quests.dailyPool.size() + " daily and "
+				+ quests.weeklyPool.size() + " weekly quests");
 	}
 
 	@Override
@@ -81,7 +86,11 @@ public final class PlebMcShop extends JavaPlugin implements Listener, PluginMess
 		for (String w : catalog.warnings()) {
 			getLogger().warning(w);
 		}
-		coins = new Coins(getConfig().getConfigurationSection("coins"), store, getLogger());
+		quests = new Quests(getConfig());
+		for (String w : quests.warnings) {
+			getLogger().warning(w);
+		}
+		currency = getConfig().getString("currency-name", "PlebMc Coins");
 		hiddenWorlds = new HashSet<>();
 		for (String w : getConfig().getStringList("hidden-in-worlds")) {
 			hiddenWorlds.add(w.toLowerCase(Locale.ROOT));
@@ -123,13 +132,28 @@ public final class PlebMcShop extends JavaPlugin implements Listener, PluginMess
 			d.name = p.getName();
 			store.changed();
 		}
-		// clients that registered before the join finished: catch them up a moment later
+		// a moment later (so the client has registered the channel): the login reward,
+		// and catch up clients that registered before the join finished
 		Bukkit.getScheduler().runTaskLater(this, () -> {
-			if (p.isOnline() && listens(p)) {
+			if (!p.isOnline()) {
+				return;
+			}
+			Store.Data data = store.get(p.getUniqueId());
+			data.name = p.getName();
+			long now = System.currentTimeMillis();
+			long reward = quests.login(data, now);
+			if (reward >= 0) {
+				store.changed();
+				notify(p, msg("login-title", "&6Daily login"), msg("login-message", "Day %streak%: +%coins% %currency%")
+						.replace("%streak%", Integer.toString(data.streak)).replace("%coins%", fmt(reward)));
+				completed(p, quests.add(data, "login", 1, now));
+			}
+			if (listens(p)) {
+				sendState(p, false);
 				sendEveryone(p);
 				broadcastSlots(p);
 			}
-		}, 20L);
+		}, 40L);
 	}
 
 	@EventHandler(priority = EventPriority.MONITOR)
@@ -139,6 +163,69 @@ public final class PlebMcShop extends JavaPlugin implements Listener, PluginMess
 		Map<String, Object> players = new LinkedHashMap<>();
 		players.put(p.getUniqueId().toString(), null);
 		broadcast(playersMessage(players, false), p);
+	}
+
+	@EventHandler(priority = EventPriority.MONITOR)
+	public void onDeath(PlayerDeathEvent e) {
+		Player dead = e.getEntity();
+		Player killer = dead.getKiller();
+		progress(dead, "match", 1);
+		progress(dead, "death", 1);
+		if (killer != null && killer != dead) {
+			progress(killer, "kill", 1);
+		}
+	}
+
+	/** Every minute: time online counts toward "play" quests and playtime coins. */
+	private void everyMinute() {
+		for (Player p : Bukkit.getOnlinePlayers()) {
+			Store.Data d = store.get(p.getUniqueId());
+			long paid = quests.minute(d);
+			List<Quests.Completed> done = quests.add(d, "play", 1, System.currentTimeMillis());
+			store.changed();
+			if (paid > 0 && getConfig().getBoolean("playtime.notify", true)) {
+				notify(p, msg("playtime-title", "&bThanks for playing"),
+						msg("playtime-message", "+%coins% %currency%").replace("%coins%", fmt(paid)));
+			}
+			completed(p, done);
+			if (listens(p)) {
+				sendState(p, false);
+			}
+		}
+	}
+
+	/** Counts progress toward quests of a type and tells the player about finished ones. */
+	void progress(Player p, String type, long amount) {
+		Store.Data d = store.get(p.getUniqueId());
+		List<Quests.Completed> done = quests.add(d, type, amount, System.currentTimeMillis());
+		store.changed();
+		completed(p, done);
+		if (listens(p)) {
+			sendState(p, false);
+		}
+	}
+
+	private void completed(Player p, List<Quests.Completed> done) {
+		for (Quests.Completed c : done) {
+			getLogger().info(p.getName() + " finished quest " + c.quest.id + " (+" + c.quest.reward + ")");
+			notify(p, msg("quest-title", "&aQuest complete!"), msg("quest-message", "%quest%: +%coins% %currency%")
+					.replace("%quest%", plain(c.quest.name)).replace("%coins%", fmt(c.quest.reward)));
+		}
+	}
+
+	/** A popup on the PlebMc client, or a chat line for everyone else. */
+	private void notify(Player p, String title, String message) {
+		message = message.replace("%currency%", currency);
+		if (listens(p)) {
+			Map<String, Object> m = new LinkedHashMap<>();
+			m.put("type", "notify");
+			m.put("title", color(title));
+			m.put("message", color(message));
+			m.put("coins", store.get(p.getUniqueId()).coins);
+			send(p, m);
+		} else if (getConfig().getBoolean("chat-for-other-clients", true)) {
+			p.sendMessage(prefix + color(title) + color(" &7") + color(message));
+		}
 	}
 
 	@EventHandler(priority = EventPriority.MONITOR)
@@ -219,22 +306,14 @@ public final class PlebMcShop extends JavaPlugin implements Listener, PluginMess
 			result(p, false, msg("no-permission", "You can't buy %item%.").replace("%item%", plain(it.name)), -1);
 			return;
 		}
-		long balance = coins.balance(p);
-		if (balance < 0) {
-			result(p, false, msg("coins-unavailable", "The shop can't read your coins right now."), -1);
-			return;
-		}
+		long balance = d.coins;
 		if (balance < it.price) {
 			result(p, false, msg("not-enough", "You need %need% more coins.")
 					.replace("%need%", fmt(it.price - balance)), balance);
 			return;
 		}
-		long after = coins.take(p, it.price);
-		if (after < 0) {
-			result(p, false, msg("purchase-failed", "The purchase didn't go through. No coins were taken."),
-					coins.balance(p));
-			return;
-		}
+		d.coins -= it.price;
+		long after = d.coins;
 		d.owned.add(it.id);
 		d.name = p.getName();
 		boolean autoEquip = getConfig().getBoolean("equip-on-buy", true);
@@ -302,10 +381,13 @@ public final class PlebMcShop extends JavaPlugin implements Listener, PluginMess
 		Store.Data d = store.get(p.getUniqueId());
 		Map<String, Object> m = new LinkedHashMap<>();
 		m.put("type", "state");
-		long bal = knownBalance != Long.MIN_VALUE ? knownBalance : coins.balance(p);
-		if (bal >= 0) {
-			m.put("coins", bal);
-		}
+		long now = System.currentTimeMillis();
+		m.put("coins", d.coins);
+		m.put("currency", currency);
+		m.put("quests", quests.toJson(d, now));
+		m.put("dailyResetIn", quests.secondsToDailyReset(now));
+		m.put("weeklyResetIn", quests.secondsToWeeklyReset(now));
+		m.put("loginStreak", quests.loginClaimed(d, now) ? d.streak : 0);
 		List<String> owned = new ArrayList<>();
 		for (String id : d.owned) {
 			if (catalog.get(id) != null) {
@@ -421,9 +503,10 @@ public final class PlebMcShop extends JavaPlugin implements Listener, PluginMess
 		case "reload":
 			loadSettings();
 			refreshAll();
-			s.sendMessage(prefix + "Reloaded: " + catalog.all().size() + " cosmetics, coins from " + coins.mode()
-					+ (catalog.warnings().isEmpty() ? "" : color(" &c(" + catalog.warnings().size()
-							+ " problems, see console)")));
+			int problems = catalog.warnings().size() + quests.warnings.size();
+			s.sendMessage(prefix + "Reloaded: " + catalog.all().size() + " cosmetics, " + quests.dailyPool.size()
+					+ " daily and " + quests.weeklyPool.size() + " weekly quests"
+					+ (problems == 0 ? "" : color(" &c(" + problems + " problems, see console)")));
 			return true;
 		case "list":
 			for (Catalog.Item it : catalog.all()) {
@@ -451,14 +534,39 @@ public final class PlebMcShop extends JavaPlugin implements Listener, PluginMess
 			if (a.length < 2) {
 				return usage(s, label + " balance <player>");
 			}
-			Player bp = Bukkit.getPlayerExact(a[1]);
-			if (bp == null) {
+			UUID bid = resolve(a[1]);
+			s.sendMessage(prefix + a[1] + " has " + color("&e" + fmt(bid == null ? 0 : store.get(bid).coins) + " &7")
+					+ currency);
+			return true;
+		case "progress":
+			if (a.length < 3) {
+				return usage(s, label + " progress <player> <type> [amount]");
+			}
+			Player pp = Bukkit.getPlayerExact(a[1]);
+			if (pp == null) {
 				s.sendMessage(prefix + color("&cThat player isn't online."));
 				return true;
 			}
-			long b = coins.balance(bp);
-			s.sendMessage(prefix + bp.getName() + " has " + (b < 0 ? color("&cunreadable coins (check config)")
-					: color("&e" + fmt(b) + " &7coins")) + " (" + coins.mode() + ")");
+			long amount = 1;
+			if (a.length > 3) {
+				try {
+					amount = Long.parseLong(a[3]);
+				} catch (NumberFormatException e) {
+					return usage(s, label + " progress <player> <type> [amount]");
+				}
+			}
+			progress(pp, a[2].toLowerCase(Locale.ROOT), amount);
+			if (a[2].equalsIgnoreCase("win")) {
+				progress(pp, "match", 1);
+			}
+			return true;
+		case "quests":
+			long now = System.currentTimeMillis();
+			s.sendMessage(prefix + "Quests for " + quests.dayKey(now) + " (" + quests.weekKey(now) + "):");
+			for (Quests.Quest q : quests.active(now)) {
+				s.sendMessage(color("&7- &f" + q.id + " &8(" + q.period + ", " + q.type + " x" + q.goal + ") &e+"
+						+ fmt(q.reward)));
+			}
 			return true;
 		case "coins":
 			return internalCoins(s, label, a);
@@ -466,7 +574,7 @@ public final class PlebMcShop extends JavaPlugin implements Listener, PluginMess
 			s.sendMessage(prefix + color("&fPlebMc cosmetics shop"));
 			for (String line : Arrays.asList("reload", "list", "give <player> <item>", "remove <player> <item>",
 					"equip <player> <hat|trail> <item|none>", "info <player>", "balance <player>",
-					"coins <give|take|set> <player> <amount> &8(internal mode only)")) {
+					"coins <give|take|set> <player> <amount>", "progress <player> <type> [amount]", "quests")) {
 				s.sendMessage(color("&7/" + label + " " + line));
 			}
 			return true;
@@ -571,18 +679,11 @@ public final class PlebMcShop extends JavaPlugin implements Listener, PluginMess
 		s.sendMessage(color("&7Owned: &f" + (d.owned.isEmpty() ? "nothing" : String.join(", ", d.owned))));
 		s.sendMessage(color("&7Hat: &f" + d.equipped.getOrDefault(Catalog.HAT, "none") + "  &7Trail: &f"
 				+ d.equipped.getOrDefault(Catalog.TRAIL, "none")));
-		if ("internal".equals(coins.mode())) {
-			s.sendMessage(color("&7Coins: &e" + fmt(d.coins)));
-		}
+		s.sendMessage(color("&7" + currency + ": &e" + fmt(d.coins) + "  &7Login streak: &f" + d.streak));
 		return true;
 	}
 
 	private boolean internalCoins(CommandSender s, String label, String[] a) {
-		if (!"internal".equals(coins.mode())) {
-			s.sendMessage(prefix + "Coins come from " + coins.mode()
-					+ " mode, so change them there (for Battle Royale X: /brx coins).");
-			return true;
-		}
 		if (a.length < 4) {
 			return usage(s, label + " coins <give|take|set> <player> <amount>");
 		}
@@ -596,25 +697,30 @@ public final class PlebMcShop extends JavaPlugin implements Listener, PluginMess
 		if (uid == null || n < 0) {
 			return usage(s, label + " coins <give|take|set> <player> <amount>");
 		}
-		long cur = store.coins(uid);
+		Store.Data cd = store.get(uid);
+		if (cd.name.isEmpty()) {
+			cd.name = a[2];
+		}
+		long cur = cd.coins;
 		switch (a[1].toLowerCase(Locale.ROOT)) {
 		case "give":
-			store.setCoins(uid, cur + n);
+			cd.coins = cur + n;
 			break;
 		case "take":
-			store.setCoins(uid, cur - n);
+			cd.coins = Math.max(0, cur - n);
 			break;
 		case "set":
-			store.setCoins(uid, n);
+			cd.coins = n;
 			break;
 		default:
 			return usage(s, label + " coins <give|take|set> <player> <amount>");
 		}
+		store.changed();
 		Player online = Bukkit.getPlayer(uid);
 		if (online != null) {
 			sendState(online, false);
 		}
-		s.sendMessage(prefix + a[2] + " now has " + fmt(store.coins(uid)) + " coins.");
+		s.sendMessage(prefix + a[2] + " now has " + fmt(cd.coins) + " " + currency + ".");
 		return true;
 	}
 
@@ -626,7 +732,8 @@ public final class PlebMcShop extends JavaPlugin implements Listener, PluginMess
 		}
 		List<String> options;
 		if (a.length == 1) {
-			options = Arrays.asList("reload", "list", "give", "remove", "equip", "info", "balance", "coins");
+			options = Arrays.asList("reload", "list", "give", "remove", "equip", "info", "balance", "coins",
+					"progress", "quests");
 		} else if (a.length == 2 && a[0].equalsIgnoreCase("coins")) {
 			options = Arrays.asList("give", "take", "set");
 		} else if (a.length == 2 || (a.length == 3 && a[0].equalsIgnoreCase("coins"))) {
@@ -634,6 +741,8 @@ public final class PlebMcShop extends JavaPlugin implements Listener, PluginMess
 			for (Player p : Bukkit.getOnlinePlayers()) {
 				options.add(p.getName());
 			}
+		} else if (a.length == 3 && a[0].equalsIgnoreCase("progress")) {
+			options = Arrays.asList("kill", "win", "match", "play", "death", "login");
 		} else if (a.length == 3 && a[0].equalsIgnoreCase("equip")) {
 			options = Arrays.asList("hat", "trail");
 		} else if ((a.length == 3 && (a[0].equalsIgnoreCase("give") || a[0].equalsIgnoreCase("remove")))

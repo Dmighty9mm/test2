@@ -24,6 +24,8 @@ public final class CosmeticsScreen extends GuiScreen {
 	private static final int ID_ACT = 200; // + row
 
 	private static final int ROWS = 5;
+	private static final int TAB_QUESTS = 2;
+	private static final String[] TABS = { "Hats", "Trails", "Quests" };
 
 	private final GuiScreen parent;
 	private int tab;
@@ -46,8 +48,10 @@ public final class CosmeticsScreen extends GuiScreen {
 		}
 		seenVersion = Cosmetics.version();
 		this.buttonList.clear();
-		items = Cosmetics.catalog(Cosmetics.CATEGORIES[tab]);
-		int pages = Math.max(1, (items.size() + ROWS - 1) / ROWS);
+		items = tab < Cosmetics.CATEGORIES.length ? Cosmetics.catalog(Cosmetics.CATEGORIES[tab])
+				: java.util.Collections.<Cosmetics.Item>emptyList();
+		int count = tab == TAB_QUESTS ? Cosmetics.quests().size() : items.size();
+		int pages = Math.max(1, (count + ROWS - 1) / ROWS);
 		page = Math.min(page, pages - 1);
 
 		// [ player preview 80 ] gap [ item list ]
@@ -58,15 +62,16 @@ public final class CosmeticsScreen extends GuiScreen {
 		listY = 52;
 
 		// tabs
-		String[] names = { "Hats", "Trails" };
-		for (int i = 0; i < names.length; i++) {
-			GuiButton b = new GuiButton(ID_TAB + i, listX + i * 74, 28, 70, 20, (i == tab ? "§e" : "") + names[i]);
+		int tabW = (listW - 8) / TABS.length;
+		for (int i = 0; i < TABS.length; i++) {
+			GuiButton b = new GuiButton(ID_TAB + i, listX + i * (tabW + 4), 28, tabW, 20,
+					(i == tab ? "§e" : "") + TABS[i]);
 			this.buttonList.add(b);
 		}
 
 		boolean online = Cosmetics.serverSupported();
 		int rowH = 26;
-		for (int r = 0; r < ROWS; r++) {
+		for (int r = 0; r < ROWS && tab != TAB_QUESTS; r++) {
 			int idx = page * ROWS + r;
 			if (idx >= items.size()) {
 				break;
@@ -106,7 +111,7 @@ public final class CosmeticsScreen extends GuiScreen {
 			close();
 			return;
 		}
-		if (b.id >= ID_TAB && b.id < ID_TAB + Cosmetics.CATEGORIES.length) {
+		if (b.id >= ID_TAB && b.id < ID_TAB + TABS.length) {
 			tab = b.id - ID_TAB;
 			page = 0;
 		} else if (b.id == ID_PREV) {
@@ -150,11 +155,11 @@ public final class CosmeticsScreen extends GuiScreen {
 	@Override
 	public void drawScreen(int mouseX, int mouseY, float partialTicks) {
 		this.drawDefaultBackground();
-		this.drawCenteredString(this.fontRendererObj, "§lCosmetics", this.width / 2, 8, 0xFFFFFF);
+		this.drawCenteredString(this.fontRendererObj, "§lPlebMc Shop", this.width / 2, 8, 0xFFFFFF);
 
 		// balance, top right
 		long coins = Cosmetics.coins();
-		String bal = coins >= 0 ? fmt(coins) + " coins" : "";
+		String bal = coins >= 0 ? fmt(coins) + " " + Cosmetics.currency() : "";
 		if (!bal.isEmpty()) {
 			int w = this.fontRendererObj.getStringWidth(bal);
 			int x = this.width - 8 - w;
@@ -173,7 +178,10 @@ public final class CosmeticsScreen extends GuiScreen {
 
 		// rows
 		int rowH = 26;
-		for (int r = 0; r < ROWS; r++) {
+		if (tab == TAB_QUESTS) {
+			drawQuests(rowH);
+		}
+		for (int r = 0; r < ROWS && tab != TAB_QUESTS; r++) {
 			Cosmetics.Item it = row(r);
 			if (it == null) {
 				break;
@@ -195,15 +203,77 @@ public final class CosmeticsScreen extends GuiScreen {
 			this.drawCenteredString(this.fontRendererObj, (Cosmetics.messageOk() ? "§a" : "§c") + msg,
 					this.width / 2, this.height - 40, 0xFFFFFF);
 		} else if (!Cosmetics.serverSupported()) {
-			String s = "§7Try anything on here. Buy with coins on PlebMc.";
+			String s = tab == TAB_QUESTS ? "§7Join PlebMc to do quests and earn coins."
+					: "§7Try anything on here. Buy with coins from quests on PlebMc.";
 			this.drawCenteredString(this.fontRendererObj, Draw.fit(s, this.width - 10), this.width / 2, this.height - 40,
 					0xFFFFFF);
 		}
-		if (items.isEmpty()) {
+		if (tab != TAB_QUESTS && items.isEmpty()) {
 			this.drawCenteredString(this.fontRendererObj, "§7Nothing here yet", listX + listW / 2, infoY - 60,
 					0xFFFFFF);
 		}
 		super.drawScreen(mouseX, mouseY, partialTicks);
+	}
+
+	/** The quest list: name, what to do, a progress bar and the reward. */
+	private void drawQuests(int rowH) {
+		List<Cosmetics.Quest> qs = Cosmetics.quests();
+		StringBuilder head = new StringBuilder();
+		long daily = Cosmetics.dailyResetSeconds();
+		if (daily >= 0) {
+			head.append("§7Daily quests reset in §f").append(time(daily));
+		}
+		if (Cosmetics.loginStreak() > 0) {
+			head.append(head.length() > 0 ? "  §8|  " : "").append("§7Login streak: §f").append(Cosmetics.loginStreak())
+					.append(Cosmetics.loginStreak() == 1 ? " day" : " days");
+		}
+		if (head.length() > 0) {
+			this.fontRendererObj.drawStringWithShadow(Draw.fit(head.toString(), listW - 52), listX + 50,
+					listY + ROWS * rowH + 12, 0xFFFFFF);
+		}
+		if (qs.isEmpty()) {
+			this.drawCenteredString(this.fontRendererObj, Cosmetics.serverSupported() ? "§7No quests right now" : "§7No quests yet",
+					listX + listW / 2, listY + 50, 0xFFFFFF);
+			return;
+		}
+		for (int r = 0; r < ROWS; r++) {
+			int idx = page * ROWS + r;
+			if (idx >= qs.size()) {
+				break;
+			}
+			Cosmetics.Quest q = qs.get(idx);
+			int y = listY + 2 + r * rowH;
+			Gui.drawRect(listX, y, listX + listW, y + 24, 0x70000000);
+			Gui.drawRect(listX, y, listX + 2, y + 24, q.done ? 0xFF55FF55 : "weekly".equals(q.period) ? 0xFFB57EDC
+					: "login".equals(q.period) ? 0xFFFFD54A : 0xFF3FA9F5);
+			String reward = "+" + fmt(q.reward);
+			int rw = this.fontRendererObj.getStringWidth(reward);
+			coin(listX + listW - rw - 18, y + 3);
+			this.fontRendererObj.drawStringWithShadow(reward, listX + listW - rw - 5, y + 4, q.done ? 0x55FF55 : 0xFFD54A);
+			String tag = "weekly".equals(q.period) ? "§d[Weekly] " : "login".equals(q.period) ? "§6[Login] " : "";
+			int textW = listW - rw - 30;
+			this.fontRendererObj.drawStringWithShadow(
+					Draw.fit(tag + "§f" + q.name + (q.done ? " §a(done)" : " §8- §7" + q.description), textW), listX + 6,
+					y + 3, 0xFFFFFF);
+			// progress bar with the count on it
+			int bx = listX + 6;
+			int bw = listW - 12;
+			int by = y + 13;
+			Gui.drawRect(bx, by, bx + bw, by + 10, 0xFF202020);
+			int fill = (int) (bw * Math.min(1.0, q.progress / (double) q.goal));
+			if (fill > 0) {
+				Gui.drawRect(bx, by, bx + fill, by + 10, q.done ? 0xFF2E8B3A : 0xFF2A6FA8);
+			}
+			String count = fmt(q.progress) + " / " + fmt(q.goal);
+			this.fontRendererObj.drawStringWithShadow(count, bx + (bw - this.fontRendererObj.getStringWidth(count)) / 2,
+					by + 1, 0xFFFFFF);
+		}
+	}
+
+	private static String time(long s) {
+		long h = s / 3600;
+		long m = (s % 3600) / 60;
+		return h > 0 ? h + "h " + m + "m" : m > 0 ? m + "m" : s + "s";
 	}
 
 	/** A small gold coin. */

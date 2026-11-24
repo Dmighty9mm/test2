@@ -109,6 +109,16 @@ public final class PlebClient {
 					LOG.warn(msg);
 				}
 			});
+			net.plebmc.client.cosmetics.Cosmetics.setToasts(new net.plebmc.client.cosmetics.Cosmetics.Toasts() {
+				@Override
+				public void show(String title, String message) {
+					net.plebmc.client.apollo.module.NotificationModule nm = Apollo
+							.module(net.plebmc.client.apollo.module.NotificationModule.class);
+					if (nm != null) {
+						nm.showLocal(title, message, 5000L);
+					}
+				}
+			});
 			mods.load(STORE);
 		} catch (Throwable t) {
 			LOG.warn("mod/Apollo init failed: " + t);

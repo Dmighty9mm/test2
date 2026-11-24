@@ -4,4 +4,5 @@ public interface Player extends org.bukkit.OfflinePlayer, org.bukkit.command.Com
     java.util.Set<String> getListeningPluginChannels();
     org.bukkit.World getWorld();
     boolean isOnline();
+    Player getKiller();
 }

@@ -54,7 +54,7 @@ public final class ModMenuScreen extends GuiScreen {
 		}
 		int by = y0 + rows * rowH + 6;
 		int half = this.width / 2;
-		this.buttonList.add(new GuiButton(ID_COSMETICS, half - 152, by, 100, 20, "§6Cosmetics"));
+		this.buttonList.add(new GuiButton(ID_COSMETICS, half - 152, by, 100, 20, "§6Shop & Quests"));
 		this.buttonList.add(new GuiButton(ID_EDITOR, half - 50, by, 100, 20, "Edit HUD"));
 		this.buttonList.add(new GuiButton(ID_DEBUG, half + 52, by, 100, 20, "Apollo debug"));
 		this.buttonList.add(new GuiButton(ID_SCALE, half - 152, by + rowH, 150, 20, scaleLabel()));
