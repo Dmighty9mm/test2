@@ -97,6 +97,31 @@ public class CosmeticsTest {
 		check(!Cosmetics.serverSupported() && Cosmetics.coins() == -1 && Cosmetics.nothingToDraw(),
 				"disconnect forgets the server's state");
 
+		// quest categories (General / PlebNite), the All view, NEW tags
+		Cosmetics.handle("{\"type\":\"state\",\"questCategories\":[{\"id\":\"general\",\"name\":\"General\",\"icon\":\"general\",\"color\":\"#3FD8E6\"},"
+				+ "{\"id\":\"plebnite\",\"name\":\"PlebNite\",\"color\":\"bad\"}],\"quests\":["
+				+ "{\"id\":\"login\",\"category\":\"general\",\"period\":\"login\",\"streak\":3,\"streakLength\":7,\"cycle\":\"d1\",\"goal\":1,\"done\":true},"
+				+ "{\"id\":\"general_chat_10\",\"category\":\"general\",\"period\":\"daily\",\"cycle\":\"d1\",\"goal\":10,\"progress\":2},"
+				+ "{\"id\":\"kills_3\",\"category\":\"plebnite\",\"period\":\"daily\",\"cycle\":\"d1\",\"goal\":3}]}");
+		check(Cosmetics.questCategories().get(0).color == 0xFF3FD8E6 && Cosmetics.questCategories().get(1).color == 0
+				&& "quests".equals(Cosmetics.questCategories().get(1).icon), "category colors and icons");
+		check(Cosmetics.quests(null).size() == 3 && Cosmetics.quests("general").size() == 2 && Cosmetics.quests("plebnite").size() == 1,
+				"All / General / PlebNite");
+		check(Cosmetics.quests("general").get(0).streak == 3, "login streak on the row");
+		Cosmetics.loadSeen(null);
+		check(Cosmetics.newCount(null) == 2 && Cosmetics.newCount("plebnite") == 1, "unseen quests are new (not the login)");
+		check(Cosmetics.markSeen(Cosmetics.quests(null)) && Cosmetics.newCount(null) == 0 && !Cosmetics.markSeen(Cosmetics.quests(null)), "seen");
+		String saved = Cosmetics.seenJson();
+		Cosmetics.loadSeen(saved);
+		check(Cosmetics.newCount(null) == 0, "seen survives a restart");
+		Cosmetics.handle("{\"type\":\"state\",\"quests\":[{\"id\":\"kills_3\",\"category\":\"plebnite\",\"period\":\"daily\",\"cycle\":\"d2\",\"goal\":3}]}");
+		check(Cosmetics.newCount(null) == 1, "the same quest on a new day is new again");
+		Cosmetics.loadSeen("not json");
+		check(Cosmetics.newCount(null) == 1, "broken seen data is ignored");
+		Cosmetics.handle("{\"type\":\"state\",\"catalog\":[{\"id\":\"vip\",\"name\":\"VIP\",\"category\":\"hat\",\"render\":\"crown\",\"price\":999999999,\"forSale\":false},"
+				+ "{\"id\":\"cap\",\"name\":\"Cap\",\"category\":\"hat\",\"render\":\"beanie\",\"price\":50}]}");
+		check(Cosmetics.item("vip") != null && !Cosmetics.item("vip").forSale && Cosmetics.item("cap").forSale, "not-for-sale items");
+
 		System.out.println("CosmeticsTest: " + checks + " checks, failures=" + failures);
 		System.exit(failures == 0 ? 0 : 1);
 	}

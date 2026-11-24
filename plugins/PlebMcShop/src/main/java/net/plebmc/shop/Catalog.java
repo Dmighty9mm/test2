@@ -52,8 +52,11 @@ final class Catalog {
 			m.put("name", name);
 			m.put("category", category);
 			m.put("render", render);
-			// the client has no "not for sale" state: show a price nobody can reach
+			// older clients have no "not for sale" state: they get a price nobody can reach
 			m.put("price", notForSale() ? 999_999_999L : price);
+			if (notForSale()) {
+				m.put("forSale", false);
+			}
 			if (color != null) {
 				m.put("color", color);
 			}

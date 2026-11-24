@@ -102,7 +102,18 @@ Every hook calls `net.plebmc.client.hud.PlebClient` or `PlebEntities`:
 
 ## Client mods
 
-Open the mod menu with **Right Shift** in game.
+**Right Shift** in game opens the PlebMc home screen: a door to each of the client's
+own screens (number keys 1 to 6 work too). Settings > Behavior can make Right Shift
+open Mods, Quests or the Shop directly instead. Every screen closes with Esc or Right Shift.
+
+| Screen | What it does |
+|---|---|
+| **Mods** | Every mod as a card with its state (on, off, or locked when the server blocks it). Click a card to toggle it; right-click it or its gear for its settings page (every option, reset to defaults, "Move on HUD"). Categories on the left (HUD, Gameplay, Squad, Performance) with on/total counts, and a search box (start typing anywhere). |
+| **Shop** | Cosmetics only: Hats and Trails tabs (owned/total), item cards with price, Owned, Equipped or Exclusive (never sold), pages, and your player on the left (drag or arrow keys to spin). Picking a card tries it on (only you see it, until you leave). Buy, Equip and Unequip go to the server. |
+| **Quests** | All / General / PlebNite on the left with done/total counts and a dot for new quests; Daily and Weekly sections with reset timers; each quest's progress bar, count and reward; finished quests fold into compact "claimed" rows; the daily login row with streak pips. |
+| **HUD** | The HUD editor (below). |
+| **Account** | plebmc.top login: status, profile (name, ranks), log in with a code, log out. |
+| **Settings** | Interface (accent color, menu background, animations, click sounds), Notifications (popups, popup time), HUD (text shadow), Performance (resolution, FPS Boost, FPS counter), Behavior (what Right Shift opens), Developer (Apollo debug). |
 
 | Mod | Id (server option key) | Default | Notes |
 |---|---|---|---|
@@ -121,11 +132,23 @@ Open the mod menu with **Right Shift** in game.
 | Squad Ping | `squad-ping` | on | **Sneak + F** sends the swap-hands action modern servers use for pings (Apollo servers only) |
 | FPS Boost | `fps-boost` | off | fastest video settings while on; your own values come back when it's off |
 
-"Edit HUD layout" lets you drag every enabled HUD element. Positions are saved as
-screen fractions in browser storage (`plebmc.mods`), so they survive resizes and
-GUI-scale changes. "Apollo debug" shows each module's state and the last 100
-messages (green handled, orange ignored, red error, cyan sent). "Verbose log"
-prints every plugin message to the browser console.
+The **HUD editor** draws the live HUD with a side panel. Drag an element to move it: it
+snaps to the screen edges, the center line and other elements, always stays fully on
+screen, and if you drop it on another element it moves to the nearest free spot (or back
+where it was). Drag the corner handle or scroll over an element to resize it (50% to
+200%); arrow keys nudge it by a pixel. The panel lists every HUD element with a show/hide
+eye; selecting one shows its size, text color and background, "Reset position", "Reset
+look" and its other options. "Reset all" (click twice) puts every element back. Positions
+are saved as screen fractions in browser storage (`plebmc.mods`), so they survive resizes
+and GUI-scale changes.
+
+Mod options are saved per mod (`"opts"` in `plebmc.mods`); client settings in
+`plebmc.prefs`; which quests you've seen (for the NEW tags) in `plebmc.questsSeen`.
+
+**Apollo debug** (turn on Settings > Developer) shows each module's state and the last 100
+messages (green handled, orange ignored, red error, cyan sent). "Verbose log" prints every
+plugin message to the browser console; "Preview features" fills every module, the shop,
+quests and account with demo data.
 
 ## Squad and match features (PlebNite)
 
@@ -166,7 +189,7 @@ orange "unknown".
 
 ## Cosmetics shop protocol
 
-Cosmetics (hats and trails) are bought with the server's coins (on PlebMc: PlebMc Coins, earned from quests, a daily login reward and time online). The server owns the balance, ownership and what is equipped; the client only displays them and sends requests. Messages are UTF-8 JSON objects on the plugin channel `plebmc:shop`. The client sends `REGISTER plebmc:shop` when it joins (Bukkit needs this before it will deliver messages to the client). Open the shop from the mod menu (Right Shift, **Shop & Quests**). "Try on" works everywhere and is local only.
+Cosmetics (hats and trails) are bought with the server's coins (on PlebMc: PlebMc Coins, earned from quests, a daily login reward and time online). The server owns the balance, ownership and what is equipped; the client only displays them and sends requests. Messages are UTF-8 JSON objects on the plugin channel `plebmc:shop`. The client sends `REGISTER plebmc:shop` when it joins (Bukkit needs this before it will deliver messages to the client). Open it with Right Shift, then **Shop** or **Quests**. "Try on" works everywhere and is local only.
 
 **Client to server**
 
@@ -185,9 +208,11 @@ Cosmetics (hats and trails) are bought with the server's coins (on PlebMc: PlebM
 | `{"type":"result","ok":false,"message":"Not enough coins","coins":100}` | Answer to buy/equip, shown in the shop. `coins` is optional. |
 | `{"type":"notify","title":"§aQuest complete!","message":"Get 3 kills: +75 PlebMc Coins","coins":425}` | A popup (top right, like Apollo notifications). `coins` optional. |
 
-`state` can also carry the Quests tabs: `"currency":"PlebMc Coins"`, `"dailyResetIn":18720` and `"weeklyResetIn":...` (seconds), `"loginStreak":4`, `"questCategories":[{"id":"lobby","name":"PlebMc Lobby","tab":"Lobby"},{"id":"plebnite","name":"PlebNite","tab":"PlebNite"}]` (one tab each; without it the client shows a single Quests tab), and `"quests":[{"id":"kills_3","category":"plebnite","name":"Get 3 kills","description":"...","period":"daily","progress":1,"goal":3,"reward":75,"done":false}]` (`period` is `daily`, `weekly` or `login`; a quest without `category` shows in every tab).
+`state` can also carry the quests: `"currency":"PlebMc Coins"`, `"dailyResetIn":18720` and `"weeklyResetIn":...` (seconds), `"loginStreak":4`, `"questCategories":[{"id":"general","name":"General","icon":"general","color":"#3FD8E6"},{"id":"plebnite","name":"PlebNite","icon":"plebnite","color":"#FF9A3C"}]` (one entry each on the Quests screen, after "All"; `icon` and `color` are optional), and `"quests":[{"id":"kills_3","category":"plebnite","cycle":"2026-11-24","name":"Get 3 kills","description":"...","period":"daily","progress":1,"goal":3,"reward":75,"done":false}]` (`period` is `daily`, `weekly` or `login`; `cycle` names the day or week the quest belongs to, so the client can tag it NEW again when it comes back; the login row also has `"streak"` and `"streakLength"`; a quest without `category` shows in every category). Rewards are paid by the server the moment a quest is done, once; the client shows done quests as claimed.
 
-**Website login (plebmc.top).** `{"type":"account"}` asks for the player's website login; `{"type":"link","code":"ABC123"}` links the Minecraft account with a code from the website's Connections page. The server answers `{"type":"account","enabled":true,"linked":true,"username":"Master","displayName":"Master","groups":["Owner","Member"],"staff":true,"site":"https://plebmc.top","linkUrl":"https://plebmc.top/index.php?route=/user/connections","message":"Logged in as Master!","ok":true}` (`message`/`ok` only after a link attempt or an error). It also sends this on join once it has checked the website.
+**Website login (plebmc.top).** `{"type":"account"}` asks for the player's website login; `{"type":"link","code":"ABC123"}` links the Minecraft account with a code from the website's Connections page. The server answers `{"type":"account","enabled":true,"linked":true,"username":"Master","displayName":"Master","groups":["Owner","Member"],"staff":true,"site":"https://plebmc.top","linkUrl":"https://plebmc.top/index.php?route=/user/connections","message":"Logged in as Master!","ok":true}` (`message`/`ok` only after a link attempt or an error). It also sends this on join once it has checked the website. `{"type":"logout"}` logs out: the server unlinks the Minecraft account on the website (`users/integration_id:minecraft:<uuid>/integrations/unlink`) and answers with `"linked":false`.
+
+Catalog items that are never sold (given by staff or events) carry `"forSale":false` (and, for older clients, a price nobody can reach); the shop shows them as Exclusive.
 
 Catalog item: `{"id":"gold_tophat","name":"Gold Top Hat","category":"hat","render":"tophat","price":900,"color":"#FFD700","description":"..."}`. `category` is `hat` or `trail`. `render` is the look the client draws: hats `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`; trails `flame`, `hearts`, `notes`, `rainbow`, `cloud`, `portal`, `emerald`, `snow`. `color` tints a hat (optional). Items with a `render` this client doesn't know are hidden, so newer items don't break older clients. Without a catalog the client shows the built-in one (ids equal to the render names, prices 250 to 2,500).
 
@@ -197,14 +222,16 @@ Catalog item: `{"id":"gold_tophat","name":"Gold Top Hat","category":"hat","rende
 cosmetics are shared by every server behind the proxy. It answers `plebmc:shop` itself
 (those messages never reach the backends), sends `players` only to people on the same
 server, and keeps everything in `players.yml` on the proxy. Its own PlebMc Coins are
-separate from in-game economies. Quests are grouped in categories (one per server group,
-e.g. lobby and PlebNite), each with its own daily and weekly pool.
+separate from in-game economies. Quests are grouped in categories, each with its own
+daily and weekly pool and a list of servers it counts on: by default **General** (`'*'`,
+every server) and **PlebNite** (only the PlebNite server).
 
 `plugins/PlebMcBridge` runs on the backends and reports quest events (kills, deaths,
 matches, worlds, `/plebquest <player> <type>`) to the proxy as `PlebMcBridge` messages on
 the standard `BungeeCord` channel: `{"player":"<uuid>","type":"kill","amount":1}` or
-`{"player":"<uuid>","world":"arena1"}`. The proxy counts an event for the category of
-the server it came from. See both plugins' READMEs.
+`{"player":"<uuid>","world":"arena1"}`. The proxy counts an event for every category
+covering the server it came from (General everywhere, PlebNite only on PlebNite). Chat
+messages count for `chat` quests on the proxy itself, at most one every 10 seconds. See both plugins' READMEs.
 
 ## Testing with a real server (Spigot/Paper 1.8.8 + Apollo + EaglerXBungee)
 

@@ -193,6 +193,34 @@ final class Website {
 		return r.account == null && r.error == null ? new Result(null, "Linked, but the website didn't confirm it yet.") : r;
 	}
 
+	/**
+	 * Logs out: removes the Minecraft link from the website account (the
+	 * player can link again with a new code). Returns null when done, or why not.
+	 */
+	String unlink(UUID player) {
+		String route;
+		try {
+			route = "users/integration_id:" + URLEncoder.encode(integration.toLowerCase(Locale.ROOT), "UTF-8") + ":"
+					+ identifier(player) + "/integrations/unlink";
+		} catch (IOException e) {
+			return "bad integration name";
+		}
+		Map<String, Object> body = new LinkedHashMap<>();
+		body.put("integration", integration);
+		Map<?, ?> m;
+		try {
+			m = call("POST", route, gson.toJson(body));
+		} catch (IOException e) {
+			return "The website didn't answer. Try again in a minute.";
+		}
+		if (m.get("error") != null) {
+			String err = String.valueOf(m.get("error"));
+			// already not linked (or no such user): that is logged out too
+			return err.contains("not_linked") || err.contains("cannot_find_user") ? null : describe(err);
+		}
+		return null;
+	}
+
 	private Map<?, ?> call(String method, String route, String body) throws IOException {
 		Object[] r = http.request(method, api(route), apiKey, body);
 		Object parsed;

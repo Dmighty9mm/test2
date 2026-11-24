@@ -1,158 +1,236 @@
 package net.plebmc.client.hud;
 
 import net.lax1dude.eaglercraft.v1_8.EagRuntime;
-import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
 import net.plebmc.client.cosmetics.Account;
 import net.plebmc.client.cosmetics.Cosmetics;
 
 /**
- * Log in with a plebmc.top account. The website can't take passwords from
- * the game, so the player links once with a code from the website's
- * Connections page; the server remembers it from then on.
+ * Your plebmc.top account. The website can't take passwords from the game,
+ * so you link once with a code from the website's Connections page; the
+ * server remembers it from then on. Logging out unlinks it on the website.
  */
-public final class AccountScreen extends GuiScreen {
+public final class AccountScreen extends PlebScreen {
 
-	private static final int ID_LOGIN = 1, ID_SITE = 2, ID_DONE = 3;
-
-	private final GuiScreen parent;
 	private GuiTextField code;
 	private int seen = -1;
 	private int ticks;
+	private long logoutArmedAt;
+	private int wx, wy, ww, wh;
 
 	public AccountScreen(GuiScreen parent) {
-		this.parent = parent;
-	}
-
-	@Override
-	public void initGui() {
-		Account a = Cosmetics.account();
-		seen = a.version;
-		String keep = code == null ? "" : code.getText();
-		this.buttonList.clear();
-		int half = this.width / 2;
-		int y = this.height / 2 + 10;
-		code = null;
-		if (Cosmetics.serverSupported() && a.enabled && !a.linked) {
-			code = new GuiTextField(0, this.fontRendererObj, half - 100, y, 140, 20);
-			code.setMaxStringLength(64);
-			code.setText(keep);
-			code.setFocused(true);
-			GuiButton login = new GuiButton(ID_LOGIN, half + 44, y, 56, 20, a.pending ? "..." : "Log in");
-			login.enabled = !a.pending;
-			this.buttonList.add(login);
-		}
-		String site = a.linked ? "Open plebmc.top" : "Get my code (website)";
-		GuiButton open = new GuiButton(ID_SITE, half - 100, y + 26, 200, 20, site);
-		open.enabled = !a.linkUrl.isEmpty();
-		this.buttonList.add(open);
-		this.buttonList.add(new GuiButton(ID_DONE, half - 100, this.height - 28, 200, 20, "Done"));
-		if (Cosmetics.serverSupported() && !a.known) {
+		super(parent);
+		if (Cosmetics.serverSupported() && !Cosmetics.account().known) {
 			Cosmetics.requestAccount();
 		}
 	}
 
-	@Override
-	protected void actionPerformed(GuiButton b) {
+	private enum State {
+		OFFLINE, CHECKING, DISABLED, LINKED, LOGGED_OUT
+	}
+
+	private State state() {
 		Account a = Cosmetics.account();
-		if (b.id == ID_LOGIN && code != null) {
-			submit();
-		} else if (b.id == ID_SITE) {
-			EagRuntime.openLink(a.linked && !a.site.isEmpty() ? a.site : a.linkUrl);
-		} else if (b.id == ID_DONE) {
-			this.mc.displayGuiScreen(parent);
+		if (!Cosmetics.serverSupported() || (!a.known && ticks > 100)) {
+			return State.OFFLINE;
 		}
+		if (!a.known) {
+			return State.CHECKING;
+		}
+		if (!a.enabled) {
+			return State.DISABLED;
+		}
+		return a.linked ? State.LINKED : State.LOGGED_OUT;
+	}
+
+	@Override
+	protected void build() {
+		Account a = Cosmetics.account();
+		seen = a.version;
+		ww = Math.min(this.width - 16, 330);
+		wh = Math.min(this.height - 16, 230);
+		wx = (this.width - ww) / 2;
+		wy = (this.height - wh) / 2;
+		closeButton(wx + ww - 22, wy + 10);
+		int x = wx + 14, w = ww - 28;
+		int by = wy + wh - 26;
+		State s = state();
+		code = null;
+		switch (s) {
+		case LOGGED_OUT:
+			code = field(x + 6, wy + 140, w - 92, 12, 64);
+			code.setFocused(true);
+			Button login = button(a.pending ? "Checking..." : "Log in", x + w - 74, wy + 136, 74, 18, this::submit);
+			login.style(Style.PRIMARY).icon("account").enabled = !a.pending;
+			Button site = button("Get my code on plebmc.top", x, by, w, 18, () -> EagRuntime.openLink(a.linkUrl));
+			site.icon("link").tip = "Opens " + a.linkUrl;
+			break;
+		case LINKED:
+			Button open = button("Open plebmc.top", x, by, (w - 6) / 2, 18, () -> EagRuntime.openLink(a.site));
+			open.icon("link");
+			boolean armed = System.currentTimeMillis() - logoutArmedAt < 4000;
+			Button out = button(a.pending ? "Logging out..." : armed ? "Click to confirm" : "Log out", x + (w + 6) / 2, by,
+					(w - 6) / 2, 18, this::logout);
+			out.style(Style.DANGER).icon("logout").enabled = !a.pending;
+			out.tip = "Unlinks this Minecraft account from " + host(a.site) + ". You can link again any time.";
+			break;
+		case OFFLINE:
+			if (this.mc == null || this.mc.getCurrentServerData() == null) {
+				Button join = button("Join PlebMc", x + w / 2 - 50, by, 100, 18, () -> PlebMenu.joinServer(this));
+				join.style(Style.PRIMARY).icon("plebnite");
+			}
+			break;
+		default:
+			break;
+		}
+	}
+
+	private static String host(String url) {
+		return url.replaceFirst("^https?://", "").replaceAll("/.*$", "");
 	}
 
 	private void submit() {
+		if (code == null) {
+			return;
+		}
 		String c = code.getText().trim();
 		if (!c.isEmpty()) {
 			Cosmetics.link(c);
-			this.initGui();
+			rebuild();
+		}
+	}
+
+	private void logout() {
+		long now = System.currentTimeMillis();
+		if (now - logoutArmedAt > 4000) {
+			logoutArmedAt = now;
+			rebuild();
+			return;
+		}
+		logoutArmedAt = 0;
+		Cosmetics.logout();
+		rebuild();
+	}
+
+	@Override
+	protected void tick() {
+		ticks++;
+		Account a = Cosmetics.account();
+		if (a.version != seen || ticks == 101 || (logoutArmedAt != 0 && System.currentTimeMillis() - logoutArmedAt > 4000)) {
+			if (logoutArmedAt != 0 && System.currentTimeMillis() - logoutArmedAt > 4000) {
+				logoutArmedAt = 0;
+			}
+			rebuild();
 		}
 	}
 
 	@Override
-	public void updateScreen() {
-		ticks++;
-		if (code != null) {
-			code.updateCursorCounter();
-		}
-		if (Cosmetics.account().version != seen) {
-			this.initGui();
+	protected void key(char c, int key) {
+		if (key == PlebClient.KEY_RSHIFT) {
+			back();
 		}
 	}
 
 	@Override
 	protected void keyTyped(char c, int key) {
-		if (key == 1) {
-			this.mc.displayGuiScreen(parent);
+		if (code != null && code.isFocused() && (key == 28 || key == 156)) { // Enter
+			submit();
 			return;
 		}
-		if (code != null) {
-			if (key == 28 || key == 156) { // Enter
-				submit();
-				return;
-			}
-			code.textboxKeyTyped(c, key);
-		}
+		super.keyTyped(c, key);
 	}
 
 	@Override
-	protected void mouseClicked(int x, int y, int button) {
-		super.mouseClicked(x, y, button);
-		if (code != null) {
-			code.mouseClicked(x, y, button);
-		}
-	}
-
-	@Override
-	public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-		this.drawDefaultBackground();
+	protected void drawContent(int mx, int my, float pt) {
 		Account a = Cosmetics.account();
-		int half = this.width / 2;
-		int y = this.height / 2 - 70;
-		this.drawCenteredString(this.fontRendererObj, "§b§lplebmc.top Account", half, y, 0xFFFFFF);
-		y += 18;
-		if (!Cosmetics.serverSupported() || (!a.known && ticks > 100)) {
-			line("Join PlebMc to log in with your website account.", y, 0xAAAAAA);
-		} else if (!a.known) {
-			line("Checking your account...", y, 0xAAAAAA);
-		} else if (!a.enabled) {
-			line("Website login isn't set up on this server yet.", y, 0xAAAAAA);
-		} else if (a.linked) {
-			line("Logged in as §b" + a.displayName + (a.username.equals(a.displayName) ? "" : " §7(" + a.username + ")"), y, 0xFFFFFF);
-			y += 12;
-			if (!a.groups.isEmpty()) {
-				line("Rank: §e" + String.join("§7, §e", a.groups), y, 0xAAAAAA);
-				y += 12;
-			}
-			line("§8You stay logged in on every join. To log out, unlink", y + 6, 0xFFFFFF);
-			line("§8Minecraft under Connections on the website.", y + 16, 0xFFFFFF);
-		} else {
-			line("1. Log in on §bplebmc.top§7 with your email and password", y, 0xAAAAAA);
-			line("2. Go to Account > Connections > Minecraft > Link", y + 11, 0xAAAAAA);
-			line("3. Type the code it shows here (just the code)", y + 22, 0xAAAAAA);
+		Ui.window(wx, wy, ww, wh);
+		State s = state();
+		header(wx, wy, ww, "account", "Account", s == State.LINKED ? "Logged in with " + host(a.site) : host(a.site) + " login", false);
+		int x = wx + 14, w = ww - 28;
+		int y = wy + 48;
+		switch (s) {
+		case OFFLINE:
+			center("account", "Not connected to PlebMc", "Your website login works on PlebMc. Join it to log in or see your profile.", y);
+			break;
+		case CHECKING:
+			center("clock", "Checking your account...", "Asking " + host(a.site) + " who you are.", y);
+			break;
+		case DISABLED:
+			center("lock", "Website login is off", "This server hasn't set up " + host(a.site) + " login yet.", y);
+			break;
+		case LINKED:
+			profile(a, x, y, w);
+			break;
+		default:
+			steps(a, x, y, w);
+			break;
 		}
-		if (a.message != null) {
-			line((a.messageOk ? "§a" : "§c") + a.message, this.height / 2 + 60, 0xFFFFFF);
+		if (a.message != null && s != State.CHECKING) {
+			int my2 = wy + wh - 48;
+			Ui.icon(a.messageOk ? "check" : "close", x, my2 + 1, 1, a.messageOk ? Ui.GOOD : Ui.BAD);
+			Ui.text(Ui.fit(a.message, w - 14), x + 12, my2 + 2, a.messageOk ? Ui.GOOD : Ui.BAD);
 		}
-		if (code != null) {
-			code.drawTextBox();
-			if (code.getText().isEmpty() && !code.isFocused()) {
-				this.fontRendererObj.drawStringWithShadow("§8code", half - 96, this.height / 2 + 16, 0xFFFFFF);
-			}
-		}
-		super.drawScreen(mouseX, mouseY, partialTicks);
 	}
 
-	private void line(String s, int y, int color) {
-		this.drawCenteredString(this.fontRendererObj, Draw.fit(s, this.width - 10), this.width / 2, y, color);
+	private void profile(Account a, int x, int y, int w) {
+		Ui.card(x, y, w, 64, Ui.RAISED, Ui.BORDER_SOFT);
+		int acc = Ui.accent();
+		// initials avatar
+		String initial = a.displayName.isEmpty() ? "?" : a.displayName.substring(0, 1).toUpperCase();
+		Ui.round(x + 8, y + 8, 30, 30, Ui.alpha(acc, 0x40));
+		Ui.outline(x + 8, y + 8, 30, 30, acc);
+		Ui.big(initial, x + 23 - Ui.width(initial), y + 16, 2f, Ui.TEXT, true);
+		Ui.big(Ui.fit(a.displayName, (w - 60) * 2 / 3), x + 46, y + 9, 1.5f, Ui.TEXT, false);
+		String sub = a.username.equals(a.displayName) ? "Logged in" : "@" + a.username;
+		Ui.text(Ui.fit(sub, w - 60), x + 46, y + 24, Ui.MUTED);
+		int px = x + 46;
+		for (String g : a.groups) {
+			int pw = Ui.pillWidth(g);
+			if (px + pw > x + w - 6) {
+				break;
+			}
+			boolean top = g.equals(a.rank());
+			Ui.pill(g, px, y + 40, top ? Ui.ON_ACCENT : Ui.TEXT, top ? (a.staff ? Ui.GOLD : acc) : 0xFF0A0E12);
+			px += pw + 4;
+		}
+		if (a.groups.isEmpty()) {
+			Ui.text("No ranks yet", x + 46, y + 42, Ui.FAINT);
+		}
+		y += 72;
+		Ui.icon("check", x, y + 1, 1, Ui.GOOD);
+		Ui.text(Ui.fit("You're logged in on every join, no code needed.", w - 14), x + 12, y + 2, Ui.MUTED);
+		Ui.icon("link", x, y + 13, 1, Ui.FAINT);
+		Ui.text(Ui.fit("Linked to this Minecraft account on " + host(a.site), w - 14), x + 12, y + 14, Ui.FAINT);
 	}
 
-	@Override
-	public boolean doesGuiPauseGame() {
-		return false;
+	private void steps(Account a, int x, int y, int w) {
+		Ui.text("Log in with your " + host(a.site) + " account", x, y, Ui.TEXT);
+		y += 14;
+		String[] st = { "Log in on " + host(a.site) + " with your email and password",
+				"Open Account, then Connections, then Link next to Minecraft",
+				"Type the code it shows below (just the code)" };
+		for (int i = 0; i < st.length; i++) {
+			Ui.round(x, y + i * 14, 11, 11, Ui.alpha(Ui.accent(), 0x40));
+			Ui.centered(Integer.toString(i + 1), x + 6, y + i * 14 + 2, Ui.accent());
+			Ui.text(Ui.fit(st[i], w - 16), x + 16, y + i * 14 + 2, Ui.MUTED);
+		}
+		// code box
+		int fy = wy + 136;
+		boolean f = code != null && code.isFocused();
+		Ui.card(x, fy, w - 80, 18, 0xFF0D1217, f ? Ui.accent() : Ui.BORDER);
+		if (code != null && code.getText().isEmpty() && !f) {
+			Ui.text("Code from the website", x + 6, fy + 5, Ui.FAINT);
+		}
+	}
+
+	private void center(String icon, String title, String text, int y) {
+		int cx = wx + ww / 2;
+		Ui.icon(icon, cx - 13, y + 6, 3, Ui.alpha(Ui.accent(), 0x90));
+		Ui.centered(title, cx, y + 40, Ui.TEXT);
+		java.util.List<String> lines = Ui.wrap(text, ww - 60);
+		for (int i = 0; i < lines.size(); i++) {
+			Ui.centered(lines.get(i), cx, y + 52 + i * 10, Ui.MUTED);
+		}
 	}
 }

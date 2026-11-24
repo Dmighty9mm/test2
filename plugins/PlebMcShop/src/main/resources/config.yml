@@ -22,6 +22,8 @@ timezone: 'America/Chicago'
 # within streak-reset-hours and starts over after the last reward.
 login-rewards:
   enabled: true
+  # The quest category the daily login shows under in the client.
+  category: general
   rewards: [50, 75, 100, 125, 150, 200, 300]
   cooldown-hours: 20
   streak-reset-hours: 48
@@ -33,39 +35,41 @@ playtime:
   coins: 10
   notify: true
 
-# Quests come in categories, one per game. Each category is a tab in the client and
-# lists the backend servers (names from the BungeeCord config) whose events count for it.
+# Quests come in categories. The client shows them in one Quests screen with an
+# All / General / PlebNite filter, each split into Daily and Weekly.
+#   servers: the BungeeCord server names whose events count for the category.
+#            '*' = every server (network-wide).
+#   icon:    general, plebnite, star, quests, shop, squad, ... (client icon names)
+#   color:   the category's accent in the client.
 # Every day daily-count quests are picked from each category's "daily" list (the same for
 # everyone), and every week (from Monday) weekly-count from its "weekly" list.
-# Rewards are paid the moment a quest is finished.
-#
-# Quest types:
-#   play  = a minute on that category's servers     join  = connect to one of its servers
-#   login = a day with a login reward (counts in every category)
-#   kill / death / match = from the PlebMcBridge plugin on the backend (match = you died or won)
-#   anything else (win, parkour, ...) = /plebquest <player> <type> [amount] run on the backend
-#   console, e.g. from Battle Royale X's Player-Win commands or ajParkour's rewards.
+# Rewards are paid the moment a quest is finished, once.
+# Quest types: login (a daily login claimed), play (a minute online), join (connecting to
+# a server), chat (a chat message, at most one every 10 seconds), kill, death, match, win,
+# or anything a backend sends with /plebquest <player> <type> [amount].
 quests:
   reset-hour: 0
   daily-count: 3
   weekly-count: 2
   categories:
-    lobby:
-      name: 'PlebMc Lobby'
-      tab: 'Lobby'
-      servers: [lobby]
+    general:
+      name: 'General'
+      icon: general
+      color: '#3FD8E6'
+      servers: ['*']
       daily:
-        lobby_play_20:  {name: 'Hang out for 20 minutes', description: 'Spend time in the lobby', type: play, goal: 20, reward: 40}
-        lobby_parkour:  {name: 'Finish the parkour', description: 'Beat the lobby parkour', type: parkour, goal: 1, reward: 75}
-        lobby_pvp_3:    {name: 'Get 3 lobby PvP kills', description: 'Win fights in the lobby PvP', type: kill, goal: 3, reward: 50}
-        lobby_join_3:   {name: 'Come back 3 times', description: 'Join the lobby 3 times today', type: join, goal: 3, reward: 30}
+        general_play_30:  {name: 'Hang out for 30 minutes', description: 'Be online anywhere on PlebMc', type: play, goal: 30, reward: 60}
+        general_join_3:   {name: 'Server hopper', description: 'Join or switch servers 3 times', type: join, goal: 3, reward: 40}
+        general_chat_10:  {name: 'Say hi', description: 'Send 10 chat messages', type: chat, goal: 10, reward: 40}
+        general_play_60:  {name: 'Stick around for an hour', description: 'Be online for 60 minutes', type: play, goal: 60, reward: 100}
       weekly:
-        lobby_parkour_5: {name: 'Parkour pro', description: 'Finish the parkour 5 times', type: parkour, goal: 5, reward: 300}
-        lobby_play_120:  {name: 'Lobby regular', description: 'Spend 2 hours in the lobby', type: play, goal: 120, reward: 250}
-        login_5:         {name: 'Log in on 5 days', description: 'Claim your daily login 5 times', type: login, goal: 5, reward: 400}
+        login_5:          {name: 'Log in on 5 days', description: 'Claim your daily login 5 times', type: login, goal: 5, reward: 400}
+        general_play_300: {name: 'Play for 5 hours', description: 'Be online anywhere this week', type: play, goal: 300, reward: 500}
+        general_chat_100: {name: 'Chatterbox', description: 'Send 100 chat messages this week', type: chat, goal: 100, reward: 250}
     plebnite:
       name: 'PlebNite'
-      tab: 'PlebNite'
+      icon: plebnite
+      color: '#FF9A3C'
       servers: [plebnite]
       daily:
         kills_3:   {name: 'Get 3 kills', description: 'Eliminate players in matches', type: kill, goal: 3, reward: 75}

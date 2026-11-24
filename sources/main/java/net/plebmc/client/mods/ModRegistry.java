@@ -76,6 +76,13 @@ public final class ModRegistry {
                         if (!Double.isNaN(x) && !Double.isNaN(y)) {
                                 m.setPosition((float) x, (float) y);
                         }
+                        if (s.get("opts") instanceof Map) {
+                                Map<?, ?> o = (Map<?, ?>) s.get("opts");
+                                for (Mod.Setting st : m.settings()) {
+                                        double v = ProtoValues.asNumber(o.get(st.key), st.def);
+                                        st.set(Double.isNaN(v) ? st.def : (int) v);
+                                }
+                        }
                 }
         }
 
@@ -88,6 +95,13 @@ public final class ModRegistry {
                                 s.put("x", (double) m.fx());
                                 s.put("y", (double) m.fy());
                         }
+                        if (!m.settings().isEmpty()) {
+                                Map<String, Object> o = new LinkedHashMap<>();
+                                for (Mod.Setting st : m.settings()) {
+                                        o.put(st.key, (double) st.get());
+                                }
+                                s.put("opts", o);
+                        }
                         root.put(m.id(), s);
                 }
                 return Json.write(root);
@@ -99,7 +113,7 @@ public final class ModRegistry {
                 }
         }
 
-        /** Top-left pixel of a HUD box, clamped fully on screen. */
+        /** Top-left pixel of a HUD box (boxW/boxH already scaled), clamped fully on screen. */
         public static int[] place(Mod m, int boxW, int boxH, int screenW, int screenH) {
                 int x = Math.round(m.fx() * screenW) - (m.centerAnchored() ? boxW / 2 : 0);
                 int y = Math.round(m.fy() * screenH);

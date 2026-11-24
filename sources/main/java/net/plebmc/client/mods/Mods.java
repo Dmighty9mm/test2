@@ -19,13 +19,13 @@ public final class Mods {
         private Mods() {
         }
 
-        static ModSettingModule settings() {
+        static ModSettingModule modSettings() {
                 return Apollo.module(ModSettingModule.class);
         }
 
         /** Server override of one option, or {@code def}. */
         static boolean serverOption(String id, String option, boolean def) {
-                ModSettingModule ms = settings();
+                ModSettingModule ms = modSettings();
                 return ms == null ? def : ms.optionBool(id, option, def);
         }
 
@@ -54,6 +54,7 @@ public final class Mods {
         public static final class Fps extends TextMod {
                 public Fps() {
                         super("fps", "FPS", "Frames per second", true, 0.005f, 0.10f);
+                        hudLook(true);
                 }
 
                 @Override
@@ -65,26 +66,48 @@ public final class Mods {
         public static final class Cps extends TextMod {
                 public Cps() {
                         super("cps", "CPS", "Clicks per second (left | right)", true, 0.005f, 0.14f);
+                        hudLook(true);
+                        right = setting("right", "Right clicks", "Also count right clicks", OFF_ON, 1);
                 }
+
+                private final Setting right;
 
                 @Override
                 protected List<String> lines(ClientView v) {
-                        return one(v.cps(0) + " | " + v.cps(1) + " CPS");
+                        return one(right.on() ? v.cps(0) + " | " + v.cps(1) + " CPS" : v.cps(0) + " CPS");
                 }
         }
 
         public static final class Coordinates extends TextMod {
                 public Coordinates() {
                         super("coordinates", "Coordinates", "Position and facing", true, 0.005f, 0.18f);
+                        hudLook(true);
+                        facing = setting("facing", "Facing", "Show which way you're looking", OFF_ON, 1);
+                        decimals = setting("decimals", "Decimals", "Show one decimal place", OFF_ON, 1);
+                        compact = setting("compact", "Layout", "One line or one line per axis", new String[] { "Stacked", "One line" }, 0);
+                }
+
+                private final Setting facing;
+                private final Setting decimals;
+                private final Setting compact;
+
+                private String n(double d) {
+                        return decimals.on() ? fmt(d) : Long.toString((long) Math.floor(d));
                 }
 
                 @Override
                 protected List<String> lines(ClientView v) {
                         List<String> l = new ArrayList<>();
-                        l.add("X: " + fmt(v.x()));
-                        l.add("Y: " + fmt(v.y()));
-                        l.add("Z: " + fmt(v.z()));
-                        l.add("Facing: " + facing(v.yaw()));
+                        if (compact.on()) {
+                                l.add(n(v.x()) + ", " + n(v.y()) + ", " + n(v.z()));
+                        } else {
+                                l.add("X: " + n(v.x()));
+                                l.add("Y: " + n(v.y()));
+                                l.add("Z: " + n(v.z()));
+                        }
+                        if (facing.on()) {
+                                l.add("Facing: " + facing(v.yaw()));
+                        }
                         return l;
                 }
 
@@ -115,6 +138,7 @@ public final class Mods {
         public static final class Ping extends TextMod {
                 public Ping() {
                         super("ping", "Ping", "Connection latency", false, 0.90f, 0.05f);
+                        hudLook(true);
                 }
 
                 @Override
@@ -127,17 +151,61 @@ public final class Mods {
         public static final class Clock extends TextMod {
                 public Clock() {
                         super("clock", "Clock", "Local time", false, 0.90f, 0.01f);
+                        hudLook(true);
+                        format = setting("format", "Format", "24-hour or 12-hour time", new String[] { "24-hour", "12-hour" }, 0);
                 }
+
+                private final Setting format;
 
                 @Override
                 protected List<String> lines(ClientView v) {
-                        return one(v.localTime());
+                        return one(format.on() ? twelve(v.localTime()) : v.localTime());
+                }
+
+                /** "13:05" -> "1:05 PM". */
+                public static String twelve(String hhmm) {
+                        int c = hhmm == null ? -1 : hhmm.indexOf(':');
+                        if (c < 1) {
+                                return hhmm;
+                        }
+                        try {
+                                int h = Integer.parseInt(hhmm.substring(0, c));
+                                String ap = h >= 12 ? " PM" : " AM";
+                                h = h % 12 == 0 ? 12 : h % 12;
+                                return h + hhmm.substring(c) + ap;
+                        } catch (NumberFormatException e) {
+                                return hhmm;
+                        }
                 }
         }
 
         public static final class Armor extends TextMod {
                 public Armor() {
                         super("armorstatus", "Armor", "Worn armor and durability", false, 0.005f, 0.70f);
+                        hudLook(true);
+                        durability = setting("durability", "Durability", "How durability is shown",
+                                        new String[] { "Numbers", "Percent", "Hidden" }, 0);
+                }
+
+                private final Setting durability;
+
+                /** "Helmet 363/363" in the chosen style. */
+                String style(String s) {
+                        int sp = s.lastIndexOf(' ');
+                        int sl = s.lastIndexOf('/');
+                        if (durability.get() == 0 || sp < 0 || sl < sp) {
+                                return s;
+                        }
+                        if (durability.get() == 2) {
+                                return s.substring(0, sp);
+                        }
+                        try {
+                                int a = Integer.parseInt(s.substring(sp + 1, sl));
+                                int b = Integer.parseInt(s.substring(sl + 1));
+                                return s.substring(0, sp) + " " + (b <= 0 ? 100 : Math.round(a * 100f / b)) + "%";
+                        } catch (NumberFormatException e) {
+                                return s;
+                        }
                 }
 
                 @Override
@@ -145,7 +213,7 @@ public final class Mods {
                         List<String> l = new ArrayList<>();
                         for (String s : v.armor()) {
                                 if (!s.isEmpty()) {
-                                        l.add(s);
+                                        l.add(style(s));
                                 }
                         }
                         return l;
@@ -158,10 +226,10 @@ public final class Mods {
                                 return b;
                         }
                         List<String> l = new ArrayList<>();
-                        l.add("Helmet 363/363");
-                        l.add("Chestplate 528/528");
-                        l.add("Leggings 495/495");
-                        l.add("Boots 429/429");
+                        l.add(style("Helmet 363/363"));
+                        l.add(style("Chestplate 528/528"));
+                        l.add(style("Leggings 495/495"));
+                        l.add(style("Boots 429/429"));
                         return HudBox.lines(l, m);
                 }
         }
@@ -169,6 +237,7 @@ public final class Mods {
         public static final class Potions extends TextMod {
                 public Potions() {
                         super("potion-effects", "Potion effects", "Active effects and time left", false, 0.80f, 0.30f);
+                        hudLook(true);
                 }
 
                 @Override
@@ -197,7 +266,15 @@ public final class Mods {
 
                 public Keystrokes() {
                         super("keystrokes", "Keystrokes", "WASD, mouse buttons and jump", true, 0.005f, 0.37f);
+                        hudLook(false);
+                        mouse = setting("mouse", "Mouse buttons", "Show the LMB / RMB keys", OFF_ON, 1);
+                        cps = setting("cps", "Clicks per second", "Show CPS on the mouse keys", OFF_ON, 1);
+                        jump = setting("jump", "Space bar", "Show the jump key", OFF_ON, 1);
                 }
+
+                private final Setting mouse;
+                private final Setting cps;
+                private final Setting jump;
 
                 @Override
                 public boolean hasHud() {
@@ -213,10 +290,16 @@ public final class Mods {
                         key(b, "S", col, col, KEY, v.keyDown("back"));
                         key(b, "D", col * 2, col, KEY, v.keyDown("right"));
                         int mw = (col * 3 - GAP - GAP) / 2;
-                        key(b, "LMB " + v.cps(0), 0, col * 2, mw, v.mouseDown(0));
-                        key(b, "RMB " + v.cps(1), mw + GAP, col * 2, mw, v.mouseDown(1));
-                        b.rect(0, col * 3, col * 3 - GAP, 8, v.keyDown("jump") ? HudBox.BG_PRESSED : HudBox.BG);
-                        b.rect(col * 3 / 2 - 10, col * 3 + 3, 20, 1, v.keyDown("jump") ? HudBox.TEXT_PRESSED : HudBox.TEXT);
+                        int y = col * 2;
+                        if (mouse.on()) {
+                                key(b, cps.on() ? "LMB " + v.cps(0) : "LMB", 0, y, mw, v.mouseDown(0));
+                                key(b, cps.on() ? "RMB " + v.cps(1) : "RMB", mw + GAP, y, mw, v.mouseDown(1));
+                                y += col;
+                        }
+                        if (jump.on()) {
+                                b.rect(0, y, col * 3 - GAP, 8, v.keyDown("jump") ? HudBox.BG_PRESSED : HudBox.BG);
+                                b.rect(col * 3 / 2 - 10, y + 3, 20, 1, v.keyDown("jump") ? HudBox.TEXT_PRESSED : HudBox.TEXT);
+                        }
                         return b;
                 }
 
@@ -234,7 +317,12 @@ public final class Mods {
 
                 public ToggleSprint() {
                         super("toggle-sneak", "Toggle Sprint", "Tap sprint to keep sprinting", false, 0.005f, 0.95f);
+                        hudLook(true);
+                        category(GAMEPLAY);
+                        indicator = setting("indicator", "On-screen label", "Show [Sprinting (Toggled)] while it's on", OFF_ON, 1);
                 }
+
+                private final Setting indicator;
 
                 @Override
                 public boolean isBlockedByServer() {
@@ -258,7 +346,7 @@ public final class Mods {
 
                 @Override
                 protected List<String> lines(ClientView v) {
-                        return sprintHeld() ? one("[Sprinting (Toggled)]") : new ArrayList<String>();
+                        return sprintHeld() && indicator.on() ? one("[Sprinting (Toggled)]") : new ArrayList<String>();
                 }
 
                 @Override
@@ -273,13 +361,39 @@ public final class Mods {
 
                 public Zoom() {
                         super("zoom", "Zoom", "Hold C to zoom", true, 0f, 0f);
+                        level = setting("level", "Zoom level", "How far you zoom in when you press the key", LEVEL_NAMES, 1);
+                        scroll = setting("scroll", "Scroll to adjust", "Mouse wheel zooms further in or out while zooming", OFF_ON, 1);
+                        smooth = setting("smooth", "Smooth camera", "Cinematic camera while zoomed", OFF_ON, 0);
+                }
+
+                /** Field of view while zoomed (Eaglercraft's zoom works in FOV degrees). */
+                public static final float[] LEVELS = { 30f, 18f, 10f, 5f };
+                public static final String[] LEVEL_NAMES = { "Light", "Normal", "Strong", "Max" };
+                private final Setting level;
+                private final Setting scroll;
+                private final Setting smooth;
+
+                public float startFov() {
+                        return LEVELS[level.get()];
+                }
+
+                /** The zoomed FOV after one mouse wheel step (Eaglercraft: 4 degrees a notch, 5..32). */
+                public float scrolled(float current, int wheel) {
+                        if (!scroll.on()) {
+                                return current;
+                        }
+                        return Math.max(5f, Math.min(32f, current - wheel * 4f));
+                }
+
+                public boolean smoothCamera() {
+                        return smooth.on();
                 }
 
                 public float fov(float baseFov, boolean keyDown) {
                         if (!keyDown || !isActive()) {
                                 return baseFov;
                         }
-                        ModSettingModule ms = settings();
+                        ModSettingModule ms = modSettings();
                         float div = DEFAULT_DIVISOR;
                         if (ms != null) {
                                 double d = ProtoValues.asNumber(ms.option(id(), "zoom-divisor"), DEFAULT_DIVISOR);
@@ -295,6 +409,7 @@ public final class Mods {
         public static final class Fullbright extends Mod {
                 public Fullbright() {
                         super("lighting", "Fullbright", "See in the dark", false, 0f, 0f);
+                        category(GAMEPLAY);
                 }
 
                 @Override
@@ -347,7 +462,11 @@ public final class Mods {
 
                 public Compass() {
                         super("compass", "Compass", "Heading strip with your squad and waypoints", true, 0.5f, 0.09f);
+                        hudLook(false);
+                        pips = setting("markers", "Squad markers", "Show teammates and waypoints on the strip", OFF_ON, 1);
                 }
+
+                private final Setting pips;
 
                 public void setMarkers(List<Marker> m) {
                         markers = m == null ? new ArrayList<Marker>() : m;
@@ -381,7 +500,7 @@ public final class Mods {
                         HudBox b = new HudBox();
                         int mid = WIDTH / 2;
                         float yaw = v.yaw();
-                        b.rect(0, 0, WIDTH, HEIGHT, 0x50000000);
+                        b.rect(0, 0, WIDTH, HEIGHT, HudBox.BG_LIGHT);
                         // ticks every 15 degrees, letters every 45
                         for (int deg = 0; deg < 360; deg += 15) {
                                 float rel = relative(deg, yaw);
@@ -398,7 +517,7 @@ public final class Mods {
                                 }
                         }
                         // squad + waypoint pips
-                        for (int i = 0; i < markers.size(); i++) {
+                        for (int i = 0; pips.on() && i < markers.size(); i++) {
                                 Marker mk = markers.get(i);
                                 float rel = relative(mk.bearing, yaw);
                                 boolean edge = Math.abs(rel) > SPAN;
@@ -429,6 +548,7 @@ public final class Mods {
         public static final class SquadPing extends Mod {
                 public SquadPing() {
                         super("squad-ping", "Squad Ping", "Sneak + F marks a spot for your squad", true, 0f, 0f);
+                        category(SQUAD);
                 }
         }
 
@@ -441,6 +561,7 @@ public final class Mods {
         public static final class FpsBoost extends Mod {
                 public FpsBoost() {
                         super("fps-boost", "FPS Boost", "75% resolution, no vsync, fast settings (undone when off)", false, 0f, 0f);
+                        category(PERFORMANCE);
                 }
         }
 }

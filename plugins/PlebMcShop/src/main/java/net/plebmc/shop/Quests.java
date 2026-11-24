@@ -32,16 +32,28 @@ final class Quests {
 	static final class Category {
 		final String id;
 		final String name;
-		final String tab;
+		final String icon;
+		final String color;
 		final List<String> servers;
 		final List<Quest> daily = new ArrayList<>();
 		final List<Quest> weekly = new ArrayList<>();
 
-		Category(String id, String name, String tab, List<String> servers) {
+		Category(String id, String name, String icon, String color, List<String> servers) {
 			this.id = id;
 			this.name = name;
-			this.tab = tab;
+			this.icon = icon;
+			this.color = color;
 			this.servers = servers;
+		}
+
+		/** True for '*' (every server) or a listed server. A null server (the login) only matches '*'. */
+		boolean covers(String server) {
+			for (String s : servers) {
+				if (s.equals("*") || (server != null && s.equalsIgnoreCase(server))) {
+					return true;
+				}
+			}
+			return false;
 		}
 	}
 
@@ -76,6 +88,8 @@ final class Quests {
 	final List<String> warnings = new ArrayList<>();
 
 	final boolean loginEnabled;
+	/** The category the daily login row shows under. */
+	final String loginCategory;
 	final long[] loginRewards;
 	final long loginCooldownMs;
 	final long streakResetMs;
@@ -110,7 +124,15 @@ final class Quests {
 					continue;
 				}
 				String name = c.str("name", cid);
-				Category cat = new Category(cid, name, c.str("tab", name), c.list("servers"));
+				String color = c.str("color", "");
+				if (!color.isEmpty() && !color.matches("#[0-9A-Fa-f]{6}")) {
+					warnings.add("quests.categories." + cid + ".color must look like '#3FD8E6'");
+					color = "";
+				}
+				Category cat = new Category(cid, name, c.str("icon", "quests"), color, c.list("servers"));
+				if (cat.servers.isEmpty()) {
+					warnings.add("quests.categories." + cid + " has no servers (use ['*'] for every server)");
+				}
 				readPool(c.section("daily"), DAILY, cat, cat.daily, ids);
 				readPool(c.section("weekly"), WEEKLY, cat, cat.weekly, ids);
 				categories.put(cid, cat);
@@ -121,6 +143,8 @@ final class Quests {
 		}
 
 		loginEnabled = root.bool("login-rewards.enabled", true);
+		String lc = root.str("login-rewards.category", "");
+		loginCategory = categories.containsKey(lc) ? lc : categories.isEmpty() ? null : categories.keySet().iterator().next();
 		List<Long> parsed = new ArrayList<>();
 		for (String r : root.list("login-rewards.rewards")) {
 			try {
@@ -167,19 +191,20 @@ final class Quests {
 		}
 	}
 
-	/** The category a backend server belongs to, or null. */
-	String categoryOf(String server) {
-		if (server == null) {
-			return null;
-		}
+	/** The categories whose quests count events from this server (null = network events like the login). */
+	List<String> categoriesOf(String server) {
+		List<String> out = new ArrayList<>();
 		for (Category c : categories.values()) {
-			for (String s : c.servers) {
-				if (s.equalsIgnoreCase(server)) {
-					return c.id;
-				}
+			if (c.covers(server)) {
+				out.add(c.id);
 			}
 		}
-		return null;
+		return out;
+	}
+
+	/** True when anything counts on this server. */
+	boolean counts(String server) {
+		return !categoriesOf(server).isEmpty();
 	}
 
 	List<Quest> allQuests() {
@@ -246,7 +271,12 @@ final class Quests {
 		for (int i = 0; i < pool.size(); i++) {
 			idx.add(i);
 		}
-		Collections.shuffle(idx, new Random(key.hashCode() * 31L + 17));
+		// java.util.Random gives near-identical first shuffles for nearby seeds (and "day 23" vs
+		// "day 24" hash to nearby numbers), so mix the key first or the pick would never rotate.
+		long z = key.hashCode() * 0x9E3779B97F4A7C15L;
+		z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
+		z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
+		Collections.shuffle(idx, new Random(z ^ (z >>> 31)));
 		List<Integer> chosen = new ArrayList<>(idx.subList(0, n));
 		Collections.sort(chosen);
 		List<Quest> out = new ArrayList<>();
@@ -261,6 +291,16 @@ final class Quests {
 	/** Clears progress from a finished day/week. True if anything changed. */
 	boolean roll(Store.Data d, long now) {
 		boolean changed = false;
+		// quests removed from the config (e.g. the old Lobby ones): forget their progress.
+		// Never when the config has no quests at all (a broken config shouldn't wipe everyone).
+		Set<String> known = new HashSet<>();
+		for (Quest q : allQuests()) {
+			known.add(q.id);
+		}
+		if (!known.isEmpty()) {
+			changed |= d.progress.keySet().retainAll(known);
+			changed |= d.done.retainAll(known);
+		}
 		String day = dayKey(now);
 		if (!day.equals(d.dailyKey)) {
 			for (Quest q : allQuests()) {
@@ -287,18 +327,20 @@ final class Quests {
 	}
 
 	/**
-	 * Counts {@code amount} of {@code type} (kill, play, win, ...) toward the
-	 * player's active quests in {@code category} (null = every category) and
-	 * pays out any that are now finished. Returns the finished quests.
+	 * Counts {@code amount} of {@code type} (kill, play, win, ...) that
+	 * happened on {@code server} (null = a network event such as the login)
+	 * toward the player's active quests in every category covering that
+	 * server, and pays out any that are now finished (once: a finished quest
+	 * never counts again until it resets). Returns the finished quests.
 	 */
-	List<Quest> add(Store.Data d, String category, String type, long amount, long now) {
+	List<Quest> add(Store.Data d, String server, String type, long amount, long now) {
 		roll(d, now);
 		List<Quest> out = new ArrayList<>();
 		if (amount <= 0) {
 			return out;
 		}
 		for (Quest q : active(now)) {
-			if (!q.type.equals(type) || d.done.contains(q.id) || (category != null && !category.equals(q.category))) {
+			if (!q.type.equals(type) || d.done.contains(q.id) || !categories.get(q.category).covers(server)) {
 				continue;
 			}
 			long p = Math.min(q.goal, d.progress.getOrDefault(q.id, 0L) + amount);
@@ -332,8 +374,12 @@ final class Quests {
 
 	/** The reward for the next login (shown in the client before it's claimed). */
 	long nextLoginReward(Store.Data d, long now) {
-		int next = d.lastLogin == 0 || now - d.lastLogin > streakResetMs ? 1 : d.streak + 1;
-		return loginRewards[(next - 1) % loginRewards.length];
+		return loginRewards[(nextStreak(d, now) - 1) % loginRewards.length];
+	}
+
+	/** The streak day the next login will be (1 when the streak has run out). */
+	int nextStreak(Store.Data d, long now) {
+		return d.lastLogin == 0 || now - d.lastLogin > streakResetMs ? 1 : d.streak + 1;
 	}
 
 	/** One minute online. Returns playtime coins given (0 most minutes). */
@@ -357,13 +403,17 @@ final class Quests {
 			Map<String, Object> m = new LinkedHashMap<>();
 			m.put("id", c.id);
 			m.put("name", c.name);
-			m.put("tab", c.tab);
+			m.put("tab", c.name);
+			m.put("icon", c.icon);
+			if (!c.color.isEmpty()) {
+				m.put("color", c.color);
+			}
 			out.add(m);
 		}
 		return out;
 	}
 
-	/** The quest list as the client shows it: the login reward first (no category = every tab), then the rest. */
+	/** The quest list as the client shows it: the login reward first (in the login category), then the rest. */
 	List<Object> toJson(Store.Data d, long now) {
 		roll(d, now);
 		List<Object> out = new ArrayList<>();
@@ -371,10 +421,14 @@ final class Quests {
 			boolean claimed = loginClaimed(d, now);
 			Map<String, Object> m = new LinkedHashMap<>();
 			m.put("id", "login");
+			m.put("category", loginCategory);
+			m.put("streak", claimed ? d.streak : nextStreak(d, now) - 1);
+			m.put("streakLength", loginRewards.length);
 			m.put("name", "Daily login");
 			m.put("description", claimed ? "Day " + d.streak + " of your streak. Come back tomorrow!"
 					: "Join PlebMc every day for a bigger reward");
 			m.put("period", "login");
+			m.put("cycle", dayKey(now));
 			m.put("progress", claimed ? 1 : 0);
 			m.put("goal", 1);
 			m.put("reward", claimed ? loginRewards[(d.streak - 1) % loginRewards.length] : nextLoginReward(d, now));
@@ -387,6 +441,7 @@ final class Quests {
 			m.put("name", q.name);
 			m.put("description", q.description);
 			m.put("period", q.period);
+			m.put("cycle", DAILY.equals(q.period) ? dayKey(now) : weekKey(now));
 			m.put("category", q.category);
 			m.put("progress", d.progress.getOrDefault(q.id, 0L));
 			m.put("goal", q.goal);

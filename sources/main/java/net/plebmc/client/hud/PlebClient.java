@@ -23,6 +23,7 @@ import net.plebmc.client.mods.ClickCounter;
 import net.plebmc.client.mods.HudBox;
 import net.plebmc.client.mods.Mod;
 import net.plebmc.client.mods.ModRegistry;
+import net.plebmc.client.mods.ClientPrefs;
 import net.plebmc.client.mods.SettingsStore;
 import net.plebmc.client.network.PluginChannels;
 
@@ -114,13 +115,15 @@ public final class PlebClient {
 				public void show(String title, String message) {
 					net.plebmc.client.apollo.module.NotificationModule nm = Apollo
 							.module(net.plebmc.client.apollo.module.NotificationModule.class);
-					if (nm != null) {
-						nm.showLocal(title, message, 5000L);
+					if (nm != null && ClientPrefs.get().toasts) {
+						nm.showLocal(title, message, ClientPrefs.get().toastMs());
 					}
 				}
 			});
 			mods.load(STORE);
 			net.plebmc.client.mods.FpsLarp.INSTANCE.load(STORE);
+			ClientPrefs.get().load(STORE);
+			net.plebmc.client.cosmetics.Cosmetics.loadSeen(STORE.get(QUESTS_SEEN_KEY));
 		} catch (Throwable t) {
 			LOG.warn("mod/Apollo init failed: " + t);
 		}
@@ -135,6 +138,20 @@ public final class PlebClient {
 				clicks.clear();
 			}
 		});
+	}
+
+	/** What Right Shift opens (Settings > Behavior). */
+	static net.minecraft.client.gui.GuiScreen shiftScreen() {
+		switch (ClientPrefs.get().shiftOpens) {
+		case 1:
+			return new ModsScreen(null);
+		case 2:
+			return new QuestsScreen(null);
+		case 3:
+			return new ShopScreen(null);
+		default:
+			return new LauncherScreen(null);
+		}
 	}
 
 	public static ModRegistry mods() {
@@ -155,10 +172,22 @@ public final class PlebClient {
 		return view;
 	}
 
+	static final String QUESTS_SEEN_KEY = "questsSeen";
+
+	/** Remembers which quests the player has seen (for the NEW tags). */
+	static void saveQuestsSeen() {
+		try {
+			STORE.set(QUESTS_SEEN_KEY, net.plebmc.client.cosmetics.Cosmetics.seenJson());
+		} catch (Throwable t) {
+			LOG.warn("could not save seen quests: " + t);
+		}
+	}
+
 	public static void saveSettings() {
 		try {
 			mods.save(STORE);
 			net.plebmc.client.mods.FpsLarp.INSTANCE.save(STORE);
+			ClientPrefs.get().save(STORE);
 		} catch (Throwable t) {
 			LOG.warn("could not save mod settings: " + t);
 		}
@@ -218,7 +247,7 @@ public final class PlebClient {
 			return false;
 		}
 		if (key == KEY_RSHIFT) {
-			mc.displayGuiScreen(new ModMenuScreen(null));
+			mc.displayGuiScreen(shiftScreen());
 			return true;
 		}
 		if (key == mc.gameSettings.keyBindSprint.getKeyCode()) {
@@ -273,6 +302,37 @@ public final class PlebClient {
 		return keyDown && mods.zoom.isActive();
 	}
 
+	/** Zoom key pressed: the FOV to start at (the Zoom level setting). */
+	public static float zoomStart(float eaglerDefault) {
+		try {
+			return mods.zoom.startFov();
+		} catch (Throwable t) {
+			return eaglerDefault;
+		}
+	}
+
+	/** Mouse wheel while zooming. */
+	public static float zoomScroll(float current, int wheel) {
+		return mods.zoom.scrolled(current, wheel);
+	}
+
+	private static boolean smoothByZoom;
+	private static boolean smoothBefore;
+
+	/** Smooth camera while zoomed (and puts the player's own setting back after). */
+	private static void syncZoomCamera() {
+		boolean want = mc.isZoomKey && mods.zoom.isActive() && mods.zoom.smoothCamera() && mc.currentScreen == null;
+		if (want != smoothByZoom) {
+			if (want) {
+				smoothBefore = mc.gameSettings.smoothCamera;
+				mc.gameSettings.smoothCamera = true;
+			} else {
+				mc.gameSettings.smoothCamera = smoothBefore;
+			}
+			smoothByZoom = want;
+		}
+	}
+
 	/** EntityRenderer.updateLightmap: the gamma to use. */
 	public static float gamma(float base) {
 		float min = mods.fullbright.minLight();
@@ -321,6 +381,7 @@ public final class PlebClient {
 		int guiH = res.getScaledHeight();
 		try {
 			FpsBoost.sync(mc, mods.fpsBoost.isActive());
+			syncZoomCamera();
 		} catch (Throwable t) {
 			LOG.warn("FPS boost failed: " + t);
 		}
@@ -356,25 +417,47 @@ public final class PlebClient {
 
 	/** Draws one HUD box at its saved position; returns {x, y, w, h}. */
 	static int[] drawMod(Mod m, HudBox box, int guiW, int guiH, boolean outline) {
+		return drawMod(m, box, guiW, guiH, outline ? 0xFFFFFF55 : 0);
+	}
+
+	/**
+	 * Draws one HUD box at its saved position with the mod's size, text
+	 * color and background; returns its on-screen {x, y, w, h}.
+	 */
+	static int[] drawMod(Mod m, HudBox box, int guiW, int guiH, int outline) {
 		if (box == null || box.width <= 0) {
 			return null;
 		}
-		int[] p = ModRegistry.place(m, box.width, box.height, guiW, guiH);
+		float sc = m.hudScale();
+		int w = Math.max(1, Math.round(box.width * sc));
+		int h = Math.max(1, Math.round(box.height * sc));
+		int[] p = ModRegistry.place(m, w, h, guiW, guiH);
+		int textColor = m.hudTextColor();
+		int bg = m.hudBackground();
+		boolean shadow = ClientPrefs.get().hudShadow;
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.pushMatrix();
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.translate(p[0], p[1], 0f);
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.scale(sc, sc, 1f);
 		for (HudBox.Rect r : box.rects) {
-			Draw.fill(p[0] + r.x, p[1] + r.y, r.w, r.h, r.argb);
+			int c = r.argb;
+			if (bg >= 0 && (c == HudBox.BG || c == HudBox.BG_LIGHT)) {
+				c = bg;
+			}
+			Draw.fill(r.x, r.y, r.w, r.h, c);
 		}
 		for (HudBox.Text t : box.texts) {
-			float tx = t.centered ? p[0] + t.x - Draw.width(t.text) / 2f : p[0] + t.x;
-			Draw.text(t.text, tx, p[1] + t.y, t.argb, true);
+			int c = textColor != 0 && t.argb == HudBox.TEXT ? textColor : t.argb;
+			float tx = t.centered ? t.x - Draw.width(t.text) / 2f : t.x;
+			Draw.text(t.text, tx, t.y, c, shadow);
 		}
-		if (outline) {
-			int c = 0xFFFFFF55;
-			Draw.fill(p[0] - 1, p[1] - 1, box.width + 2, 1, c);
-			Draw.fill(p[0] - 1, p[1] + box.height, box.width + 2, 1, c);
-			Draw.fill(p[0] - 1, p[1], 1, box.height, c);
-			Draw.fill(p[0] + box.width, p[1], 1, box.height, c);
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.popMatrix();
+		if (outline != 0) {
+			Draw.fill(p[0] - 1, p[1] - 1, w + 2, 1, outline);
+			Draw.fill(p[0] - 1, p[1] + h, w + 2, 1, outline);
+			Draw.fill(p[0] - 1, p[1], 1, h, outline);
+			Draw.fill(p[0] + w, p[1], 1, h, outline);
 		}
-		return new int[] { p[0], p[1], box.width, box.height };
+		return new int[] { p[0], p[1], w, h };
 	}
 
 	static EntityPlayerSP player() {

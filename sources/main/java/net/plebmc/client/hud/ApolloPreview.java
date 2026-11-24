@@ -62,14 +62,22 @@ final class ApolloPreview {
 		// cosmetics: what the PlebMc shop plugin would send
 		net.plebmc.client.cosmetics.Cosmetics.handle("{\"type\":\"state\",\"coins\":3200,"
 				+ "\"owned\":[\"tophat\",\"crown\",\"flame\"],\"equipped\":{\"hat\":\"crown\",\"trail\":\"flame\"},"
-				+ "\"dailyResetIn\":18720,\"loginStreak\":4,"
-				+ "\"questCategories\":[{\"id\":\"lobby\",\"name\":\"PlebMc Lobby\",\"tab\":\"Lobby\"},{\"id\":\"plebnite\",\"name\":\"PlebNite\",\"tab\":\"PlebNite\"}],\"quests\":["
-				+ "{\"id\":\"login\",\"name\":\"Daily login\",\"description\":\"Day 4 of your streak\",\"period\":\"login\",\"progress\":1,\"goal\":1,\"reward\":125,\"done\":true},"
-				+ "{\"id\":\"lobby_parkour\",\"category\":\"lobby\",\"name\":\"Parkour run\",\"description\":\"Finish the lobby parkour\",\"period\":\"daily\",\"progress\":0,\"goal\":1,\"reward\":100},"
-				+ "{\"id\":\"lobby_play_20\",\"category\":\"lobby\",\"name\":\"Hang out 20 minutes\",\"description\":\"Be online in the lobby\",\"period\":\"daily\",\"progress\":12,\"goal\":20,\"reward\":50},"
-				+ "{\"id\":\"kills_3\",\"category\":\"plebnite\",\"name\":\"Get 3 kills\",\"description\":\"Eliminate players in matches\",\"period\":\"daily\",\"progress\":2,\"goal\":3,\"reward\":75},"
-				+ "{\"id\":\"play_30\",\"category\":\"plebnite\",\"name\":\"Play 30 minutes\",\"description\":\"Play PlebNite\",\"period\":\"daily\",\"progress\":12,\"goal\":30,\"reward\":60},"
-				+ "{\"id\":\"wins_5\",\"category\":\"plebnite\",\"name\":\"Win 5 matches\",\"description\":\"Be the last one standing\",\"period\":\"weekly\",\"progress\":1,\"goal\":5,\"reward\":750}]}");
+				+ "\"dailyResetIn\":18720,\"weeklyResetIn\":297000,\"loginStreak\":4,"
+				+ "\"questCategories\":[{\"id\":\"general\",\"name\":\"General\",\"icon\":\"general\",\"color\":\"#3FD8E6\"},"
+				+ "{\"id\":\"plebnite\",\"name\":\"PlebNite\",\"icon\":\"plebnite\",\"color\":\"#FF9A3C\"}],\"quests\":["
+				+ "{\"id\":\"login\",\"category\":\"general\",\"cycle\":\"demo\",\"streak\":4,\"streakLength\":7,\"name\":\"Daily login\",\"description\":\"Day 4 of your streak\",\"period\":\"login\",\"progress\":1,\"goal\":1,\"reward\":125,\"done\":true},"
+				+ "{\"id\":\"general_play_30\",\"category\":\"general\",\"cycle\":\"demo\",\"name\":\"Hang out for 30 minutes\",\"description\":\"Be online anywhere on PlebMc\",\"period\":\"daily\",\"progress\":18,\"goal\":30,\"reward\":60},"
+				+ "{\"id\":\"general_chat_10\",\"category\":\"general\",\"cycle\":\"demo\",\"name\":\"Say hi\",\"description\":\"Send 10 chat messages\",\"period\":\"daily\",\"progress\":10,\"goal\":10,\"reward\":40,\"done\":true},"
+				+ "{\"id\":\"general_join_3\",\"category\":\"general\",\"cycle\":\"demo\",\"name\":\"Server hopper\",\"description\":\"Join or switch servers 3 times\",\"period\":\"daily\",\"progress\":1,\"goal\":3,\"reward\":40},"
+				+ "{\"id\":\"login_5\",\"category\":\"general\",\"cycle\":\"demo\",\"name\":\"Log in on 5 days\",\"description\":\"Claim your daily login 5 times\",\"period\":\"weekly\",\"progress\":4,\"goal\":5,\"reward\":400},"
+				+ "{\"id\":\"general_play_300\",\"category\":\"general\",\"cycle\":\"demo\",\"name\":\"Play for 5 hours\",\"description\":\"Be online anywhere this week\",\"period\":\"weekly\",\"progress\":95,\"goal\":300,\"reward\":500},"
+				+ "{\"id\":\"kills_3\",\"category\":\"plebnite\",\"cycle\":\"demo\",\"name\":\"Get 3 kills\",\"description\":\"Eliminate players in matches\",\"period\":\"daily\",\"progress\":2,\"goal\":3,\"reward\":75},"
+				+ "{\"id\":\"win_1\",\"category\":\"plebnite\",\"cycle\":\"demo\",\"name\":\"Win a match\",\"description\":\"Be the last one standing\",\"period\":\"daily\",\"progress\":0,\"goal\":1,\"reward\":150},"
+				+ "{\"id\":\"play_30\",\"category\":\"plebnite\",\"cycle\":\"demo\",\"name\":\"Play PlebNite for 30 minutes\",\"description\":\"Be on PlebNite\",\"period\":\"daily\",\"progress\":30,\"goal\":30,\"reward\":60,\"done\":true},"
+				+ "{\"id\":\"kills_40\",\"category\":\"plebnite\",\"cycle\":\"demo\",\"name\":\"Get 40 kills\",\"description\":\"Eliminate players this week\",\"period\":\"weekly\",\"progress\":17,\"goal\":40,\"reward\":600},"
+				+ "{\"id\":\"wins_5\",\"category\":\"plebnite\",\"cycle\":\"demo\",\"name\":\"Win 5 matches\",\"description\":\"Be the last one standing 5 times\",\"period\":\"weekly\",\"progress\":1,\"goal\":5,\"reward\":750}]}");
+		net.plebmc.client.cosmetics.Cosmetics.handle("{\"type\":\"account\",\"enabled\":true,\"linked\":true,\"username\":\"PreviewPleb\","
+				+ "\"displayName\":\"PreviewPleb\",\"groups\":[\"Owner\",\"Member\"],\"staff\":true,\"site\":\"https://plebmc.top\"}");
 		net.plebmc.client.cosmetics.Cosmetics.handle("{\"type\":\"notify\",\"title\":\"\u00a7aQuest complete!\",\"message\":\"Daily login: +125 PlebMc Coins\"}");
 	}
 

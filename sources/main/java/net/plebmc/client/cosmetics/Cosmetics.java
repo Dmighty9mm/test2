@@ -47,6 +47,8 @@ public final class Cosmetics {
 		public final int price;
 		/** 0xRRGGBB tint, or -1 for the look's own colors. */
 		public final int color;
+		/** False for items that are only given out (events, ranks), never sold. */
+		public boolean forSale = true;
 
 		public Item(String id, String name, String category, String render, String description, int price,
 				int color) {
@@ -71,8 +73,18 @@ public final class Cosmetics {
 		public final long goal;
 		public final long reward;
 		public final boolean done;
-		/** The category (tab) id, or null for quests that show in every tab (the daily login). */
+		/** The category id (null only from older servers: then it shows in every tab). */
 		public final String category;
+		/** Login row: the streak day reached (0 = none) and how many days the reward cycle has. */
+		public int streak;
+		public int streakLength;
+		/** Which day/week this quest belongs to (so "new" works when the same quest comes back). */
+		public String cycle = "";
+
+		/** Identifies this quest in this day/week. */
+		public String key() {
+			return id + "@" + cycle;
+		}
 
 		public Quest(String id, String name, String description, String period, long progress, long goal, long reward,
 				boolean done) {
@@ -93,16 +105,27 @@ public final class Cosmetics {
 		}
 	}
 
-	/** A quest tab: e.g. "lobby" shown as "Lobby", titled "PlebMc Lobby". */
+	/** A quest category from the server's config (General, PlebNite). */
 	public static final class QuestCategory {
 		public final String id;
 		public final String name;
+		/** The tab label (the name, from older servers maybe shorter). */
 		public final String tab;
+		/** An icon name the client knows (general, plebnite, ...), or "quests". */
+		public final String icon;
+		/** ARGB, or 0 for the accent color. */
+		public final int color;
 
 		public QuestCategory(String id, String name, String tab) {
+			this(id, name, tab, "quests", 0);
+		}
+
+		public QuestCategory(String id, String name, String tab, String icon, int color) {
 			this.id = id;
 			this.name = name;
 			this.tab = tab;
+			this.icon = icon;
+			this.color = color;
 		}
 	}
 
@@ -249,7 +272,8 @@ public final class Cosmetics {
 						Map<?, ?> c = (Map<?, ?>) e;
 						String cid = (String) c.get("id");
 						String cname = str(c.get("name"), cid);
-						cs.add(new QuestCategory(cid, cname, str(c.get("tab"), cname)));
+						cs.add(new QuestCategory(cid, cname, str(c.get("tab"), cname), str(c.get("icon"), "quests"),
+								parseColor(str(c.get("color"), ""))));
 					}
 				}
 				questCategories = Collections.unmodifiableList(cs);
@@ -365,8 +389,10 @@ public final class Cosmetics {
 		} else if (c instanceof Number) {
 			color = ((Number) c).intValue() & 0xFFFFFF;
 		}
-		return new Item(id, str(m.get("name"), id), cat, render, str(m.get("description"), ""),
-				(int) Math.max(0, num(m.get("price"), 0)), color);
+		Item it = new Item(id, str(m.get("name"), id), cat, render, str(m.get("description"), ""),
+				(int) Math.max(0, Math.min(Integer.MAX_VALUE, num(m.get("price"), 0))), color);
+		it.forSale = !Boolean.FALSE.equals(m.get("forSale"));
+		return it;
 	}
 
 	private static Quest readQuest(Object o) {
@@ -381,8 +407,20 @@ public final class Cosmetics {
 		long goal = Math.max(1, num(m.get("goal"), 1));
 		long progress = Math.max(0, Math.min(goal, num(m.get("progress"), 0)));
 		boolean done = Boolean.TRUE.equals(m.get("done")) || progress >= goal;
-		return new Quest(id, str(m.get("name"), id), str(m.get("description"), ""), str(m.get("period"), "daily"),
+		Quest q = new Quest(id, str(m.get("name"), id), str(m.get("description"), ""), str(m.get("period"), "daily"),
 				done ? goal : progress, goal, Math.max(0, num(m.get("reward"), 0)), done, str(m.get("category"), null));
+		q.streak = (int) Math.max(0, num(m.get("streak"), 0));
+		q.streakLength = (int) Math.max(0, num(m.get("streakLength"), 0));
+		q.cycle = str(m.get("cycle"), "");
+		return q;
+	}
+
+	/** "#RRGGBB" to opaque ARGB, or 0. */
+	static int parseColor(String s) {
+		if (s == null || !s.matches("#[0-9A-Fa-f]{6}")) {
+			return 0;
+		}
+		return 0xFF000000 | Integer.parseInt(s.substring(1), 16);
 	}
 
 	public static boolean knownRender(String r) {
@@ -424,6 +462,13 @@ public final class Cosmetics {
 		return send(obj("type", "link", "code", code));
 	}
 
+	/** Logs out: the server unlinks this Minecraft account from the website account. */
+	public static boolean logout() {
+		account.pending = true;
+		account.version++;
+		return send(obj("type", "logout"));
+	}
+
 	/** The plebmc.top login, as the server last reported it. */
 	public static Account account() {
 		return account;
@@ -462,7 +507,62 @@ public final class Cosmetics {
 		return quests;
 	}
 
-	/** Quests for one tab: that category's plus the ones in every tab. */
+	// ---- "new" quests: ones the player hasn't seen on the Quests screen yet ----
+	private static final java.util.Set<String> seen = new java.util.HashSet<>();
+
+	/** Unfinished and not seen yet (this day/week). */
+	public static boolean isNew(Quest q) {
+		return !q.done && !"login".equals(q.period) && !seen.contains(q.key());
+	}
+
+	public static int newCount(String category) {
+		int n = 0;
+		for (Quest q : quests(category)) {
+			if (isNew(q)) {
+				n++;
+			}
+		}
+		return n;
+	}
+
+	/** The Quests screen showed these. Returns true if anything changed (then save {@link #seenJson()}). */
+	public static boolean markSeen(List<Quest> qs) {
+		boolean changed = false;
+		for (Quest q : qs) {
+			changed |= seen.add(q.key());
+		}
+		if (changed) {
+			// forget old days and weeks: keep only what the server lists now
+			java.util.Set<String> now = new java.util.HashSet<>();
+			for (Quest q : quests) {
+				now.add(q.key());
+			}
+			seen.retainAll(now);
+		}
+		return changed;
+	}
+
+	public static String seenJson() {
+		return net.plebmc.client.apollo.proto.Json.write(new ArrayList<Object>(seen));
+	}
+
+	public static void loadSeen(String raw) {
+		seen.clear();
+		try {
+			Object o = raw == null || raw.isEmpty() ? null : net.plebmc.client.apollo.proto.Json.parse(raw);
+			if (o instanceof List) {
+				for (Object e : (List<?>) o) {
+					if (e instanceof String) {
+						seen.add((String) e);
+					}
+				}
+			}
+		} catch (RuntimeException e) {
+			// a broken value: start over
+		}
+	}
+
+	/** Quests for one tab (null = All): that category's, plus any without a category (older servers). */
 	public static List<Quest> quests(String category) {
 		List<Quest> out = new ArrayList<>();
 		for (Quest q : quests) {

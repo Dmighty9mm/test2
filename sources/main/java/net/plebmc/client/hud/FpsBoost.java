@@ -49,16 +49,29 @@ final class FpsBoost {
 
 	/** Moves to the next resolution step (wraps around). */
 	static void cycleScale() {
+		cycleScale(1);
+	}
+
+	/** Moves one resolution step forward (+1) or back (-1), wrapping around. */
+	static void cycleScale(int dir) {
 		double cur = userScale();
 		int next = 0;
 		for (int i = 0; i < SCALES.length; i++) {
 			if (Math.abs(SCALES[i] - cur) < 0.01) {
-				next = (i + 1) % SCALES.length;
+				next = ((i + dir) % SCALES.length + SCALES.length) % SCALES.length;
 				break;
 			}
 		}
 		userScale = SCALES[next];
 		PlebClient.STORE.set("renderScale", String.valueOf(userScale));
+	}
+
+	/** "75%" (and what the boost makes it, if lower). */
+	static String scaleLabel() {
+		boolean boost = PlebClient.mods().fpsBoost.isActive();
+		int user = (int) Math.round(userScale() * 100);
+		int eff = (int) Math.round(effectiveScale(boost) * 100);
+		return user + "%" + (eff != user ? " (" + eff + "% now)" : "");
 	}
 
 	/** The resolution the game draws at right now. */

@@ -13,6 +13,8 @@ public final class HudBox {
         public static final int PAD = 2;
         public static final int LINE_H = 10;
         public static final int BG = 0x6F000000;
+        /** A lighter background (the compass strip); the Background option replaces it too. */
+        public static final int BG_LIGHT = 0x50000000;
         public static final int BG_PRESSED = 0xB0FFFFFF;
         public static final int TEXT = 0xFFFFFFFF;
         public static final int TEXT_PRESSED = 0xFF000000;

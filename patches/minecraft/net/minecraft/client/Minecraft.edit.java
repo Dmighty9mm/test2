@@ -647,7 +647,7 @@
 > CHANGE  25 : 28  @  25 : 26
 
 ~ 						if (this.isZoomKey) {
-~ 							this.adjustedZoomValue = MathHelper.clamp_float(adjustedZoomValue - j * 4.0f, 5.0f, 32.0f);
+~ 							this.adjustedZoomValue = net.plebmc.client.hud.PlebClient.zoomScroll(adjustedZoomValue, j);
 ~ 						} else if (this.thePlayer.isSpectator()) {
 
 > CHANGE  14 : 16  @  14 : 15
@@ -695,7 +695,7 @@
 
 + 			boolean zoomKey = this.gameSettings.keyBindZoomCamera.isKeyDown();
 + 			if (zoomKey != isZoomKey) {
-+ 				adjustedZoomValue = startZoomValue;
++ 				adjustedZoomValue = net.plebmc.client.hud.PlebClient.zoomStart(startZoomValue);
 + 				isZoomKey = zoomKey;
 + 			}
 + 

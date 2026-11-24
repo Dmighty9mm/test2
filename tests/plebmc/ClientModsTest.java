@@ -247,6 +247,30 @@ public class ClientModsTest {
                 check(cc.cps(0, 1599) == 12 && cc.cps(0, 2400) == 3 && cc.cps(1, 2400) == 1 && cc.cps(1, 2600) == 0,
                                 "click counter window: " + cc.cps(0, 1599) + "/" + cc.cps(0, 2400));
 
+                // HUD editor: reset position, prefs round trip
+                ModRegistry rr = new ModRegistry();
+                float dx = rr.fps.fx(), dy = rr.fps.fy();
+                rr.fps.setPosition(0.6f, 0.7f);
+                rr.fps.resetPosition();
+                check(rr.fps.fx() == dx && rr.fps.fy() == dy, "reset position");
+                net.plebmc.client.mods.ClientPrefs pr = net.plebmc.client.mods.ClientPrefs.get();
+                pr.shiftOpens = 2;
+                pr.accent = 3;
+                Map<String, String> kv = new HashMap<>();
+                SettingsStore st2 = new SettingsStore() {
+                        public String get(String k) { return kv.get(k); }
+                        public void set(String k, String v) { kv.put(k, v); }
+                };
+                pr.save(st2);
+                pr.reset();
+                check(pr.shiftOpens == 0 && pr.accent == 0, "prefs reset");
+                pr.load(st2);
+                check(pr.shiftOpens == 2 && pr.accent == 3 && pr.accentColor() == net.plebmc.client.mods.ClientPrefs.ACCENTS[3], "prefs saved and loaded");
+                kv.put("prefs", "{\"shiftOpens\":99,\"accent\":-4}");
+                pr.load(st2);
+                check(pr.shiftOpens == 3 && pr.accent == 0, "out-of-range prefs are clamped");
+                pr.reset();
+
                 System.out.println("ClientModsTest: " + checks + " checks, failures=" + failures);
                 System.exit(failures > 0 ? 1 : 0);
         }

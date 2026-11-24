@@ -21,6 +21,7 @@ import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.connection.Server;
+import net.md_5.bungee.api.event.ChatEvent;
 import net.md_5.bungee.api.event.PlayerDisconnectEvent;
 import net.md_5.bungee.api.event.PluginMessageEvent;
 import net.md_5.bungee.api.event.ServerSwitchEvent;
@@ -107,6 +108,18 @@ public final class BungeeShop extends Plugin implements Listener {
 				core.connected(p.getUniqueId(), from, first);
 			}
 		}, first ? 3 : 1, TimeUnit.SECONDS);
+	}
+
+	/** Chat (not commands) counts for "chat" quests; runs last so muted or cancelled messages don't. */
+	@EventHandler(priority = net.md_5.bungee.event.EventPriority.HIGHEST)
+	public void onChat(ChatEvent e) {
+		if (e.isCancelled() || e.isCommand() || !(e.getSender() instanceof ProxiedPlayer)) {
+			return;
+		}
+		ProxiedPlayer p = (ProxiedPlayer) e.getSender();
+		if (p.getServer() != null) {
+			core.chat(p.getUniqueId());
+		}
 	}
 
 	@EventHandler

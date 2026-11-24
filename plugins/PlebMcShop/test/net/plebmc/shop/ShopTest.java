@@ -60,6 +60,13 @@ public class ShopTest {
                 linked = true; linkedId = (String) b.get("identifier");
                 return new Object[] { 200, "{\"message\":\"ok\"}" };
             }
+            if (url.endsWith("/integrations/unlink")) {
+                String id = url.substring(url.indexOf("minecraft:") + 10, url.indexOf("/integrations"));
+                if (!new Gson().fromJson(body, Map.class).get("integration").equals("Minecraft")) return new Object[] { 400, "{\"error\":\"core:invalid_integration\"}" };
+                if (!linked || !id.equals(linkedId)) return new Object[] { 400, "{\"error\":\"core:integration_not_linked\"}" };
+                linked = false;
+                return new Object[] { 200, "{\"success\":true}" };
+            }
             if (url.contains("/api/v2/users/integration_id:minecraft:")) {
                 String id = url.substring(url.lastIndexOf(':') + 1);
                 if (!linked || !id.equals(linkedId)) return new Object[] { 400, "{\"error\":\"nameless:cannot_find_user\"}" };
@@ -115,47 +122,58 @@ public class ShopTest {
         Map<?, ?> st = mighty.last("state");
         check(st != null && "PlebMc Coins".equals(st.get("currency")), "state sent");
         List<?> cats = (List<?>) st.get("questCategories");
-        check(cats.size() == 2 && "Lobby".equals(((Map<?, ?>) cats.get(0)).get("tab")) && "PlebNite".equals(((Map<?, ?>) cats.get(1)).get("tab")),
+        check(cats.size() == 2 && "General".equals(((Map<?, ?>) cats.get(0)).get("name")) && "PlebNite".equals(((Map<?, ?>) cats.get(1)).get("name"))
+                && "plebnite".equals(((Map<?, ?>) cats.get(1)).get("icon")) && "#FF9A3C".equals(((Map<?, ?>) cats.get(1)).get("color")),
                 "questCategories: " + cats);
         Map<?, ?> withCatalog = null;
         for (Map<?, ?> m : mighty.got) if (m.containsKey("catalog")) withCatalog = m;
         check(withCatalog != null && ((List<?>) withCatalog.get("catalog")).size() == 19, "catalog has 19 items");
         check(mighty.coins() == 50, "day 1 login reward: " + mighty.coins());
         check(String.valueOf(mighty.last("notify").get("message")).contains("+50 PlebMc Coins"), "login popup");
-        check(mighty.done("login") && mighty.quest("login").get("category") == null, "login row done, in every tab");
+        check(mighty.done("login") && "general".equals(mighty.quest("login").get("category")) && ((Number) mighty.quest("login").get("streak")).intValue() == 1,
+                "login row done, once, in General, streak 1");
+        int loginRows = 0;
+        for (Object o : (List<?>) mighty.last("state").get("quests")) if ("login".equals(((Map<?, ?>) o).get("id"))) loginRows++;
+        check(loginRows == 1, "exactly one login row: " + loginRows);
         check(mighty.progress("login_5") == 1, "weekly login quest counted");
-        check(mighty.progress("lobby_join_3") == 1 && "lobby".equals(mighty.quest("lobby_join_3").get("category")), "lobby join counted");
+        check(mighty.progress("general_join_3") == 1 && "general".equals(mighty.quest("general_join_3").get("category")), "joining the lobby counts for General");
         check(java.got.isEmpty() && java.chat.stream().anyMatch(c -> c.contains("+50")), "other clients get chat: " + java.chat);
         quit(mighty);
         mighty = join("Mighty", "lobby", true);
-        check(mighty.coins() == 50, "no second login reward the same day");
+        check(mighty.coins() == 50 && mighty.progress("login_5") == 1, "no second login reward (or login count) the same day");
 
-        // ---- categories: lobby kills don't count on PlebNite and the other way round ----
+        // ---- categories: PlebNite quests only count on PlebNite, General everywhere ----
         core.progress(mighty.id, "lobby", "kill", 3);
-        check(mighty.done("lobby_pvp_3") && mighty.progress("kills_3") == 0, "lobby pvp only in the lobby");
-        long c0 = mighty.coins();
-        core.progress(mighty.id, "lobby", "parkour", 1);
-        check(mighty.done("lobby_parkour") && mighty.progress("lobby_parkour_5") == 1, "parkour");
-        check(mighty.coins() > c0, "parkour paid");
+        check(mighty.progress("kills_3") == 0 && mighty.progress("kills_40") == 0, "lobby kills don't count for PlebNite");
         move(mighty, "plebnite");
-        check(mighty.coins() == mighty.coins() && mighty.progress("lobby_join_3") == 2, "switching servers: no login reward, join counted");
+        check(mighty.progress("general_join_3") == 3, "rejoin and switching servers count as joins: " + mighty.progress("general_join_3"));
         long before = mighty.coins();
         core.progress(mighty.id, "plebnite", "kill", 3);
-        check(mighty.done("kills_3") && mighty.progress("kills_8") == 3 && mighty.progress("lobby_pvp_3") == 3, "plebnite kills");
+        check(mighty.done("kills_3") && mighty.progress("kills_8") == 3 && mighty.progress("kills_40") == 3, "plebnite kills");
         check(mighty.coins() == before + 75, "kills_3 reward: " + (mighty.coins() - before));
         check(String.valueOf(mighty.last("notify").get("message")).contains("Get 3 kills: +75"), "quest popup");
         before = mighty.coins();
+        core.progress(mighty.id, "plebnite", "kill", 3);
+        check(mighty.coins() == before && mighty.progress("kills_3") == 3, "a done quest never pays twice");
+        before = mighty.coins();
         cmd("progress", "Mighty", "win");
         check(mighty.done("win_1") && mighty.coins() == before + 150, "win via /plebshop progress on the player's server");
-        // minutes count as "play" in the category of the server you're on
+        // minutes count as "play" in every category covering the server you're on
         java.server = "lobby";
         for (int i = 0; i < 15; i++) core.minute();
-        check(mighty.progress("play_30") == 15 && mighty.progress("lobby_play_20") == 0, "playtime on plebnite");
+        check(mighty.progress("play_30") == 15 && mighty.progress("general_play_30") == 15, "playtime on plebnite: both");
         move(mighty, "lobby");
         for (int i = 0; i < 5; i++) core.minute();
-        check(mighty.progress("play_30") == 15 && mighty.progress("lobby_play_20") == 5, "playtime in the lobby");
+        check(mighty.progress("play_30") == 15 && mighty.progress("general_play_30") == 20, "playtime in the lobby: General only");
+        check(!core.store.get(java.id).progress.containsKey("play_30") && core.store.get(java.id).progress.get("general_play_30") == 20, "lobby-only player: no PlebNite progress");
         core.progress(mighty.id, "survival", "kill", 5);
-        check(mighty.progress("kills_8") == 3 && mighty.progress("lobby_pvp_3") == 3, "servers without a category count nothing");
+        check(mighty.progress("kills_8") == 6, "kills elsewhere don't count for PlebNite");
+        // chat: at most one every 10 seconds
+        for (int i = 0; i < 5; i++) core.chat(mighty.id);
+        check(mighty.progress("general_chat_10") == 1, "chat spam counts once: " + mighty.progress("general_chat_10"));
+        net.now += ShopCore.CHAT_EVERY_MS;
+        core.chat(mighty.id);
+        check(mighty.progress("general_chat_10") == 2, "chat again after 10s");
 
         // ---- the shop ----
         cmd("coins", "set", "Mighty", "10000");
@@ -206,13 +224,14 @@ public class ShopTest {
         PluginChannels.onJoin();
         Cosmetics.setSelf(mighty.id.toString());
         for (String m : mighty.raw) Cosmetics.handle(m);
-        check(Cosmetics.questCategories().size() == 2 && "PlebMc Lobby".equals(Cosmetics.questCategories().get(0).name), "client categories");
-        List<Cosmetics.Quest> lq = Cosmetics.quests("lobby"), nq = Cosmetics.quests("plebnite");
-        check(lq.size() == 1 + 4 + 3 && nq.size() == 1 + 6 + 4, "client quests per tab: " + lq.size() + "/" + nq.size());
-        check("login".equals(lq.get(0).id) && "login".equals(nq.get(0).id), "login row in both tabs");
+        check(Cosmetics.questCategories().size() == 2 && "General".equals(Cosmetics.questCategories().get(0).name)
+                && "plebnite".equals(Cosmetics.questCategories().get(1).icon) && Cosmetics.questCategories().get(1).color == 0xFFFF9A3C, "client categories");
+        List<Cosmetics.Quest> lq = Cosmetics.quests("general"), nq = Cosmetics.quests("plebnite"), aq = Cosmetics.quests(null);
+        check(lq.size() == 1 + 4 + 3 && nq.size() == 6 + 4 && aq.size() == lq.size() + nq.size(), "client quests per tab: " + lq.size() + "/" + nq.size() + "/" + aq.size());
+        check("login".equals(lq.get(0).id) && lq.get(0).streak == 1 && lq.get(0).streakLength == 7, "login row once, in General, with its streak");
         Cosmetics.Quest k8 = null;
         for (Cosmetics.Quest q : nq) if (q.id.equals("kills_8")) k8 = q;
-        check(k8 != null && k8.progress == 3 && k8.goal == 8 && "plebnite".equals(k8.category), "client quest fields");
+        check(k8 != null && k8.progress == 6 && k8.goal == 8 && "plebnite".equals(k8.category), "client quest fields");
         check(Cosmetics.coins() == mighty.coins(), "client coins");
         int got = mighty.got.size();
         core.fromClient(mighty.id, "{\"type\":\"dev\",\"action\":\"coins\",\"amount\":5}");
@@ -250,6 +269,14 @@ public class ShopTest {
         admin.clear();
         cmd("info", "Webby");
         check(admin.get(admin.size() - 1).contains("Master [Owner, Member]"), "info shows website account: " + admin);
+        // log out from the client: unlinks on the website, and can link again
+        Thread.sleep(4100);
+        core.fromClient(web.id, "{\"type\":\"logout\"}");
+        check(Boolean.FALSE.equals(web.last("account").get("linked")) && !site.linked
+                && site.calls.get(site.calls.size() - 1).contains("/integrations/unlink"), "logout unlinks: " + web.last("account"));
+        Thread.sleep(4100);
+        core.fromClient(web.id, "{\"type\":\"link\",\"code\":\"ABC123\"}");
+        check(Boolean.TRUE.equals(web.last("account").get("linked")), "link again after logout");
         // unlinked on the website: logged out next join
         site.verified = false;
         quit(web);
@@ -277,10 +304,10 @@ public class ShopTest {
         cmd("equip", "Poor", "hat", "dropzone_crown");
         check("dropzone_crown".equals(((Map<?, ?>) poor.last("state").get("equipped")).get("hat")), "admin give + equip");
         check(core.tabComplete(new String[] { "equip", "Poor", "trail", "r" }).contains("rainbow"), "tab complete");
-        check(core.tabComplete(new String[] { "progress", "Mighty", "pa" }).contains("parkour"), "tab complete parkour");
+        check(core.tabComplete(new String[] { "progress", "Mighty", "ch" }).contains("chat"), "tab complete chat");
         admin.clear();
         cmd("quests");
-        check(admin.size() == 1 + 17 && admin.get(1).contains("lobby"), "quests command lists categories");
+        check(admin.size() == 1 + 17 && admin.get(1).contains("general"), "quests command lists categories");
         admin.clear();
         core.command(new ShopCore.Sender() {
             public void reply(String line) { admin.add(line); }
@@ -307,7 +334,7 @@ public class ShopTest {
         core.save();
         net = new FakeNet();
         net.now += 24 * 3600_000L;
-        core = new ShopCore(net, new Store(new File(dir, "players.yml"), log), cfg(), log);
+        core = new ShopCore(net, new Store(new File(dir, "players.yml"), log), cfg("daily-count: 3", "daily-count: 99", "weekly-count: 2", "weekly-count: 99"), log);
         P back = join("Mighty", "plebnite", true);
         check(back.coins() == keep + 75, "coins survive restart, day 2 reward: " + back.coins() + " vs " + keep);
         check(((List<?>) back.last("state").get("owned")).contains("crown") && back.progress("login_5") == 2, "progress survives restart");

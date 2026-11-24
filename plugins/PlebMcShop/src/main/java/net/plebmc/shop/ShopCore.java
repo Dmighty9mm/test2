@@ -164,10 +164,7 @@ final class ShopCore {
 				completed(p, quests.add(d, null, "login", 1, now));
 			}
 		}
-		String cat = quests.categoryOf(net.server(p));
-		if (cat != null) {
-			completed(p, quests.add(d, cat, "join", 1, now));
-		}
+		completed(p, quests.add(d, net.server(p), "join", 1, now));
 		if (from != null) {
 			// players on the old server stop seeing this one
 			Map<String, Object> gone = new LinkedHashMap<>();
@@ -191,19 +188,19 @@ final class ShopCore {
 		accounts.remove(p);
 		lookedUp.remove(p);
 		lastLinkTry.remove(p);
+		lastChat.remove(p);
 		Map<String, Object> gone = new LinkedHashMap<>();
 		gone.put(p.toString(), null);
 		broadcast(playersMessage(gone, false), server, p);
 	}
 
-	/** Every minute: playtime coins, and "play" quests in the category of the player's server. */
+	/** Every minute: playtime coins, and "play" quests in the categories covering the player's server. */
 	synchronized void minute() {
 		long now = net.now();
 		for (UUID p : net.online()) {
 			Store.Data d = data(p);
 			long paid = quests.minute(d);
-			String cat = quests.categoryOf(net.server(p));
-			List<Quests.Quest> done = cat == null ? new ArrayList<Quests.Quest>() : quests.add(d, cat, "play", 1, now);
+			List<Quests.Quest> done = quests.add(d, net.server(p), "play", 1, now);
 			store.changed();
 			if (paid > 0 && config.bool("playtime.notify", true)) {
 				notify(p, msg("playtime-title", "&bThanks for playing"),
@@ -218,18 +215,32 @@ final class ShopCore {
 
 	/** Quest progress from a backend server (the bridge plugin) or a command. */
 	synchronized void progress(UUID p, String server, String type, long amount) {
-		String cat = quests.categoryOf(server);
-		if (cat == null) {
-			return; // a server with no quest category (e.g. survival): nothing counts there
+		if (server == null || !quests.counts(server)) {
+			return; // a server no quest category covers: nothing counts there
 		}
 		Store.Data d = data(p);
-		List<Quests.Quest> done = quests.add(d, cat, type.toLowerCase(Locale.ROOT), amount, net.now());
+		List<Quests.Quest> done = quests.add(d, server, type.toLowerCase(Locale.ROOT), amount, net.now());
 		store.changed();
 		completed(p, done);
 		if (clients.contains(p)) {
 			sendState(p, false);
 		}
 	}
+
+	private final Map<UUID, Long> lastChat = new HashMap<>();
+
+	/** A chat message (not a command). Counts for "chat" quests at most once every 10 seconds, so spam doesn't. */
+	synchronized void chat(UUID p) {
+		long now = net.now();
+		Long last = lastChat.get(p);
+		if (last != null && now - last < CHAT_EVERY_MS) {
+			return;
+		}
+		lastChat.put(p, now);
+		progress(p, net.server(p), "chat", 1);
+	}
+
+	static final long CHAT_EVERY_MS = 10_000L;
 
 	/** The bridge reports the world a player is in (for hidden-in-worlds). */
 	synchronized void world(UUID p, String world) {
@@ -313,6 +324,9 @@ final class ShopCore {
 		case "link":
 			link(p, str(m.get("code")));
 			break;
+		case "logout":
+			logout(p);
+			break;
 		default:
 			break;
 		}
@@ -386,6 +400,38 @@ final class ShopCore {
 					sendAccount(p, "Logged in as " + r.account.displayName + "!", true);
 				} else {
 					sendAccount(p, r.error, false);
+				}
+			}
+		});
+	}
+
+	/** Unlinks the player's Minecraft account on the website (off-thread). */
+	private void logout(UUID p) {
+		if (!website.configured() || !accounts.containsKey(p)) {
+			sendAccount(p, null, true);
+			return;
+		}
+		long now = System.currentTimeMillis();
+		Long last = lastLinkTry.get(p);
+		if (last != null && now - last < LINK_COOLDOWN_MS) {
+			sendAccount(p, "Wait a few seconds and try again.", false);
+			return;
+		}
+		lastLinkTry.put(p, now);
+		final Website w = website;
+		final String name = net.name(p);
+		net.async(() -> {
+			String err = w.unlink(p);
+			synchronized (ShopCore.this) {
+				if (!net.online().contains(p)) {
+					return;
+				}
+				if (err == null) {
+					accounts.remove(p);
+					log.info(name + " logged out of the website (unlinked)");
+					sendAccount(p, "Logged out. Link again any time with a new code.", true);
+				} else {
+					sendAccount(p, err, false);
 				}
 			}
 		});
@@ -814,7 +860,7 @@ final class ShopCore {
 					n = 0;
 				}
 			}
-			if (quests.categoryOf(net.server(id)) == null) {
+			if (!quests.counts(net.server(id))) {
 				s.reply(prefix + color("&c" + net.server(id) + " isn't in any quest category (see quests.categories)."));
 				return;
 			}
@@ -845,7 +891,7 @@ final class ShopCore {
 				options.add(net.name(o));
 			}
 		} else if (a.length == 3 && a[0].equalsIgnoreCase("progress")) {
-			options = Arrays.asList("kill", "win", "match", "death", "play", "join", "parkour");
+			options = Arrays.asList("kill", "win", "match", "death", "play", "join", "chat");
 		} else if (a.length == 3 && a[0].equalsIgnoreCase("equip")) {
 			options = Arrays.asList("hat", "trail");
 		} else if ((a.length == 3 && (a[0].equalsIgnoreCase("give") || a[0].equalsIgnoreCase("remove")))
