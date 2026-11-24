@@ -61,6 +61,7 @@ Every hook calls `net.plebmc.client.hud.PlebClient` or `PlebEntities`:
 | `ModelBakery.loadItemModels` | `PlebItems.itemModelLocations` | bake the converted custom models and new-item models |
 | `ItemModelMesher.getItemModel(ItemStack)` | `PlebItems.itemModel` | swap in a custom model (all render paths: hand, GUI, dropped, frames) |
 | `LayerArmorBase.renderLayer` | `PlebItems.armorTexture` | netherite armor texture on players |
+| `LayerCustomHead.doRenderLayer` | `PlebItems.customHat` | pack hats (QualityArmory hats on quartz) drawn on heads like 1.16 |
 
 ### Safety rules
 
@@ -363,5 +364,9 @@ Setting: **Settings > Behavior > Custom item models** (on by default). Code: `it
 - **Speed:** stacks with no NBT on items that have no rules take a fast path; others are cached (2048 entries, cleared on reload).
 - **Newer packs:** server packs with `pack_format` 4+ are wrapped (`ModernPackFilter`) so their vanilla models/blockstates don't break 1.8 items. Server packs with no or a bad SHA-1 are still accepted (downloaded each time).
 - **Totems and netherite:** items Via substitutes ("1.16 Netherite Sword", or a Via original-id tag) get PlebClient's own textures, including worn netherite armor.
-- **Bundled PlebNite pack:** put a pack zip at `sources/resources/plebclient/plebnite-pack.zip`. It is imported once and used only on `*.plebmc.top`, after the server's own pack.
+- **Bundled PlebNite pack:** the QualityArmory pack (sounds removed) is at `sources/resources/plebclient/plebnite-pack.zip`. It is imported once and used only on `*.plebmc.top`, after the server's own pack.
 - **Debug:** Settings > Developer > Item NBT log shows the held item's NBT, including CustomModelData.
+
+## Cosmetic crown
+
+The Crown hat is the "goldcrown-king" Blockbench model: `cosmetics/CrownModel.java` (boxes and UVs, generated from the .bbmodel) and `assets/plebitems/textures/cosmetics/crown.png`, drawn by `CosmeticLayer`. The other hats are still plain colored boxes.

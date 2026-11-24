@@ -247,6 +247,23 @@ public final class PlebItems {
 		return normal;
 	}
 
+	/**
+	 * LayerCustomHead: 1.8 only draws blocks and skulls worn on the head, so a
+	 * hat from a pack (a QualityArmory crown on quartz) would be invisible.
+	 * True when the helmet-slot item has a custom 3D model.
+	 */
+	public static boolean customHat(ItemStack stack) {
+		if (stack == null || stack.getTagCompound() == null || !enabled()) {
+			return false;
+		}
+		try {
+			Hit h = hit(stack, Minecraft.getMinecraft().getRenderItem().getItemModelMesher().getModelManager());
+			return h != null && h.model != null && h.newItem == null && h.model.isGui3d();
+		} catch (Throwable t) {
+			return false;
+		}
+	}
+
 	private static Hit hit(ItemStack stack, ModelManager models) {
 		Item item = stack.getItem();
 		if (item == null) {
