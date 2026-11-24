@@ -1,0 +1,62 @@
+# PlebMcShop - the coin shop behind the PlebMc client's Cosmetics menu
+# (Right Shift > Cosmetics). Only players on the PlebMc client see hats and trails.
+# Run /plebshop reload after editing.
+
+coins:
+  # command  = read the balance from a PlaceholderAPI placeholder and take coins with a
+  #            console command (set up for Battle Royale X coins below)
+  # vault    = use the Vault economy (EssentialsX money etc.)
+  # internal = this plugin keeps its own coins (/plebshop coins give <player> <amount>)
+  mode: command
+  balance-placeholder: '%battleroyalex_coins%'
+  # %player% = name, %uuid% = uuid, %amount% = price. Run as console.
+  take-command: 'brx coins remove %player% %amount%'
+
+# Put the item on right after buying it.
+equip-on-buy: true
+
+# Worlds where nobody's hat or trail is shown (e.g. your match worlds). Empty = shown everywhere.
+hidden-in-worlds: []
+
+messages:
+  prefix: '&8[&b&lPlebMc&8] &7'
+  bought: 'Bought %item%!'
+  not-enough: 'You need %need% more coins.'
+  already-owned: 'You already own %item%.'
+  not-owned: 'You don''t own %item% yet.'
+  not-for-sale: '%item% can''t be bought.'
+  no-permission: 'You can''t buy %item%.'
+  unknown-item: 'That item isn''t in the shop.'
+  coins-unavailable: 'The shop can''t read your coins right now.'
+  purchase-failed: 'The purchase didn''t go through. No coins were taken.'
+
+# The shop. Each item:
+#   category: hat or trail
+#   render:   the look the client draws
+#             hats:   tophat, crown, halo, partyhat, beanie, horns
+#             trails: flame, hearts, notes, rainbow, cloud, portal, emerald, snow
+#   price:    coins (-1 = not for sale, give it with /plebshop give)
+#   color:    optional hat tint, like '#FFD700'
+#   permission: optional, needed to buy it
+# The id (the key) is what's saved, so don't rename ids players already own.
+items:
+  tophat:      {name: 'Top Hat', category: hat, render: tophat, price: 3000, description: 'A classy black top hat'}
+  gold_tophat: {name: 'Gold Top Hat', category: hat, render: tophat, price: 12000, color: '#E8B923', description: 'For the richest plebs'}
+  crown:       {name: 'Crown', category: hat, render: crown, price: 15000, description: 'Gold crown for champions'}
+  diamond_crown: {name: 'Diamond Crown', category: hat, render: crown, price: 30000, color: '#5DE2E7', description: 'The rarest crown there is'}
+  halo:        {name: 'Halo', category: hat, render: halo, price: 8000, description: 'A glowing ring over your head'}
+  partyhat:    {name: 'Party Hat', category: hat, render: partyhat, price: 2000, description: 'Striped cone hat'}
+  beanie:      {name: 'Blue Beanie', category: hat, render: beanie, price: 1500, color: '#3A7BD5', description: 'Warm knitted beanie'}
+  red_beanie:  {name: 'Red Beanie', category: hat, render: beanie, price: 1500, color: '#C0392B', description: 'Warm knitted beanie'}
+  green_beanie: {name: 'Green Beanie', category: hat, render: beanie, price: 1500, color: '#27AE60', description: 'Warm knitted beanie'}
+  horns:       {name: 'Devil Horns', category: hat, render: horns, price: 6000, description: 'Two red horns'}
+  dropzone_crown: {name: 'Drop Zone Crown', category: hat, render: crown, price: -1, color: '#4FC3F7', description: 'Season 1 Battle Pass reward'}
+
+  flame:   {name: 'Flame Trail', category: trail, render: flame, price: 5000, description: 'Fire at your feet'}
+  hearts:  {name: 'Heart Trail', category: trail, render: hearts, price: 3000, description: 'Hearts follow you'}
+  notes:   {name: 'Music Trail', category: trail, render: notes, price: 3000, description: 'Music notes as you walk'}
+  rainbow: {name: 'Rainbow Trail', category: trail, render: rainbow, price: 15000, description: 'A rainbow dust trail'}
+  cloud:   {name: 'Cloud Trail', category: trail, render: cloud, price: 2500, description: 'Puffs of cloud'}
+  portal:  {name: 'Ender Trail', category: trail, render: portal, price: 7500, description: 'Ender portal sparkles'}
+  emerald: {name: 'Emerald Trail', category: trail, render: emerald, price: 4000, description: 'Green sparkles'}
+  snow:    {name: 'Snow Trail', category: trail, render: snow, price: 4000, description: 'Snowflakes'}

@@ -184,6 +184,13 @@ Cosmetics (hats and trails) are bought with the server's coins. The server owns 
 
 Catalog item: `{"id":"gold_tophat","name":"Gold Top Hat","category":"hat","render":"tophat","price":900,"color":"#FFD700","description":"..."}`. `category` is `hat` or `trail`. `render` is the look the client draws: hats `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`; trails `flame`, `hearts`, `notes`, `rainbow`, `cloud`, `portal`, `emerald`, `snow`. `color` tints a hat (optional). Items with a `render` this client doesn't know are hidden, so newer items don't break older clients. Without a catalog the client shows the built-in one (ids equal to the render names, prices 250 to 2,500).
 
+### Server plugin
+
+`plugins/PlebMcShop` is a ready server plugin for this protocol (Spigot/Paper 1.13+): a
+configurable catalog, `players.yml` storage, and coins from a PlaceholderAPI placeholder
+plus a console command (set up for Battle Royale X coins), Vault, or its own balances.
+See `plugins/PlebMcShop/README.md`.
+
 ## Testing with a real server (Spigot/Paper 1.8.8 + Apollo + EaglerXBungee)
 
 Requirements: Java 8 for the 1.8.8 server, Java 17+ for BungeeCord.

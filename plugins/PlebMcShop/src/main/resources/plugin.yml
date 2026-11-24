@@ -1,0 +1,15 @@
+name: PlebMcShop
+version: 1.0.0
+main: net.plebmc.shop.PlebMcShop
+api-version: '1.13'
+description: Coin shop for the PlebMc client's hats and trails (plebmc:shop channel)
+softdepend: [PlaceholderAPI, Vault, BattleRoyaleX]
+commands:
+  plebshop:
+    description: Manage PlebMc client cosmetics
+    usage: /plebshop help
+    aliases: [pmshop]
+permissions:
+  plebshop.admin:
+    description: Use /plebshop
+    default: op
