@@ -1,6 +1,6 @@
 
 # Eagler Context Redacted Diff
-# Copyright (c) 2024 lax1dude. All rights reserved.
+# Copyright (c) 2026 lax1dude. All rights reserved.
 
 # Version: 1.0
 # Author: lax1dude
@@ -22,7 +22,14 @@
 
 ~ 	public EaglerTextureAtlasSprite getParticleIcon(Item item, int meta) {
 
-> CHANGE  49 : 50  @  49 : 50
+> INSERT  4 : 8  @  4
+
++ 		IBakedModel plebModel = net.plebmc.client.itemrender.PlebItems.itemModel(stack, this.modelManager);
++ 		if (plebModel != null) {
++ 			return plebModel;
++ 		}
+
+> CHANGE  45 : 46  @  45 : 46
 
 ~ 			this.simpleShapesCache.put((Integer) entry.getKey(),
 
