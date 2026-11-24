@@ -53,6 +53,8 @@ public final class Cosmetics {
 		/** Cloaks: the server's texture id (a content hash), or null for a plain colored cloak. */
 		public String texture;
 		public int textureWidth;
+		/** Model hats ("render":"model"): the server's model id (a content hash); the texture is {@link #texture}. */
+		public String model;
 
 		public Item(String id, String name, String category, String render, String description, int price,
 				int color) {
@@ -140,12 +142,14 @@ public final class Cosmetics {
 
 	/** Every look this client knows how to draw. A catalog item with another render id is hidden. */
 	public static final String[] RENDERS = { "tophat", "crown", "halo", "partyhat", "beanie", "horns", "flame",
-			"hearts", "notes", "rainbow", "cloud", "portal", "emerald", "snow", "cloak" };
+			"hearts", "notes", "rainbow", "cloud", "portal", "emerald", "snow", "cloak", "model" };
+
+	/** A hat drawn from a model the server sends (a Blockbench model in the shop plugin's folder). */
+	public static final String MODEL = "model";
 
 	/** Shown until the server sends its own catalog (prices are the server's to set). */
 	static final List<Item> DEFAULT_CATALOG = Collections.unmodifiableList(java.util.Arrays.asList(
 			new Item("tophat", "Top Hat", HAT, "tophat", "A classy black top hat", 500, -1),
-			new Item("crown", "Crown", HAT, "crown", "Gold crown for champions", 2500, -1),
 			new Item("halo", "Halo", HAT, "halo", "A glowing ring over your head", 1500, -1),
 			new Item("partyhat", "Party Hat", HAT, "partyhat", "Striped cone hat", 300, -1),
 			new Item("beanie", "Beanie", HAT, "beanie", "Warm knitted beanie", 250, 0x3A7BD5),
@@ -171,6 +175,7 @@ public final class Cosmetics {
 	private static Toasts toasts;
 	private static List<QuestCategory> questCategories = Collections.emptyList();
 	private static final Account account = new Account();
+	private static final Admin admin = new Admin();
 	private static boolean serverSupport;
 	private static final Set<String> owned = new HashSet<>();
 	private static final Map<String, String> equipped = new HashMap<>();
@@ -219,6 +224,7 @@ public final class Cosmetics {
 		quests = Collections.emptyList();
 		questCategories = Collections.emptyList();
 		account.clear();
+		admin.clear();
 		dailyResetAt = 0;
 		weeklyResetAt = 0;
 		loginStreak = 0;
@@ -251,6 +257,63 @@ public final class Cosmetics {
 			requested.add(id);
 		}
 		return b;
+	}
+
+	/** Parsed model hats by model id: 20 floats per quad (x, y, z, u, v for 4 corners). */
+	private static final Map<String, float[]> models = new HashMap<>();
+	static final int MAX_MODEL_FLOATS = 3000 * 20;
+
+	/**
+	 * The quads of a model hat once its model has arrived (asks the server the
+	 * first time), or null. Coordinates are head pixels, y up from the neck.
+	 */
+	public static float[] model(String id) {
+		if (id == null) {
+			return null;
+		}
+		float[] q = models.get(id);
+		if (q != null) {
+			return q.length == 0 ? null : q;
+		}
+		byte[] b = texture(id);
+		if (b == null) {
+			return null;
+		}
+		q = parseModel(b);
+		models.put(id, q == null ? new float[0] : q);
+		if (q == null) {
+			warn("bad hat model " + id);
+		}
+		return q;
+	}
+
+	/** {"v":1,"quads":[...]} to a float array, or null when it is broken. */
+	public static float[] parseModel(byte[] b) {
+		try {
+			Object o = Json.parse(new String(b, StandardCharsets.UTF_8));
+			if (!(o instanceof Map) || !(((Map<?, ?>) o).get("quads") instanceof List)) {
+				return null;
+			}
+			List<?> l = (List<?>) ((Map<?, ?>) o).get("quads");
+			if (l.isEmpty() || l.size() % 20 != 0 || l.size() > MAX_MODEL_FLOATS) {
+				return null;
+			}
+			float[] q = new float[l.size()];
+			for (int i = 0; i < q.length; i++) {
+				Object n = l.get(i);
+				if (!(n instanceof Number)) {
+					return null;
+				}
+				float f = ((Number) n).floatValue();
+				if (Float.isNaN(f) || Float.isInfinite(f) || Math.abs(f) > 256f) {
+					return null;
+				}
+				q[i] = f;
+			}
+			return q;
+		} catch (RuntimeException e) {
+			return null;
+		}
 	}
 
 	private static void textureChunk(Map<?, ?> m) {
@@ -401,6 +464,8 @@ public final class Cosmetics {
 			textureChunk(m);
 		} else if ("account".equals(type)) {
 			account.update(m);
+		} else if ("admin".equals(type)) {
+			admin.update(m);
 		} else if ("notify".equals(type)) {
 			if (m.containsKey("coins")) {
 				coins = Math.max(0, num(m.get("coins"), 0));
@@ -463,6 +528,16 @@ public final class Cosmetics {
 		it.forSale = !Boolean.FALSE.equals(m.get("forSale"));
 		String tex = str(m.get("texture"), null);
 		if (CLOAK.equals(cat) && tex != null && tex.matches("[0-9a-f]{8,64}")) {
+			it.texture = tex;
+			it.textureWidth = (int) Math.max(0, num(m.get("textureWidth"), 0));
+		}
+		if (MODEL.equals(render)) {
+			String model = str(m.get("model"), null);
+			if (!HAT.equals(cat) || model == null || !model.matches("[0-9a-f]{8,64}") || tex == null
+					|| !tex.matches("[0-9a-f]{8,64}")) {
+				return null; // a model hat needs its model and texture
+			}
+			it.model = model;
 			it.texture = tex;
 			it.textureWidth = (int) Math.max(0, num(m.get("textureWidth"), 0));
 		}
@@ -541,6 +616,34 @@ public final class Cosmetics {
 		account.pending = true;
 		account.version++;
 		return send(obj("type", "logout"));
+	}
+
+	/** The admin menu's data (website Owners only). */
+	public static Admin admin() {
+		return admin;
+	}
+
+	/** Asks for the admin menu's data (players, servers, items). */
+	public static boolean adminOpen() {
+		return send(obj("type", "admin", "action", "open"));
+	}
+
+	/**
+	 * An admin action: "coins" (op give/take/set, amount), "item" (op
+	 * give/remove, id), "send" (server), "kick" (reason), "broadcast"
+	 * (message) or "reload". {@code player} is a uuid or null.
+	 */
+	public static boolean adminAction(String action, String player, Object... kv) {
+		Map<String, Object> m = obj("type", "admin", "action", action);
+		if (player != null) {
+			m.put("player", player);
+		}
+		for (int i = 0; i + 1 < kv.length; i += 2) {
+			m.put(String.valueOf(kv[i]), kv[i + 1]);
+		}
+		admin.pending = true;
+		admin.version++;
+		return send(m);
 	}
 
 	/** The plebmc.top login, as the server last reported it. */

@@ -95,6 +95,17 @@ hidden-in-worlds: []
 
 # /plebshop needs plebshop.admin.
 
+# The admin menu in the PlebMc client (Right Shift > Admin): online players with their coins
+# and cosmetics, give/take/set coins, give/take cosmetics, send a player to a server, kick,
+# announcements to everyone, and reload. Only for players logged in on the website (Right
+# Shift > Account) whose website groups include one of these. The proxy checks it again for
+# every action, and logs each one in the console.
+admin-menu:
+  enabled: true
+  groups: ['Owner']
+  broadcast-title: '&b&lAnnouncement'
+
+
 messages:
   website-login-title: '&bplebmc.top'
   website-login-message: 'Logged in as %account%'
@@ -116,24 +127,33 @@ messages:
 # The shop. Each item:
 #   category: hat, trail or cloak
 #   render:   the look the client draws
-#             hats:   tophat, crown, halo, partyhat, beanie, horns
+#             hats:   tophat, crown, halo, partyhat, beanie, horns (or use model, below)
 #             trails: flame, hearts, notes, rainbow, cloud, portal, emerald, snow
 #             cloaks: leave it out
 #   price:    coins (-1 = not for sale, give it with /plebshop give)
 #   color:    optional tint, like '#FFD700' (a cloak without a texture is this color)
-#   texture:  cloaks only: a PNG in this plugin's folder, like 'cloaks/mycloak.png'.
+#   texture:  cloaks: a PNG in this plugin's folder, like 'cloaks/mycloak.png'.
 #             Use the normal Minecraft cape layout (64x32) or any multiple of it for
 #             high resolution: 128x64, 256x128, 512x256 (8x), 1024x512, up to 4096x2048.
 #             The art for the back of the cloak goes in the 10x16 box at (1,1) of the
 #             64x32 layout (at 512x256 that's the 80x128 box at (8,8)). Players download
 #             it from the proxy once and keep it until it changes. /plebshop reload
 #             picks up new or edited files.
+#   model:    hats: a 3D model in this plugin's folder, like 'hats/myhat.bbmodel'. Save it
+#             from Blockbench (File > Save Model) with its texture painted in, drop it in
+#             the hats folder, add an item and run /plebshop reload. Players download it
+#             once, just like cloak textures. A Java block/item model .json works too
+#             (then add texture: 'hats/myhat.png'). Rotated cubes and groups are fine.
+#             position: auto (default) centers it on the head and stands it on top;
+#                       model keeps Blockbench's coordinates (0,0,0 = bottom middle of
+#                       the head, the top of the head is y 8)
+#             scale:    bigger or smaller, like 1.2 (default 1)
+#             offset:   [x, y, z] in pixels after placing, like [0, -1, 0] to sink it 1 pixel
 #   permission: optional, needed to buy it
 # The id (the key) is what's saved, so don't rename ids players already own.
 items:
   tophat:      {name: 'Top Hat', category: hat, render: tophat, price: 1500, description: 'A classy black top hat'}
   gold_tophat: {name: 'Gold Top Hat', category: hat, render: tophat, price: 6000, color: '#E8B923', description: 'For the richest plebs'}
-  crown:       {name: 'Crown', category: hat, render: crown, price: 8000, description: 'Gold crown for champions'}
   diamond_crown: {name: 'Diamond Crown', category: hat, render: crown, price: 15000, color: '#5DE2E7', description: 'The rarest crown there is'}
   halo:        {name: 'Halo', category: hat, render: halo, price: 5000, description: 'A glowing ring over your head'}
   partyhat:    {name: 'Party Hat', category: hat, render: partyhat, price: 1000, description: 'Striped cone hat'}
@@ -142,6 +162,8 @@ items:
   green_beanie: {name: 'Green Beanie', category: hat, render: beanie, price: 800, color: '#27AE60', description: 'Warm knitted beanie'}
   horns:       {name: 'Devil Horns', category: hat, render: horns, price: 3500, description: 'Two red horns'}
   dropzone_crown: {name: 'Drop Zone Crown', category: hat, render: crown, price: -1, color: '#4FC3F7', description: 'Season 1 Battle Pass reward'}
+  # A hat from a Blockbench model (the sample model is copied to plugins/PlebioAPI/hats/):
+  # king_crown: {name: 'King Crown', category: hat, model: 'hats/king_crown.bbmodel', price: 10000, description: 'A 3D crown'}
 
   flame:   {name: 'Flame Trail', category: trail, render: flame, price: 2500, description: 'Fire at your feet'}
   hearts:  {name: 'Heart Trail', category: trail, render: hearts, price: 1500, description: 'Hearts follow you'}

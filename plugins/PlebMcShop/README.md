@@ -112,6 +112,15 @@ Passwords never go through the game, and the API key never leaves the proxy.
 | `/plebshop give <player> <item>` / `remove` | Give or take an item for free |
 | `/plebshop equip <player> <hat\|trail\|cloak> <item\|none>` | Put something on a player |
 
+## Admin menu in the client
+
+Players logged in on the website (see above) whose website group is in `admin-menu.groups`
+(default `['Owner']`) get an **Admin** door on the client's home screen. From there they can
+see everyone online, give/take/set PlebMc Coins, give or take cosmetics, send a player to
+another server, kick them, broadcast an announcement and reload the config. Every action is
+checked again on the proxy, so a modified client can't use it. Turn it off with
+`admin-menu.enabled: false`.
+
 ## Items
 
 Each item in `items:` has a `category` (`hat`, `trail` or `cloak`), a `render` (the look the
@@ -137,7 +146,24 @@ as a plain one in its `color`. Two examples ship with the plugin (`cloaks/plebmc
 `cloaks/storm.png`, copied into the folder on first start) and are used by
 `plebmc_cloak` and `storm_cloak` in the default config.
 
-Hats: `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`.
+### 3D model hats (same as cloaks)
+
+Make a hat in Blockbench, paint its texture, **File > Save Model** (`.bbmodel`), put it in
+`plugins/PlebioAPI/hats/` and add one line, just like a cloak:
+
+```yaml
+  king_crown: {name: 'King Crown', category: hat, model: 'hats/king_crown.bbmodel', price: 10000, description: 'A 3D crown'}
+```
+
+then `/plebshop reload`. The texture is read from inside the `.bbmodel`. A Java block/item
+model `.json` works too (add `texture: 'hats/myhat.png'`). Rotated cubes and groups are fine.
+By default the model is centered on the head and stood on top of it; to place it yourself:
+`position: model` (keep Blockbench's coordinates: 0,0,0 is the bottom middle of the head, the
+top of the head is y 8), `scale: 1.2`, `offset: [0, -1, 0]` (pixels). Players download the
+model once and keep it until the file changes. `king_crown.bbmodel` ships as an example (copied
+to `hats/` on first start); the line above is in the default config, commented out.
+
+Hats: `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns` (or `model:` above).
 Trails: `flame`, `hearts`, `notes`, `rainbow`, `cloud`, `portal`, `emerald`, `snow`.
 
 Item and quest ids are what `players.yml` saves, so don't rename ones players already have.

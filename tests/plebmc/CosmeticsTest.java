@@ -55,8 +55,8 @@ public class CosmeticsTest {
 		check(Cosmetics.shown(me, "hat") != null && "tophat".equals(Cosmetics.shown(me, "hat").render), "self shows hat");
 		check(Cosmetics.shown(other, "hat") == null, "others show nothing until told");
 
-		Cosmetics.setPreview("hat", "crown");
-		check("crown".equals(Cosmetics.shown(me, "hat").id), "try-on wins for self");
+		Cosmetics.setPreview("hat", "halo");
+		check("halo".equals(Cosmetics.shown(me, "hat").id), "try-on wins for self");
 		Cosmetics.clearPreview();
 		check("tophat".equals(Cosmetics.shown(me, "hat").id), "try-on cleared");
 
@@ -121,6 +121,22 @@ public class CosmeticsTest {
 		Cosmetics.handle("{\"type\":\"state\",\"catalog\":[{\"id\":\"vip\",\"name\":\"VIP\",\"category\":\"hat\",\"render\":\"crown\",\"price\":999999999,\"forSale\":false},"
 				+ "{\"id\":\"cap\",\"name\":\"Cap\",\"category\":\"hat\",\"render\":\"beanie\",\"price\":50}]}");
 		check(Cosmetics.item("vip") != null && !Cosmetics.item("vip").forSale && Cosmetics.item("cap").forSale, "not-for-sale items");
+
+		// model hats: listed with their model and texture ids; without them they are hidden
+		Cosmetics.handle("{\"type\":\"state\",\"catalog\":[{\"id\":\"king\",\"name\":\"King\",\"category\":\"hat\",\"render\":\"model\",\"model\":\"0123456789abcdef\",\"texture\":\"fedcba9876543210\",\"textureWidth\":256,\"price\":10},"
+				+ "{\"id\":\"broken\",\"category\":\"hat\",\"render\":\"model\",\"price\":10}]}");
+		check(Cosmetics.item("king") != null && "0123456789abcdef".equals(Cosmetics.item("king").model)
+				&& Cosmetics.item("broken") == null, "model hats in the catalog");
+		float[] q = Cosmetics.parseModel("{\"v\":1,\"quads\":[1,2,3,0,0, 1,2,3,1,0, 1,2,3,1,1, 1,2,3,0,1]}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+		check(q != null && q.length == 20 && q[19] == 1f, "model blob parsed");
+		check(Cosmetics.parseModel("{\"quads\":[1,2,3]}".getBytes(java.nio.charset.StandardCharsets.UTF_8)) == null
+				&& Cosmetics.parseModel("nope".getBytes(java.nio.charset.StandardCharsets.UTF_8)) == null, "bad model blobs refused");
+		// admin flag and admin data
+		Cosmetics.handle("{\"type\":\"account\",\"linked\":true,\"username\":\"Master\",\"groups\":[\"Owner\"],\"admin\":true}");
+		check(Cosmetics.account().admin, "account says admin");
+		Cosmetics.handle("{\"type\":\"admin\",\"allowed\":true,\"players\":[{\"uuid\":\"u2\",\"name\":\"zed\",\"coins\":5},{\"uuid\":\"u1\",\"name\":\"Amy\",\"coins\":7,\"owned\":[\"halo\"]}],\"servers\":[\"lobby\",\"plebnite\"],\"items\":[{\"id\":\"halo\",\"name\":\"Halo\",\"category\":\"hat\"}],\"message\":\"ok\",\"ok\":true}");
+		check(Cosmetics.admin().allowed && Cosmetics.admin().players.size() == 2 && "Amy".equals(Cosmetics.admin().players.get(0).name)
+				&& Cosmetics.admin().player("u1").owned.contains("halo") && Cosmetics.admin().servers.size() == 2, "admin data read");
 
 		System.out.println("CosmeticsTest: " + checks + " checks, failures=" + failures);
 		System.exit(failures == 0 ? 0 : 1);

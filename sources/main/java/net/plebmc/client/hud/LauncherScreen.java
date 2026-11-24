@@ -43,6 +43,28 @@ public final class LauncherScreen extends PlebScreen {
 		if (ClientPrefs.get().developer) {
 			doors.add(new Door("Debug", "debug", "Apollo diagnostics (developer)", () -> new ApolloDebugScreen(this)));
 		}
+		adminShown = Cosmetics.account().admin;
+		if (adminShown) {
+			doors.add(new Door("Admin", "shield", "Players, coins, cosmetics, servers and announcements (Owners)",
+					() -> new AdminScreen(this)));
+		}
+	}
+
+	/** Whether the Admin door is there (it appears when the server says this player is an Owner). */
+	private boolean adminShown;
+
+	@Override
+	protected void tick() {
+		boolean admin = Cosmetics.account().admin;
+		if (admin != adminShown) {
+			adminShown = admin;
+			doors.removeIf(d -> d.icon.equals("shield"));
+			if (admin) {
+				doors.add(new Door("Admin", "shield", "Players, coins, cosmetics, servers and announcements (Owners)",
+						() -> new AdminScreen(this)));
+			}
+			rebuild();
+		}
 	}
 
 	private static final int TILE = 58;
@@ -81,12 +103,23 @@ public final class LauncherScreen extends PlebScreen {
 			int acc = Ui.accent();
 			int lift = Math.round(hover * 3);
 			int ty = y - lift;
-			Ui.round(x, ty + 2, w, h, 0x50000000);
-			Ui.card(x, ty, w, h, Ui.mix(Ui.BASE, Ui.RAISED_2, hover), Ui.mix(Ui.BORDER, acc, hover));
+			Ui.round(x, ty + 2 + lift, w, h, 0x50000000);
+			if (hover > 0.01f) {
+				Ui.round(x - 2, ty - 2, w + 4, h + 4, Ui.alpha(acc, Math.round(0x38 * hover)));
+			}
+			PlebTheme.gradientRound(x, ty, w, h, Ui.mix(0xF0141C26, 0xF61E2A38, hover), Ui.mix(0xF0090D13, 0xF6101823, hover));
+			Ui.outline(x, ty, w, h, Ui.mix(Ui.BORDER, acc, hover));
 			Ui.rect(x + 1, ty, w - 2, 1, Ui.alpha(acc, Math.round(0x40 + 0x80 * hover)));
 			int px = w >= 50 ? 3 : 2;
 			int is = 9 * px;
+			if (hover > 0.01f) {
+				PlebTheme.glow(x + w / 2f, ty + 9 + is / 2f, is * 1.1f, Ui.alpha(acc, Math.round(0x50 * hover)));
+			}
 			Ui.icon(d.icon, x + (w - is) / 2, ty + 9, px, Ui.mix(Ui.MUTED, acc, 0.35f + 0.65f * hover));
+			int bw = Math.round((w - 8) * hover);
+			if (bw > 0) {
+				Ui.rect(x + w / 2 - bw / 2, ty + h - 2, bw, 1, acc);
+			}
 			Ui.centered(d.label, x + w / 2, ty + h - 17, Ui.mix(Ui.MUTED, Ui.TEXT, 0.5f + 0.5f * hover));
 			Ui.text(Integer.toString(key), x + 4, ty + 3, Ui.FAINT);
 		}
@@ -105,13 +138,23 @@ public final class LauncherScreen extends PlebScreen {
 		int n = doors.size();
 		int tile = Math.min(TILE, (this.width - 20 - (n - 1) * GAP) / n);
 		int y = this.height / 2 - tile / 2 + 4;
-		// wordmark
+		// wordmark: PLEB in white, the rest in the accent
 		String word = ClientInfo.NAME.toUpperCase();
+		String a1 = word.startsWith("PLEB") ? "PLEB" : word;
+		String a2 = word.startsWith("PLEB") ? word.substring(4) : "";
 		float sc = 2.5f;
 		int ww = Math.round(Ui.width(word) * sc);
-		Ui.big(word, this.width / 2 - ww / 2, y - 46, sc, Ui.TEXT, true);
-		Ui.rect(this.width / 2 - ww / 2, y - 20, ww, 1, Ui.alpha(acc, 0x90));
-		Ui.centered("PLAY.PLEBMC.TOP", this.width / 2, y - 16, acc);
+		int wx0 = this.width / 2 - ww / 2;
+		PlebTheme.glow(this.width / 2f, y - 34, ww * 0.8f, Ui.alpha(acc, 0x30));
+		Ui.big(a1, wx0, y - 46, sc, Ui.TEXT, true);
+		if (!a2.isEmpty()) {
+			Ui.big(a2, wx0 + Math.round(Ui.width(a1) * sc), y - 46, sc, acc, true);
+		}
+		for (int i = 0; i < 16; i++) {
+			float k = 1f - Math.abs(i - 7.5f) / 8f;
+			Ui.rect(wx0 + i * ww / 16, y - 20, ww / 16 + 1, 1, Ui.alpha(acc, Math.round(0xC0 * k)));
+		}
+		Ui.centered("PLAY.PLEBMC.TOP", this.width / 2, y - 16, Ui.MUTED);
 		// status strip
 		int sy = y + tile + 12;
 		StringBuilder status = new StringBuilder();

@@ -132,8 +132,19 @@ public abstract class PlebScreen extends GuiScreen {
 				fg = enabled ? Ui.TEXT : Ui.FAINT;
 				break;
 			}
-			if (border != 0) {
-				Ui.card(x, y, w, h, fill, border);
+			if (style == Style.PRIMARY && enabled) {
+				if (hv > 0.01f) {
+					Ui.round(x - 1, y - 1, w + 2, h + 2, Ui.alpha(acc, Math.round(0x50 * hv)));
+				}
+				PlebTheme.gradientRound(x, y, w, h, Ui.mix(fill, 0xFFFFFFFF, 0.12f), Ui.mix(fill, 0xFF000000, 0.18f));
+				Ui.rect(x + 1, y, w - 2, 1, 0x50FFFFFF);
+			} else if (border != 0) {
+				PlebTheme.gradientRound(x, y, w, h, Ui.mix(fill, 0xFFFFFFFF, 0.04f), Ui.mix(fill, 0xFF000000, 0.12f));
+				Ui.outline(x, y, w, h, border);
+				if (style == Style.SECONDARY && enabled && hv > 0.01f) {
+					int uw = Math.round((w - 4) * hv);
+					Ui.rect(x + w / 2 - uw / 2, y + h - 1, uw, 1, acc);
+				}
 			} else {
 				Ui.round(x, y, w, h, fill);
 			}
@@ -339,6 +350,9 @@ public abstract class PlebScreen extends GuiScreen {
 		f.setMaxStringLength(max);
 		if (fields.size() < keepText.size()) {
 			f.setText(keepText.get(fields.size())); // typed text survives a rebuild (and build() can read it)
+			if (fields.size() == keepFocus) {
+				f.setFocused(true);
+			}
 		}
 		f.setEnableBackgroundDrawing(false);
 		fields.add(f);
@@ -362,10 +376,15 @@ public abstract class PlebScreen extends GuiScreen {
 	}
 
 	private List<String> keepText = new ArrayList<>();
+	private int keepFocus = -1;
 
 	protected void rebuild() {
 		List<String> keep = new ArrayList<>();
+		keepFocus = -1;
 		for (GuiTextField f : fields) {
+			if (f.isFocused()) {
+				keepFocus = keep.size();
+			}
 			keep.add(f.getText());
 		}
 		keepText = keep;
@@ -373,6 +392,7 @@ public abstract class PlebScreen extends GuiScreen {
 		fields.clear();
 		build();
 		keepText = new ArrayList<>();
+		keepFocus = -1;
 	}
 
 	/** 0..1 for the opening animation. */
@@ -446,6 +466,9 @@ public abstract class PlebScreen extends GuiScreen {
 	protected void drawBackdrop() {
 		if (this.mc != null && this.mc.theWorld != null) {
 			Ui.rect(0, 0, this.width, this.height, ClientPrefs.get().backdropColor());
+			if (PlebTheme.enabled()) {
+				PlebTheme.glow(this.width / 2f, -this.height * 0.2f, this.width * 0.6f, Ui.alpha(Ui.accent(), 0x28));
+			}
 		} else {
 			this.drawDefaultBackground();
 			Ui.rect(0, 0, this.width, this.height, 0x90080B10);

@@ -349,13 +349,23 @@
 
 > DELETE  1  @  1 : 3
 
-> CHANGE  7 : 12  @  7 : 8
+> CHANGE  3 : 8  @  3 : 5
+
+~ 		boolean plebTitle = net.plebmc.client.hud.PlebTheme.enabled();
+~ 		if (!plebTitle) {
+~ 			this.drawGradientRect(0, 0, this.width, this.height, -2130706433, 16777215);
+~ 			this.drawGradientRect(0, 0, this.width, this.height, 0, Integer.MIN_VALUE);
+~ 		}
+
+> CHANGE  2 : 9  @  2 : 3
 
 ~ 		boolean minc = (double) this.updateCounter < 1.0E-4D;
 ~ 		if (this.isDefault) {
 ~ 			minc = !minc;
 ~ 		}
-~ 		if (minc) {
+~ 		if (plebTitle && net.plebmc.client.hud.PlebTheme.mainMenuTitle(this, b0)) {
+~ 			// PlebClient wordmark instead of the Minecraft logo
+~ 		} else if (minc) {
 
 > CHANGE  4 : 5  @  4 : 5
 
@@ -377,8 +387,13 @@
 + 		}
 + 
 
-> CHANGE  2 : 3  @  2 : 3
+> CHANGE  1 : 7  @  1 : 3
 
+~ 		if (plebTitle) {
+~ 			net.plebmc.client.hud.PlebTheme.splashTranslate(this);
+~ 		} else {
+~ 			GlStateManager.translate((float) (this.width / 2 + 90), 70.0F, 0.0F);
+~ 		}
 ~ 		GlStateManager.rotate(isForkLabel ? -12.0F : -20.0F, 0.0F, 0.0F, 1.0F);
 
 > INSERT  3 : 6  @  3

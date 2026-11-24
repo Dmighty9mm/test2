@@ -173,7 +173,20 @@
 
 ~ 	protected void actionPerformed(GuiButton parGuiButton) {
 
-> CHANGE  119 : 121  @  119 : 128
+> INSERT  75 : 78  @  75
+
++ 		if (net.plebmc.client.hud.PlebTheme.drawWorldBackground(this)) {
++ 			return;
++ 		}
+
+> INSERT  9 : 13  @  9
+
++ 		if (net.plebmc.client.hud.PlebTheme.enabled()) {
++ 			net.plebmc.client.hud.PlebTheme.background(this.width, this.height, true);
++ 			return;
++ 		}
+
+> CHANGE  35 : 37  @  35 : 44
 
 ~ 	private void openWebLink(String parURI) {
 ~ 		EagRuntime.openLink(parURI);

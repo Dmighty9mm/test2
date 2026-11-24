@@ -43,7 +43,25 @@ final class ShopCore {
 
 		/** Runs slow work (website calls) off the proxy's event threads. */
 		void async(Runnable r);
+
+		/** The backend server names (for the admin menu's "send to server"). */
+		default List<String> servers() {
+			return new ArrayList<>();
+		}
+
+		/** Moves a player to a backend server; false if it doesn't exist. */
+		default boolean connect(UUID player, String server) {
+			return false;
+		}
+
+		/** Disconnects a player with a reason. */
+		default boolean kick(UUID player, String reason) {
+			return false;
+		}
 	}
+
+	/** Re-reads config.yml (set by the proxy plugin; the admin menu's Reload uses it). */
+	Runnable reloader;
 
 	static final String ADMIN = "plebshop.admin";
 	private static final long ACTION_COOLDOWN_MS = 300;
@@ -339,6 +357,9 @@ final class ShopCore {
 		case "texture":
 			texture(p, str(m.get("id")));
 			break;
+		case "admin":
+			admin(p, m);
+			break;
 		default:
 			break;
 		}
@@ -466,6 +487,7 @@ final class ShopCore {
 			m.put("groups", a.groups);
 			m.put("staff", a.staff);
 		}
+		m.put("admin", isAdmin(p));
 		m.put("site", website.url);
 		m.put("linkUrl", website.connectionsUrl());
 		if (message != null) {
@@ -540,8 +562,8 @@ final class ShopCore {
 	 * player, so a client can't make the proxy stream images in a loop.
 	 */
 	private void texture(UUID p, String hash) {
-		Catalog.Item it = catalog.byTexture(hash);
-		if (it == null || it.png == null) {
+		byte[] bytes = catalog.download(hash);
+		if (bytes == null) {
 			return;
 		}
 		long now = net.now();
@@ -554,12 +576,12 @@ final class ShopCore {
 			textureSent.clear();
 		}
 		textureSent.put(key, now);
-		String b64 = java.util.Base64.getEncoder().encodeToString(it.png);
+		String b64 = java.util.Base64.getEncoder().encodeToString(bytes);
 		int parts = (b64.length() + TEXTURE_CHUNK - 1) / TEXTURE_CHUNK;
 		for (int i = 0; i < parts; i++) {
 			Map<String, Object> m = new LinkedHashMap<>();
 			m.put("type", "texture");
-			m.put("id", it.textureHash);
+			m.put("id", hash);
 			m.put("part", i);
 			m.put("parts", parts);
 			m.put("data", b64.substring(i * TEXTURE_CHUNK, Math.min(b64.length(), (i + 1) * TEXTURE_CHUNK)));
@@ -591,6 +613,237 @@ final class ShopCore {
 		}
 		sendState(p, false);
 		broadcastSlots(p);
+	}
+
+	// ==================== admin menu ====================
+
+	/**
+	 * True when this player may use the admin menu: logged in on the website
+	 * with a group from admin-menu.groups (Owner by default). Checked again on
+	 * every admin message, so a client can't just claim it.
+	 */
+	synchronized boolean isAdmin(UUID p) {
+		if (!config.bool("admin-menu.enabled", true)) {
+			return false;
+		}
+		Website.Account a = accounts.get(p);
+		if (a == null) {
+			return false;
+		}
+		List<String> allowed = config.list("admin-menu.groups");
+		if (allowed.isEmpty() && !config.has("admin-menu.groups")) {
+			allowed = Arrays.asList("Owner");
+		}
+		for (String g : a.groups) {
+			for (String ok : allowed) {
+				if (g != null && g.trim().equalsIgnoreCase(ok.trim())) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	private void admin(UUID p, Map<?, ?> m) {
+		if (!isAdmin(p)) {
+			Map<String, Object> r = new LinkedHashMap<>();
+			r.put("type", "admin");
+			r.put("allowed", false);
+			r.put("ok", false);
+			r.put("message", "Only website Owners can use the admin menu.");
+			send(p, r);
+			return;
+		}
+		String action = str(m.get("action"));
+		if (action == null || "open".equals(action)) {
+			sendAdmin(p, null, true);
+			return;
+		}
+		if (!cooldown(p)) {
+			return;
+		}
+		String who = net.name(p);
+		UUID target = null;
+		String targetName = null;
+		if (m.get("player") instanceof String) {
+			try {
+				target = UUID.fromString((String) m.get("player"));
+			} catch (IllegalArgumentException e) {
+				target = resolve((String) m.get("player"));
+			}
+			if (target != null) {
+				Store.Data d = store.peek(target);
+				targetName = net.name(target) != null ? net.name(target) : d != null ? d.name : target.toString();
+			}
+		}
+		String msg;
+		boolean ok = true;
+		switch (action) {
+		case "coins": {
+			long n = m.get("amount") instanceof Number ? ((Number) m.get("amount")).longValue() : -1;
+			String op = String.valueOf(m.get("op"));
+			if (target == null || n < 0 || n > 1_000_000_000L) {
+				msg = "Pick a player and an amount.";
+				ok = false;
+				break;
+			}
+			Store.Data d = store.get(target);
+			if ("give".equals(op)) {
+				d.coins += n;
+			} else if ("take".equals(op)) {
+				d.coins = Math.max(0, d.coins - n);
+			} else if ("set".equals(op)) {
+				d.coins = n;
+			} else {
+				msg = "Unknown coins action.";
+				ok = false;
+				break;
+			}
+			store.changed();
+			sendState(target, false);
+			msg = targetName + " now has " + fmt(d.coins) + " " + currency + ".";
+			break;
+		}
+		case "item": {
+			Catalog.Item it = catalog.get(str(m.get("id")));
+			String op = String.valueOf(m.get("op"));
+			if (target == null || it == null) {
+				msg = "Pick a player and an item.";
+				ok = false;
+				break;
+			}
+			Store.Data d = store.get(target);
+			if ("give".equals(op)) {
+				d.owned.add(it.id);
+				msg = "Gave " + plain(it.name) + " to " + targetName + ".";
+			} else {
+				d.owned.remove(it.id);
+				if (it.id.equals(d.equipped.get(it.category))) {
+					d.equipped.remove(it.category);
+				}
+				msg = "Took " + plain(it.name) + " from " + targetName + ".";
+			}
+			store.changed();
+			sendState(target, false);
+			broadcastSlots(target);
+			break;
+		}
+		case "send": {
+			String server = str(m.get("server"));
+			if (target == null || server == null || !net.online().contains(target)) {
+				msg = "That player isn't online.";
+				ok = false;
+			} else if (net.connect(target, server)) {
+				msg = "Sending " + targetName + " to " + server + ".";
+			} else {
+				msg = "There is no server called " + server + ".";
+				ok = false;
+			}
+			break;
+		}
+		case "kick": {
+			String reason = str(m.get("reason"));
+			if (reason == null || reason.trim().isEmpty()) {
+				reason = "Kicked by an admin";
+			}
+			reason = reason.length() > 200 ? reason.substring(0, 200) : reason;
+			if (target == null || target.equals(p) || !net.online().contains(target)) {
+				msg = target != null && target.equals(p) ? "You can't kick yourself." : "That player isn't online.";
+				ok = false;
+			} else {
+				net.kick(target, color(reason));
+				msg = "Kicked " + targetName + ".";
+			}
+			break;
+		}
+		case "broadcast": {
+			String text = str(m.get("message"));
+			if (text == null || text.trim().isEmpty()) {
+				msg = "Type a message first.";
+				ok = false;
+				break;
+			}
+			text = text.length() > 200 ? text.substring(0, 200) : text;
+			String title = color(config.str("admin-menu.broadcast-title", "&b&lAnnouncement"));
+			for (UUID o : net.online()) {
+				if (clients.contains(o)) {
+					notify(o, title, color(text));
+				} else {
+					net.chat(o, prefix + color(text));
+				}
+			}
+			msg = "Sent to " + net.online().size() + " players.";
+			break;
+		}
+		case "reload":
+			if (reloader != null) {
+				reloader.run();
+			}
+			refreshAll();
+			msg = "Reloaded: " + catalog.all().size() + " cosmetics, " + quests.allQuests().size() + " quests"
+					+ (problems() == 0 ? "." : " (" + problems() + " problems, see the proxy console).");
+			ok = problems() == 0;
+			break;
+		default:
+			msg = "Unknown admin action.";
+			ok = false;
+			break;
+		}
+		if (ok) {
+			log.info("[admin] " + who + ": " + action + (targetName == null ? "" : " " + targetName) + " -> " + msg);
+		}
+		sendAdmin(p, msg, ok);
+	}
+
+	/** The admin menu's data: online players, servers, items, and the answer to the last action. */
+	private void sendAdmin(UUID p, String message, boolean ok) {
+		Map<String, Object> r = new LinkedHashMap<>();
+		r.put("type", "admin");
+		r.put("allowed", true);
+		r.put("currency", currency);
+		List<Object> players = new ArrayList<>();
+		for (UUID o : net.online()) {
+			Store.Data d = store.peek(o);
+			Map<String, Object> pm = new LinkedHashMap<>();
+			pm.put("uuid", o.toString());
+			pm.put("name", net.name(o));
+			pm.put("server", net.server(o));
+			pm.put("coins", d == null ? 0 : d.coins);
+			pm.put("client", clients.contains(o));
+			Website.Account a = accounts.get(o);
+			if (a != null) {
+				pm.put("account", a.username);
+				pm.put("groups", a.groups);
+			}
+			List<String> owned = new ArrayList<>();
+			if (d != null) {
+				for (String id : d.owned) {
+					if (catalog.get(id) != null) {
+						owned.add(id);
+					}
+				}
+				pm.put("equipped", slots(d));
+			}
+			pm.put("owned", owned);
+			players.add(pm);
+		}
+		r.put("players", players);
+		r.put("servers", net.servers());
+		List<Object> items = new ArrayList<>();
+		for (Catalog.Item it : catalog.all()) {
+			Map<String, Object> im = new LinkedHashMap<>();
+			im.put("id", it.id);
+			im.put("name", plain(it.name));
+			im.put("category", it.category);
+			items.add(im);
+		}
+		r.put("items", items);
+		r.put("registered", store.ids().size());
+		if (message != null) {
+			r.put("message", message);
+			r.put("ok", ok);
+		}
+		send(p, r);
 	}
 
 	// ==================== messages to clients ====================
