@@ -16,19 +16,34 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
-import org.bukkit.configuration.ConfigurationSection;
-
 /**
  * How players earn PlebMc Coins: a daily login reward with a streak, coins
- * for time online, and daily/weekly quests. Today's quests are the same for
- * everyone (picked from the pool with the date as the seed) and change at
- * {@code reset-hour} in {@code timezone}. Pure logic, no Bukkit calls, so it
- * is easy to test with any clock.
+ * for time online, and daily/weekly quests in categories (one per game, e.g.
+ * PlebMc Lobby and PlebNite). Each category's quests for the day are the
+ * same for everyone (picked from its pool with the date as the seed) and
+ * change at {@code reset-hour} in {@code timezone}. Pure logic, no server
+ * calls, so it is easy to test with any clock.
  */
 final class Quests {
 
 	static final String DAILY = "daily";
 	static final String WEEKLY = "weekly";
+
+	static final class Category {
+		final String id;
+		final String name;
+		final String tab;
+		final List<String> servers;
+		final List<Quest> daily = new ArrayList<>();
+		final List<Quest> weekly = new ArrayList<>();
+
+		Category(String id, String name, String tab, List<String> servers) {
+			this.id = id;
+			this.name = name;
+			this.tab = tab;
+			this.servers = servers;
+		}
+	}
 
 	static final class Quest {
 		final String id;
@@ -38,8 +53,10 @@ final class Quests {
 		final long goal;
 		final long reward;
 		final String period;
+		final String category;
 
-		Quest(String id, String name, String description, String type, long goal, long reward, String period) {
+		Quest(String id, String name, String description, String type, long goal, long reward, String period,
+				String category) {
 			this.id = id;
 			this.name = name;
 			this.description = description;
@@ -47,15 +64,7 @@ final class Quests {
 			this.goal = goal;
 			this.reward = reward;
 			this.period = period;
-		}
-	}
-
-	/** A quest a player just finished. */
-	static final class Completed {
-		final Quest quest;
-
-		Completed(Quest q) {
-			this.quest = q;
+			this.category = category;
 		}
 	}
 
@@ -63,8 +72,7 @@ final class Quests {
 	final int resetHour;
 	final int dailyCount;
 	final int weeklyCount;
-	final List<Quest> dailyPool = new ArrayList<>();
-	final List<Quest> weeklyPool = new ArrayList<>();
+	final Map<String, Category> categories = new LinkedHashMap<>();
 	final List<String> warnings = new ArrayList<>();
 
 	final boolean loginEnabled;
@@ -76,29 +84,45 @@ final class Quests {
 	final int playEveryMinutes;
 	final long playCoins;
 
-	Quests(ConfigurationSection root) {
+	Quests(Cfg root) {
+		if (root == null) {
+			root = new Cfg(null);
+		}
 		ZoneId z;
-		String tz = root == null ? "" : root.getString("timezone", "");
+		String tz = root.str("timezone", "");
 		try {
-			z = tz == null || tz.isEmpty() ? ZoneId.systemDefault() : ZoneId.of(tz);
+			z = tz.isEmpty() ? ZoneId.systemDefault() : ZoneId.of(tz);
 		} catch (RuntimeException e) {
 			warnings.add("Unknown timezone '" + tz + "', using the server's");
 			z = ZoneId.systemDefault();
 		}
 		zone = z;
-		ConfigurationSection q = root == null ? null : root.getConfigurationSection("quests");
-		resetHour = q == null ? 0 : Math.max(0, Math.min(23, q.getInt("reset-hour", 0)));
-		dailyCount = q == null ? 3 : Math.max(0, q.getInt("daily-count", 3));
-		weeklyCount = q == null ? 2 : Math.max(0, q.getInt("weekly-count", 2));
-		Set<String> ids = new HashSet<>();
-		readPool(q == null ? null : q.getConfigurationSection("daily"), DAILY, dailyPool, ids);
-		readPool(q == null ? null : q.getConfigurationSection("weekly"), WEEKLY, weeklyPool, ids);
+		resetHour = Math.max(0, Math.min(23, root.integer("quests.reset-hour", 0)));
+		dailyCount = Math.max(0, root.integer("quests.daily-count", 3));
+		weeklyCount = Math.max(0, root.integer("quests.weekly-count", 2));
 
-		ConfigurationSection l = root == null ? null : root.getConfigurationSection("login-rewards");
-		loginEnabled = l == null || l.getBoolean("enabled", true);
-		List<String> rewards = l == null ? Collections.<String>emptyList() : l.getStringList("rewards");
+		Cfg cats = root.section("quests.categories");
+		Set<String> ids = new HashSet<>();
+		if (cats != null) {
+			for (String cid : cats.keys()) {
+				Cfg c = cats.section(cid);
+				if (c == null) {
+					continue;
+				}
+				String name = c.str("name", cid);
+				Category cat = new Category(cid, name, c.str("tab", name), c.list("servers"));
+				readPool(c.section("daily"), DAILY, cat, cat.daily, ids);
+				readPool(c.section("weekly"), WEEKLY, cat, cat.weekly, ids);
+				categories.put(cid, cat);
+			}
+		}
+		if (categories.isEmpty()) {
+			warnings.add("quests.categories is empty: there are no quests");
+		}
+
+		loginEnabled = root.bool("login-rewards.enabled", true);
 		List<Long> parsed = new ArrayList<>();
-		for (String r : rewards) {
+		for (String r : root.list("login-rewards.rewards")) {
 			try {
 				parsed.add(Math.max(0, Long.parseLong(r.trim())));
 			} catch (NumberFormatException e) {
@@ -112,37 +136,68 @@ final class Quests {
 		for (int i = 0; i < loginRewards.length; i++) {
 			loginRewards[i] = parsed.get(i);
 		}
-		loginCooldownMs = 3_600_000L * (l == null ? 20 : Math.max(1, l.getInt("cooldown-hours", 20)));
-		streakResetMs = 3_600_000L * (l == null ? 48 : Math.max(1, l.getInt("streak-reset-hours", 48)));
+		loginCooldownMs = 3_600_000L * Math.max(1, root.integer("login-rewards.cooldown-hours", 20));
+		streakResetMs = 3_600_000L * Math.max(1, root.integer("login-rewards.streak-reset-hours", 48));
 
-		ConfigurationSection p = root == null ? null : root.getConfigurationSection("playtime");
-		playEnabled = p == null || p.getBoolean("enabled", true);
-		playEveryMinutes = p == null ? 15 : Math.max(1, p.getInt("every-minutes", 15));
-		playCoins = p == null ? 10 : Math.max(0, p.getLong("coins", 10));
+		playEnabled = root.bool("playtime.enabled", true);
+		playEveryMinutes = Math.max(1, root.integer("playtime.every-minutes", 15));
+		playCoins = Math.max(0, root.num("playtime.coins", 10));
 	}
 
-	private void readPool(ConfigurationSection sec, String period, List<Quest> out, Set<String> ids) {
+	private void readPool(Cfg sec, String period, Category cat, List<Quest> out, Set<String> ids) {
 		if (sec == null) {
 			return;
 		}
-		for (String id : sec.getKeys(false)) {
-			ConfigurationSection s = sec.getConfigurationSection(id);
+		for (String id : sec.keys()) {
+			Cfg s = sec.section(id);
 			if (s == null) {
 				continue;
 			}
 			if (!ids.add(id)) {
-				warnings.add("quest id '" + id + "' is used twice, skipping the " + period + " one");
+				warnings.add("quest id '" + id + "' is used twice, skipping the one in " + cat.id + "." + period);
 				continue;
 			}
-			String type = s.getString("type", "").toLowerCase();
+			String type = s.str("type", "").toLowerCase();
 			if (type.isEmpty()) {
 				warnings.add("quest " + id + " has no type");
 				continue;
 			}
-			long goal = Math.max(1, s.getLong("goal", 1));
-			out.add(new Quest(id, s.getString("name", id), s.getString("description", ""), type, goal,
-					Math.max(0, s.getLong("reward", 0)), period));
+			out.add(new Quest(id, s.str("name", id), s.str("description", ""), type, Math.max(1, s.num("goal", 1)),
+					Math.max(0, s.num("reward", 0)), period, cat.id));
 		}
+	}
+
+	/** The category a backend server belongs to, or null. */
+	String categoryOf(String server) {
+		if (server == null) {
+			return null;
+		}
+		for (Category c : categories.values()) {
+			for (String s : c.servers) {
+				if (s.equalsIgnoreCase(server)) {
+					return c.id;
+				}
+			}
+		}
+		return null;
+	}
+
+	List<Quest> allQuests() {
+		List<Quest> out = new ArrayList<>();
+		for (Category c : categories.values()) {
+			out.addAll(c.daily);
+			out.addAll(c.weekly);
+		}
+		return out;
+	}
+
+	Quest quest(String id) {
+		for (Quest q : allQuests()) {
+			if (q.id.equals(id)) {
+				return q;
+			}
+		}
+		return null;
 	}
 
 	// ==================== periods ====================
@@ -172,17 +227,13 @@ final class Quests {
 		return Math.max(0, (next.toInstant().toEpochMilli() - now) / 1000);
 	}
 
-	List<Quest> activeDaily(long now) {
-		return pick(dailyPool, dailyCount, dayKey(now));
-	}
-
-	List<Quest> activeWeekly(long now) {
-		return pick(weeklyPool, weeklyCount, weekKey(now));
-	}
-
+	/** Today's and this week's quests in every category. */
 	List<Quest> active(long now) {
-		List<Quest> all = new ArrayList<>(activeDaily(now));
-		all.addAll(activeWeekly(now));
+		List<Quest> all = new ArrayList<>();
+		for (Category c : categories.values()) {
+			all.addAll(pick(c.daily, dailyCount, c.id + ":" + dayKey(now)));
+			all.addAll(pick(c.weekly, weeklyCount, c.id + ":" + weekKey(now)));
+		}
 		return all;
 	}
 
@@ -212,38 +263,42 @@ final class Quests {
 		boolean changed = false;
 		String day = dayKey(now);
 		if (!day.equals(d.dailyKey)) {
-			clear(d, dailyPool);
+			for (Quest q : allQuests()) {
+				if (DAILY.equals(q.period)) {
+					d.progress.remove(q.id);
+					d.done.remove(q.id);
+				}
+			}
 			d.dailyKey = day;
 			changed = true;
 		}
 		String week = weekKey(now);
 		if (!week.equals(d.weeklyKey)) {
-			clear(d, weeklyPool);
+			for (Quest q : allQuests()) {
+				if (WEEKLY.equals(q.period)) {
+					d.progress.remove(q.id);
+					d.done.remove(q.id);
+				}
+			}
 			d.weeklyKey = week;
 			changed = true;
 		}
 		return changed;
 	}
 
-	private static void clear(Store.Data d, List<Quest> pool) {
-		for (Quest q : pool) {
-			d.progress.remove(q.id);
-			d.done.remove(q.id);
-		}
-	}
-
 	/**
 	 * Counts {@code amount} of {@code type} (kill, play, win, ...) toward the
-	 * player's active quests and pays out any that are now finished.
+	 * player's active quests in {@code category} (null = every category) and
+	 * pays out any that are now finished. Returns the finished quests.
 	 */
-	List<Completed> add(Store.Data d, String type, long amount, long now) {
+	List<Quest> add(Store.Data d, String category, String type, long amount, long now) {
 		roll(d, now);
-		List<Completed> out = new ArrayList<>();
+		List<Quest> out = new ArrayList<>();
 		if (amount <= 0) {
 			return out;
 		}
 		for (Quest q : active(now)) {
-			if (!q.type.equals(type) || d.done.contains(q.id)) {
+			if (!q.type.equals(type) || d.done.contains(q.id) || (category != null && !category.equals(q.category))) {
 				continue;
 			}
 			long p = Math.min(q.goal, d.progress.getOrDefault(q.id, 0L) + amount);
@@ -251,10 +306,24 @@ final class Quests {
 			if (p >= q.goal) {
 				d.done.add(q.id);
 				d.coins += q.reward;
-				out.add(new Completed(q));
+				out.add(q);
 			}
 		}
 		return out;
+	}
+
+	/** Finishes one quest right away (dev panel). Returns it, or null. */
+	Quest complete(Store.Data d, String id, long now) {
+		roll(d, now);
+		for (Quest q : active(now)) {
+			if (q.id.equals(id) && !d.done.contains(q.id)) {
+				d.progress.put(q.id, q.goal);
+				d.done.add(q.id);
+				d.coins += q.reward;
+				return q;
+			}
+		}
+		return null;
 	}
 
 	// ==================== login and playtime ====================
@@ -295,7 +364,20 @@ final class Quests {
 		return 0;
 	}
 
-	/** The quest list as the client shows it: the login reward first, then daily, then weekly. */
+	/** The categories as the client shows them (one quest tab each). */
+	List<Object> categoriesJson() {
+		List<Object> out = new ArrayList<>();
+		for (Category c : categories.values()) {
+			Map<String, Object> m = new LinkedHashMap<>();
+			m.put("id", c.id);
+			m.put("name", c.name);
+			m.put("tab", c.tab);
+			out.add(m);
+		}
+		return out;
+	}
+
+	/** The quest list as the client shows it: the login reward first (no category = every tab), then the rest. */
 	List<Object> toJson(Store.Data d, long now) {
 		roll(d, now);
 		List<Object> out = new ArrayList<>();
@@ -319,6 +401,7 @@ final class Quests {
 			m.put("name", q.name);
 			m.put("description", q.description);
 			m.put("period", q.period);
+			m.put("category", q.category);
 			m.put("progress", d.progress.getOrDefault(q.id, 0L));
 			m.put("goal", q.goal);
 			m.put("reward", q.reward);

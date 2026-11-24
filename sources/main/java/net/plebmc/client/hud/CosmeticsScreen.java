@@ -24,8 +24,11 @@ public final class CosmeticsScreen extends GuiScreen {
 	private static final int ID_ACT = 200; // + row
 
 	private static final int ROWS = 5;
+	/** Tabs from here on are quest tabs (one per server category, or one "Quests" tab). */
 	private static final int TAB_QUESTS = 2;
-	private static final String[] TABS = { "Hats", "Trails", "Quests" };
+	private static final String SECRET = "plebdev";
+	private String typed = "";
+	private int devAsked = -1;
 
 	private final GuiScreen parent;
 	private int tab;
@@ -50,7 +53,9 @@ public final class CosmeticsScreen extends GuiScreen {
 		this.buttonList.clear();
 		items = tab < Cosmetics.CATEGORIES.length ? Cosmetics.catalog(Cosmetics.CATEGORIES[tab])
 				: java.util.Collections.<Cosmetics.Item>emptyList();
-		int count = tab == TAB_QUESTS ? Cosmetics.quests().size() : items.size();
+		String[] tabs = tabs();
+		tab = Math.min(tab, tabs.length - 1);
+		int count = tab >= TAB_QUESTS ? questsHere().size() : items.size();
 		int pages = Math.max(1, (count + ROWS - 1) / ROWS);
 		page = Math.min(page, pages - 1);
 
@@ -62,16 +67,16 @@ public final class CosmeticsScreen extends GuiScreen {
 		listY = 52;
 
 		// tabs
-		int tabW = (listW - 8) / TABS.length;
-		for (int i = 0; i < TABS.length; i++) {
+		int tabW = (listW - 4 * (tabs.length - 1)) / tabs.length;
+		for (int i = 0; i < tabs.length; i++) {
 			GuiButton b = new GuiButton(ID_TAB + i, listX + i * (tabW + 4), 28, tabW, 20,
-					(i == tab ? "§e" : "") + TABS[i]);
+					(i == tab ? "§e" : "") + Draw.fit(tabs[i], tabW - 6));
 			this.buttonList.add(b);
 		}
 
 		boolean online = Cosmetics.serverSupported();
 		int rowH = 26;
-		for (int r = 0; r < ROWS && tab != TAB_QUESTS; r++) {
+		for (int r = 0; r < ROWS && tab < TAB_QUESTS; r++) {
 			int idx = page * ROWS + r;
 			if (idx >= items.size()) {
 				break;
@@ -111,7 +116,7 @@ public final class CosmeticsScreen extends GuiScreen {
 			close();
 			return;
 		}
-		if (b.id >= ID_TAB && b.id < ID_TAB + TABS.length) {
+		if (b.id >= ID_TAB && b.id < ID_TAB + tabs().length) {
 			tab = b.id - ID_TAB;
 			page = 0;
 		} else if (b.id == ID_PREV) {
@@ -140,6 +145,33 @@ public final class CosmeticsScreen extends GuiScreen {
 		this.initGui();
 	}
 
+	/** Hats, Trails, then one tab per quest category ("Quests" when the server has none). */
+	private static String[] tabs() {
+		List<Cosmetics.QuestCategory> cats = Cosmetics.questCategories();
+		String[] t = new String[2 + Math.max(1, cats.size())];
+		t[0] = "Hats";
+		t[1] = "Trails";
+		if (cats.isEmpty()) {
+			t[2] = "Quests";
+		}
+		for (int i = 0; i < cats.size(); i++) {
+			t[2 + i] = cats.get(i).tab;
+		}
+		return t;
+	}
+
+	/** The quest category of the current tab, or null (every quest). */
+	private Cosmetics.QuestCategory category() {
+		List<Cosmetics.QuestCategory> cats = Cosmetics.questCategories();
+		int i = tab - TAB_QUESTS;
+		return i >= 0 && i < cats.size() ? cats.get(i) : null;
+	}
+
+	private List<Cosmetics.Quest> questsHere() {
+		Cosmetics.QuestCategory c = category();
+		return Cosmetics.quests(c == null ? null : c.id);
+	}
+
 	private Cosmetics.Item row(int r) {
 		int idx = page * ROWS + r;
 		return items != null && idx < items.size() ? items.get(idx) : null;
@@ -147,6 +179,11 @@ public final class CosmeticsScreen extends GuiScreen {
 
 	@Override
 	public void updateScreen() {
+		if (devAsked >= 0 && Cosmetics.devVersion() != devAsked && Cosmetics.devAllowed()) {
+			devAsked = -1;
+			this.mc.displayGuiScreen(new DevScreen(this));
+			return;
+		}
 		if (Cosmetics.version() != seenVersion) {
 			this.initGui();
 		}
@@ -155,7 +192,9 @@ public final class CosmeticsScreen extends GuiScreen {
 	@Override
 	public void drawScreen(int mouseX, int mouseY, float partialTicks) {
 		this.drawDefaultBackground();
-		this.drawCenteredString(this.fontRendererObj, "§lPlebMc Shop", this.width / 2, 8, 0xFFFFFF);
+		Cosmetics.QuestCategory qc = tab >= TAB_QUESTS ? category() : null;
+		this.drawCenteredString(this.fontRendererObj, qc != null ? "§l" + qc.name + " Quests" : "§lPlebMc Shop",
+				this.width / 2, 8, 0xFFFFFF);
 
 		// balance, top right
 		long coins = Cosmetics.coins();
@@ -178,10 +217,10 @@ public final class CosmeticsScreen extends GuiScreen {
 
 		// rows
 		int rowH = 26;
-		if (tab == TAB_QUESTS) {
+		if (tab >= TAB_QUESTS) {
 			drawQuests(rowH);
 		}
-		for (int r = 0; r < ROWS && tab != TAB_QUESTS; r++) {
+		for (int r = 0; r < ROWS && tab < TAB_QUESTS; r++) {
 			Cosmetics.Item it = row(r);
 			if (it == null) {
 				break;
@@ -203,12 +242,12 @@ public final class CosmeticsScreen extends GuiScreen {
 			this.drawCenteredString(this.fontRendererObj, (Cosmetics.messageOk() ? "§a" : "§c") + msg,
 					this.width / 2, this.height - 40, 0xFFFFFF);
 		} else if (!Cosmetics.serverSupported()) {
-			String s = tab == TAB_QUESTS ? "§7Join PlebMc to do quests and earn coins."
+			String s = tab >= TAB_QUESTS ? "§7Join PlebMc to do quests and earn coins."
 					: "§7Try anything on here. Buy with coins from quests on PlebMc.";
 			this.drawCenteredString(this.fontRendererObj, Draw.fit(s, this.width - 10), this.width / 2, this.height - 40,
 					0xFFFFFF);
 		}
-		if (tab != TAB_QUESTS && items.isEmpty()) {
+		if (tab < TAB_QUESTS && items.isEmpty()) {
 			this.drawCenteredString(this.fontRendererObj, "§7Nothing here yet", listX + listW / 2, infoY - 60,
 					0xFFFFFF);
 		}
@@ -217,7 +256,7 @@ public final class CosmeticsScreen extends GuiScreen {
 
 	/** The quest list: name, what to do, a progress bar and the reward. */
 	private void drawQuests(int rowH) {
-		List<Cosmetics.Quest> qs = Cosmetics.quests();
+		List<Cosmetics.Quest> qs = questsHere();
 		StringBuilder head = new StringBuilder();
 		long daily = Cosmetics.dailyResetSeconds();
 		if (daily >= 0) {
@@ -299,6 +338,18 @@ public final class CosmeticsScreen extends GuiScreen {
 
 	@Override
 	protected void keyTyped(char c, int key) {
+		// the secret dev panel: type "plebdev" here (the server only answers devs)
+		if (Character.isLetter(c)) {
+			typed = (typed + Character.toLowerCase(c));
+			if (typed.length() > SECRET.length()) {
+				typed = typed.substring(typed.length() - SECRET.length());
+			}
+			if (typed.equals(SECRET)) {
+				typed = "";
+				devAsked = Cosmetics.devVersion();
+				Cosmetics.dev("open");
+			}
+		}
 		if (key == 1) {
 			close();
 		}

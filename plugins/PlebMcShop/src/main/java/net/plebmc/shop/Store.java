@@ -1,7 +1,11 @@
 package net.plebmc.shop;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -12,8 +16,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Logger;
 
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.YamlConfiguration;
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.Yaml;
 
 /**
  * players.yml: each player's PlebMc Coins, what they own and wear, and their
@@ -55,44 +59,52 @@ final class Store {
 		if (!file.exists()) {
 			return;
 		}
-		YamlConfiguration y = YamlConfiguration.loadConfiguration(file);
-		ConfigurationSection root = y.getConfigurationSection("players");
-		if (root == null) {
+		Cfg root;
+		try {
+			root = Cfg.load(file);
+		} catch (IOException | RuntimeException e) {
+			log.severe("Could not read " + file + ": " + e);
+			// keep a copy so a broken file is never overwritten with an empty one
+			file.renameTo(new File(file.getPath() + ".broken-" + System.currentTimeMillis()));
 			return;
 		}
-		for (String key : root.getKeys(false)) {
+		Cfg all = root.section("players");
+		if (all == null) {
+			return;
+		}
+		for (String key : all.keys()) {
 			UUID id;
 			try {
 				id = UUID.fromString(key);
 			} catch (IllegalArgumentException e) {
 				continue;
 			}
-			ConfigurationSection s = root.getConfigurationSection(key);
+			Cfg s = all.section(key);
 			if (s == null) {
 				continue;
 			}
 			Data d = new Data();
-			d.name = s.getString("name", "");
-			d.coins = s.getLong("coins", 0);
-			d.owned.addAll(s.getStringList("owned"));
+			d.name = s.str("name", "");
+			d.coins = s.num("coins", 0);
+			d.owned.addAll(s.list("owned"));
 			for (String cat : new String[] { Catalog.HAT, Catalog.TRAIL }) {
-				String v = s.getString("equipped." + cat, null);
+				String v = s.str("equipped." + cat, null);
 				if (v != null && !v.isEmpty()) {
 					d.equipped.put(cat, v);
 				}
 			}
-			d.lastLogin = s.getLong("login.last", 0);
-			d.streak = s.getInt("login.streak", 0);
-			d.playMinutes = s.getInt("play-minutes", 0);
-			d.dailyKey = s.getString("quests.daily", "");
-			d.weeklyKey = s.getString("quests.weekly", "");
-			ConfigurationSection p = s.getConfigurationSection("quests.progress");
+			d.lastLogin = s.num("login.last", 0);
+			d.streak = s.integer("login.streak", 0);
+			d.playMinutes = s.integer("play-minutes", 0);
+			d.dailyKey = s.str("quests.daily", "");
+			d.weeklyKey = s.str("quests.weekly", "");
+			Cfg p = s.section("quests.progress");
 			if (p != null) {
-				for (String q : p.getKeys(false)) {
-					d.progress.put(q, p.getLong(q, 0));
+				for (String q : p.keys()) {
+					d.progress.put(q, p.num(q, 0));
 				}
 			}
-			d.done.addAll(s.getStringList("quests.done"));
+			d.done.addAll(s.list("quests.done"));
 			players.put(id, d);
 		}
 	}
@@ -115,46 +127,59 @@ final class Store {
 		}
 	}
 
-	void save() {
-		YamlConfiguration y = new YamlConfiguration();
+	synchronized void save() {
+		Map<String, Object> all = new LinkedHashMap<>();
 		for (Map.Entry<UUID, Data> e : players.entrySet()) {
 			Data d = e.getValue();
-			String base = "players." + e.getKey() + ".";
-			y.set(base + "name", d.name);
-			y.set(base + "coins", d.coins);
+			Map<String, Object> m = new LinkedHashMap<>();
+			m.put("name", d.name);
+			m.put("coins", d.coins);
 			if (!d.owned.isEmpty()) {
-				y.set(base + "owned", new ArrayList<>(d.owned));
+				m.put("owned", new ArrayList<>(d.owned));
 			}
-			for (Map.Entry<String, String> q : d.equipped.entrySet()) {
-				y.set(base + "equipped." + q.getKey(), q.getValue());
+			if (!d.equipped.isEmpty()) {
+				m.put("equipped", new LinkedHashMap<>(d.equipped));
 			}
 			if (d.lastLogin != 0) {
-				y.set(base + "login.last", d.lastLogin);
-				y.set(base + "login.streak", d.streak);
+				Map<String, Object> l = new LinkedHashMap<>();
+				l.put("last", d.lastLogin);
+				l.put("streak", d.streak);
+				m.put("login", l);
 			}
 			if (d.playMinutes != 0) {
-				y.set(base + "play-minutes", d.playMinutes);
+				m.put("play-minutes", d.playMinutes);
 			}
+			Map<String, Object> q = new LinkedHashMap<>();
 			if (!d.dailyKey.isEmpty()) {
-				y.set(base + "quests.daily", d.dailyKey);
+				q.put("daily", d.dailyKey);
 			}
 			if (!d.weeklyKey.isEmpty()) {
-				y.set(base + "quests.weekly", d.weeklyKey);
+				q.put("weekly", d.weeklyKey);
 			}
-			for (Map.Entry<String, Long> q : d.progress.entrySet()) {
-				y.set(base + "quests.progress." + q.getKey(), q.getValue());
+			if (!d.progress.isEmpty()) {
+				q.put("progress", new LinkedHashMap<>(d.progress));
 			}
 			if (!d.done.isEmpty()) {
-				y.set(base + "quests.done", new ArrayList<>(d.done));
+				q.put("done", new ArrayList<>(d.done));
 			}
+			if (!q.isEmpty()) {
+				m.put("quests", q);
+			}
+			all.put(e.getKey().toString(), m);
 		}
+		Map<String, Object> root = new LinkedHashMap<>();
+		root.put("players", all);
+		DumperOptions opt = new DumperOptions();
+		opt.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
 		try {
 			File parent = file.getParentFile();
 			if (parent != null) {
 				parent.mkdirs();
 			}
 			File tmp = new File(file.getPath() + ".tmp");
-			y.save(tmp);
+			try (Writer w = new OutputStreamWriter(new FileOutputStream(tmp), StandardCharsets.UTF_8)) {
+				new Yaml(opt).dump(root, w);
+			}
 			if (!tmp.renameTo(file)) {
 				// Windows can't rename over an existing file
 				file.delete();
@@ -170,5 +195,18 @@ final class Store {
 
 	List<UUID> ids() {
 		return new ArrayList<>(players.keySet());
+	}
+
+	/** Coins held by everyone (dev panel stats). */
+	long totalCoins() {
+		long t = 0;
+		for (Data d : players.values()) {
+			t += d.coins;
+		}
+		return t;
+	}
+
+	int size() {
+		return players.size();
 	}
 }

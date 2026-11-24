@@ -164,7 +164,7 @@ orange "unknown".
 
 ## Cosmetics shop protocol
 
-Cosmetics (hats and trails) are bought with the server's coins (on PlebMc: PlebMc Coins, earned from quests, a daily login reward and time online). The server owns the balance, ownership and what is equipped; the client only displays them and sends requests. Messages are UTF-8 JSON objects on the plugin channel `plebmc:shop`. The client sends `REGISTER plebmc:shop` when it joins (Bukkit needs this before it will deliver messages to the client). Open the shop from the mod menu (Right Shift, **Cosmetics**). "Try on" works everywhere and is local only.
+Cosmetics (hats and trails) are bought with the server's coins (on PlebMc: PlebMc Coins, earned from quests, a daily login reward and time online). The server owns the balance, ownership and what is equipped; the client only displays them and sends requests. Messages are UTF-8 JSON objects on the plugin channel `plebmc:shop`. The client sends `REGISTER plebmc:shop` when it joins (Bukkit needs this before it will deliver messages to the client). Open the shop from the mod menu (Right Shift, **Shop & Quests**). "Try on" works everywhere and is local only.
 
 **Client to server**
 
@@ -183,16 +183,26 @@ Cosmetics (hats and trails) are bought with the server's coins (on PlebMc: PlebM
 | `{"type":"result","ok":false,"message":"Not enough coins","coins":100}` | Answer to buy/equip, shown in the shop. `coins` is optional. |
 | `{"type":"notify","title":"§aQuest complete!","message":"Get 3 kills: +75 PlebMc Coins","coins":425}` | A popup (top right, like Apollo notifications). `coins` optional. |
 
-`state` can also carry the Quests tab: `"currency":"PlebMc Coins"`, `"dailyResetIn":18720` and `"weeklyResetIn":...` (seconds), `"loginStreak":4`, and `"quests":[{"id":"kills_3","name":"Get 3 kills","description":"...","period":"daily","progress":1,"goal":3,"reward":75,"done":false}]` (`period` is `daily`, `weekly` or `login`).
+`state` can also carry the Quests tabs: `"currency":"PlebMc Coins"`, `"dailyResetIn":18720` and `"weeklyResetIn":...` (seconds), `"loginStreak":4`, `"questCategories":[{"id":"lobby","name":"PlebMc Lobby","tab":"Lobby"},{"id":"plebnite","name":"PlebNite","tab":"PlebNite"}]` (one tab each; without it the client shows a single Quests tab), and `"quests":[{"id":"kills_3","category":"plebnite","name":"Get 3 kills","description":"...","period":"daily","progress":1,"goal":3,"reward":75,"done":false}]` (`period` is `daily`, `weekly` or `login`; a quest without `category` shows in every tab).
+
+**Dev panel.** Typing `plebdev` in the Shop & Quests screen sends `{"type":"dev","action":"open"}`. A server only answers players allowed to use it, with `{"type":"dev","allowed":true,"message":"+1,000 coins","info":["Online: ..."],"quests":[{"id":"kills_3","name":"Get 3 kills","category":"plebnite","type":"kill"}]}`, and the client then opens the panel. Silence means no access. Actions (all on the sender's own account): `open`, `coins` (`amount`), `zero`, `complete` (`id`, or all), `progress` (`questType`, `category`), `resetquests`, `claimlogin`, `resetlogin`, `unlockall`, `lockall`.
 
 Catalog item: `{"id":"gold_tophat","name":"Gold Top Hat","category":"hat","render":"tophat","price":900,"color":"#FFD700","description":"..."}`. `category` is `hat` or `trail`. `render` is the look the client draws: hats `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`; trails `flame`, `hearts`, `notes`, `rainbow`, `cloud`, `portal`, `emerald`, `snow`. `color` tints a hat (optional). Items with a `render` this client doesn't know are hidden, so newer items don't break older clients. Without a catalog the client shows the built-in one (ids equal to the render names, prices 250 to 2,500).
 
-### Server plugin
+### Server plugins
 
-`plugins/PlebMcShop` is a ready server plugin for this protocol (Spigot/Paper 1.13+): its
-own PlebMc Coins (separate from other economies), daily/weekly quests, a daily login
-streak, playtime coins, a configurable catalog and `players.yml` storage.
-See `plugins/PlebMcShop/README.md`.
+`plugins/PlebMcShop` implements this protocol on **BungeeCord**, so coins, quests and
+cosmetics are shared by every server behind the proxy. It answers `plebmc:shop` itself
+(those messages never reach the backends), sends `players` only to people on the same
+server, and keeps everything in `players.yml` on the proxy. Its own PlebMc Coins are
+separate from in-game economies. Quests are grouped in categories (one per server group,
+e.g. lobby and PlebNite), each with its own daily and weekly pool.
+
+`plugins/PlebMcBridge` runs on the backends and reports quest events (kills, deaths,
+matches, worlds, `/plebquest <player> <type>`) to the proxy as `PlebMcBridge` messages on
+the standard `BungeeCord` channel: `{"player":"<uuid>","type":"kill","amount":1}` or
+`{"player":"<uuid>","world":"arena1"}`. The proxy counts an event for the category of
+the server it came from. See both plugins' READMEs.
 
 ## Testing with a real server (Spigot/Paper 1.8.8 + Apollo + EaglerXBungee)
 

@@ -6,7 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.bukkit.configuration.ConfigurationSection;
 
 /** The items for sale, read from config.yml ("items"). */
 final class Catalog {
@@ -66,18 +65,18 @@ final class Catalog {
 	private final Map<String, Item> items = new LinkedHashMap<>();
 	private final List<String> warnings = new ArrayList<>();
 
-	Catalog(ConfigurationSection sec) {
+	Catalog(Cfg sec) {
 		if (sec == null) {
 			warnings.add("config.yml has no 'items' section, the shop is empty");
 			return;
 		}
-		for (String id : sec.getKeys(false)) {
-			ConfigurationSection s = sec.getConfigurationSection(id);
+		for (String id : sec.keys()) {
+			Cfg s = sec.section(id);
 			if (s == null) {
 				continue;
 			}
-			String category = s.getString("category", "").toLowerCase();
-			String render = s.getString("render", id).toLowerCase();
+			String category = s.str("category", "").toLowerCase();
+			String render = s.str("render", id).toLowerCase();
 			if (!HAT.equals(category) && !TRAIL.equals(category)) {
 				warnings.add("item " + id + ": category must be hat or trail");
 				continue;
@@ -88,13 +87,13 @@ final class Catalog {
 						+ ")");
 				continue;
 			}
-			String color = s.getString("color", null);
+			String color = s.str("color", null);
 			if (color != null && !color.matches("#[0-9a-fA-F]{6}")) {
 				warnings.add("item " + id + ": color must look like #FFD700, ignoring it");
 				color = null;
 			}
-			items.put(id, new Item(id, s.getString("name", id), category, render, s.getLong("price", 0), color,
-					s.getString("description", ""), s.getString("permission", null)));
+			items.put(id, new Item(id, s.str("name", id), category, render, s.num("price", 0), color,
+					s.str("description", ""), s.str("permission", null)));
 		}
 	}
 

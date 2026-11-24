@@ -1,0 +1,5 @@
+name: PlebMcShop
+version: 2.0.0
+main: net.plebmc.shop.BungeeShop
+author: PlebMc
+description: PlebMc Coins, quests and the cosmetics shop for the PlebMc client (plebmc:shop channel)

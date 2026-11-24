@@ -1,57 +1,74 @@
-# PlebMcShop - PlebMc Coins, quests and the cosmetics shop behind the PlebMc client's
-# "Shop & Quests" menu (Right Shift). PlebMc Coins are separate from every other economy
-# on the server. Only players on the PlebMc client can see and spend them.
+# PlebMcShop (BungeeCord) - PlebMc Coins, quests and the cosmetics shop behind the PlebMc
+# client's "Shop & Quests" menu (Right Shift). Runs on the proxy, so one balance works on
+# every server. PlebMc Coins are separate from every other economy on the network.
 # Run /plebshop reload after editing.
 
 currency-name: 'PlebMc Coins'
 
-# Quest days and the daily login use this time zone. Empty = the server's.
+# Quest days and the daily login use this time zone. Empty = the proxy's.
 timezone: 'America/Chicago'
 
-# Coins for joining once a day. The streak goes up each day you come back within
-# streak-reset-hours and starts over after the last reward.
+# Coins for joining the network once a day. The streak goes up each day you come back
+# within streak-reset-hours and starts over after the last reward.
 login-rewards:
   enabled: true
   rewards: [50, 75, 100, 125, 150, 200, 300]
   cooldown-hours: 20
   streak-reset-hours: 48
 
-# Coins for time online.
+# Coins for time online (anywhere on the network).
 playtime:
   enabled: true
   every-minutes: 15
   coins: 10
   notify: true
 
-# Quests. Each day daily-count quests are picked from "daily" (the same ones for
-# everyone), and each week (from Monday) weekly-count from "weekly". Rewards are paid
-# the moment a quest is finished.
-# Types counted by this plugin:
-#   kill  = kill a player          match = a match ended for you (you died or won)
-#   death = die                    play  = one minute online
-#   login = a day with a login reward
-# Any other type (like "win") is counted with /plebshop progress <player> <type> [amount],
-# so other plugins can feed quests. For Battle Royale X wins, add this line to
-# Executed-Commands > Player-Win in plugins/BattleRoyaleX/config.yml:
-#   - plebshop progress %player% win
+# Quests come in categories, one per game. Each category is a tab in the client and
+# lists the backend servers (names from the BungeeCord config) whose events count for it.
+# Every day daily-count quests are picked from each category's "daily" list (the same for
+# everyone), and every week (from Monday) weekly-count from its "weekly" list.
+# Rewards are paid the moment a quest is finished.
+#
+# Quest types:
+#   play  = a minute on that category's servers     join  = connect to one of its servers
+#   login = a day with a login reward (counts in every category)
+#   kill / death / match = from the PlebMcBridge plugin on the backend (match = you died or won)
+#   anything else (win, parkour, ...) = /plebquest <player> <type> [amount] run on the backend
+#   console, e.g. from Battle Royale X's Player-Win commands or ajParkour's rewards.
 quests:
   reset-hour: 0
   daily-count: 3
   weekly-count: 2
-  daily:
-    kills_3:   {name: 'Get 3 kills', description: 'Eliminate players in matches', type: kill, goal: 3, reward: 75}
-    kills_8:   {name: 'Get 8 kills', description: 'Eliminate players in matches', type: kill, goal: 8, reward: 150}
-    matches_3: {name: 'Play 3 matches', description: 'Finish 3 matches', type: match, goal: 3, reward: 75}
-    matches_6: {name: 'Play 6 matches', description: 'Finish 6 matches', type: match, goal: 6, reward: 125}
-    win_1:     {name: 'Win a match', description: 'Be the last one standing', type: win, goal: 1, reward: 150}
-    play_30:   {name: 'Play for 30 minutes', description: 'Be online on PlebMc', type: play, goal: 30, reward: 60}
-    play_60:   {name: 'Play for an hour', description: 'Be online on PlebMc', type: play, goal: 60, reward: 100}
-  weekly:
-    kills_40:   {name: 'Get 40 kills', description: 'Eliminate players this week', type: kill, goal: 40, reward: 600}
-    wins_5:     {name: 'Win 5 matches', description: 'Be the last one standing 5 times', type: win, goal: 5, reward: 750}
-    matches_25: {name: 'Play 25 matches', description: 'Finish 25 matches this week', type: match, goal: 25, reward: 500}
-    play_300:   {name: 'Play for 5 hours', description: 'Be online on PlebMc this week', type: play, goal: 300, reward: 500}
-    login_5:    {name: 'Log in on 5 days', description: 'Claim your daily login 5 times', type: login, goal: 5, reward: 400}
+  categories:
+    lobby:
+      name: 'PlebMc Lobby'
+      tab: 'Lobby'
+      servers: [lobby]
+      daily:
+        lobby_play_20:  {name: 'Hang out for 20 minutes', description: 'Spend time in the lobby', type: play, goal: 20, reward: 40}
+        lobby_parkour:  {name: 'Finish the parkour', description: 'Beat the lobby parkour', type: parkour, goal: 1, reward: 75}
+        lobby_pvp_3:    {name: 'Get 3 lobby PvP kills', description: 'Win fights in the lobby PvP', type: kill, goal: 3, reward: 50}
+        lobby_join_3:   {name: 'Come back 3 times', description: 'Join the lobby 3 times today', type: join, goal: 3, reward: 30}
+      weekly:
+        lobby_parkour_5: {name: 'Parkour pro', description: 'Finish the parkour 5 times', type: parkour, goal: 5, reward: 300}
+        lobby_play_120:  {name: 'Lobby regular', description: 'Spend 2 hours in the lobby', type: play, goal: 120, reward: 250}
+        login_5:         {name: 'Log in on 5 days', description: 'Claim your daily login 5 times', type: login, goal: 5, reward: 400}
+    plebnite:
+      name: 'PlebNite'
+      tab: 'PlebNite'
+      servers: [plebnite]
+      daily:
+        kills_3:   {name: 'Get 3 kills', description: 'Eliminate players in matches', type: kill, goal: 3, reward: 75}
+        kills_8:   {name: 'Get 8 kills', description: 'Eliminate players in matches', type: kill, goal: 8, reward: 150}
+        matches_3: {name: 'Play 3 matches', description: 'Finish 3 matches', type: match, goal: 3, reward: 75}
+        matches_6: {name: 'Play 6 matches', description: 'Finish 6 matches', type: match, goal: 6, reward: 125}
+        win_1:     {name: 'Win a match', description: 'Be the last one standing', type: win, goal: 1, reward: 150}
+        play_30:   {name: 'Play PlebNite for 30 minutes', description: 'Be on PlebNite', type: play, goal: 30, reward: 60}
+      weekly:
+        kills_40:   {name: 'Get 40 kills', description: 'Eliminate players this week', type: kill, goal: 40, reward: 600}
+        wins_5:     {name: 'Win 5 matches', description: 'Be the last one standing 5 times', type: win, goal: 5, reward: 750}
+        matches_25: {name: 'Play 25 matches', description: 'Finish 25 matches this week', type: match, goal: 25, reward: 500}
+        play_300:   {name: 'Play PlebNite for 5 hours', description: 'Be on PlebNite this week', type: play, goal: 300, reward: 500}
 
 # Put an item on right after buying it.
 equip-on-buy: true
@@ -59,8 +76,11 @@ equip-on-buy: true
 # Players not on the PlebMc client get quest and login rewards as chat lines instead of popups.
 chat-for-other-clients: true
 
-# Worlds where nobody's hat or trail is shown (e.g. your match worlds). Empty = shown everywhere.
+# Worlds where nobody's hat or trail is shown: 'world' or 'server:world' (needs PlebMcBridge on that server).
 hidden-in-worlds: []
+
+# The secret dev panel (type 'plebdev' in the Shop & Quests screen) only opens for players
+# with the plebshop.dev permission. /plebshop needs plebshop.admin.
 
 messages:
   prefix: '&8[&b&lPlebMc&8] &7'

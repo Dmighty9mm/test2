@@ -71,9 +71,17 @@ public final class Cosmetics {
 		public final long goal;
 		public final long reward;
 		public final boolean done;
+		/** The category (tab) id, or null for quests that show in every tab (the daily login). */
+		public final String category;
 
 		public Quest(String id, String name, String description, String period, long progress, long goal, long reward,
 				boolean done) {
+			this(id, name, description, period, progress, goal, reward, done, null);
+		}
+
+		public Quest(String id, String name, String description, String period, long progress, long goal, long reward,
+				boolean done, String category) {
+			this.category = category;
 			this.id = id;
 			this.name = name;
 			this.description = description;
@@ -82,6 +90,19 @@ public final class Cosmetics {
 			this.goal = goal;
 			this.reward = reward;
 			this.done = done;
+		}
+	}
+
+	/** A quest tab: e.g. "lobby" shown as "Lobby", titled "PlebMc Lobby". */
+	public static final class QuestCategory {
+		public final String id;
+		public final String name;
+		public final String tab;
+
+		public QuestCategory(String id, String name, String tab) {
+			this.id = id;
+			this.name = name;
+			this.tab = tab;
 		}
 	}
 
@@ -120,6 +141,14 @@ public final class Cosmetics {
 	private static long weeklyResetAt;
 	private static int loginStreak;
 	private static Toasts toasts;
+	private static List<QuestCategory> questCategories = Collections.emptyList();
+	/** Dev panel: only filled in when the server says this player is a dev. */
+	private static boolean devAllowed;
+	private static int devVersion;
+	private static String devMessage;
+	private static List<String> devInfo = Collections.emptyList();
+	private static List<String[]> devQuests = Collections.emptyList();
+	private static final java.util.LinkedList<String> protocolLog = new java.util.LinkedList<>();
 	private static boolean serverSupport;
 	private static final Set<String> owned = new HashSet<>();
 	private static final Map<String, String> equipped = new HashMap<>();
@@ -166,6 +195,11 @@ public final class Cosmetics {
 		coins = -1;
 		currency = "PlebMc Coins";
 		quests = Collections.emptyList();
+		questCategories = Collections.emptyList();
+		devAllowed = false;
+		devMessage = null;
+		devInfo = Collections.emptyList();
+		devQuests = Collections.emptyList();
 		dailyResetAt = 0;
 		weeklyResetAt = 0;
 		loginStreak = 0;
@@ -198,6 +232,10 @@ public final class Cosmetics {
 		Map<?, ?> m = (Map<?, ?>) o;
 		String type = str(m.get("type"), "");
 		serverSupport = true;
+		protocolLog.add(json.length() > 300 ? json.substring(0, 300) + "..." : json);
+		while (protocolLog.size() > 40) {
+			protocolLog.removeFirst();
+		}
 		if ("state".equals(type)) {
 			if (m.containsKey("coins")) {
 				coins = Math.max(0, num(m.get("coins"), 0));
@@ -216,6 +254,18 @@ public final class Cosmetics {
 			}
 			if (m.get("currency") instanceof String) {
 				currency = (String) m.get("currency");
+			}
+			if (m.get("questCategories") instanceof List) {
+				List<QuestCategory> cs = new ArrayList<>();
+				for (Object e : (List<?>) m.get("questCategories")) {
+					if (e instanceof Map && ((Map<?, ?>) e).get("id") instanceof String) {
+						Map<?, ?> c = (Map<?, ?>) e;
+						String cid = (String) c.get("id");
+						String cname = str(c.get("name"), cid);
+						cs.add(new QuestCategory(cid, cname, str(c.get("tab"), cname)));
+					}
+				}
+				questCategories = Collections.unmodifiableList(cs);
 			}
 			if (m.get("quests") instanceof List) {
 				List<Quest> qs = new ArrayList<>();
@@ -269,6 +319,28 @@ public final class Cosmetics {
 					}
 				}
 			}
+		} else if ("dev".equals(type)) {
+			devAllowed = Boolean.TRUE.equals(m.get("allowed"));
+			devMessage = str(m.get("message"), null);
+			if (m.get("info") instanceof List) {
+				List<String> lines = new ArrayList<>();
+				for (Object l : (List<?>) m.get("info")) {
+					lines.add(String.valueOf(l));
+				}
+				devInfo = Collections.unmodifiableList(lines);
+			}
+			if (m.get("quests") instanceof List) {
+				List<String[]> qs = new ArrayList<>();
+				for (Object e : (List<?>) m.get("quests")) {
+					if (e instanceof Map) {
+						Map<?, ?> q = (Map<?, ?>) e;
+						qs.add(new String[] { str(q.get("id"), ""), str(q.get("name"), ""), str(q.get("category"), null),
+								str(q.get("type"), "") });
+					}
+				}
+				devQuests = Collections.unmodifiableList(qs);
+			}
+			devVersion++;
 		} else if ("notify".equals(type)) {
 			if (m.containsKey("coins")) {
 				coins = Math.max(0, num(m.get("coins"), 0));
@@ -343,7 +415,7 @@ public final class Cosmetics {
 		long progress = Math.max(0, Math.min(goal, num(m.get("progress"), 0)));
 		boolean done = Boolean.TRUE.equals(m.get("done")) || progress >= goal;
 		return new Quest(id, str(m.get("name"), id), str(m.get("description"), ""), str(m.get("period"), "daily"),
-				done ? goal : progress, goal, Math.max(0, num(m.get("reward"), 0)), done);
+				done ? goal : progress, goal, Math.max(0, num(m.get("reward"), 0)), done, str(m.get("category"), null));
 	}
 
 	public static boolean knownRender(String r) {
@@ -370,6 +442,15 @@ public final class Cosmetics {
 	public static boolean equip(String category, String id) {
 		Map<String, Object> m = obj("type", "equip", "category", category);
 		m.put("id", id == null ? Json.NULL : id);
+		return send(m);
+	}
+
+	/** A dev panel request ({@code open}, {@code coins}, {@code complete}, ...). Ignored by the server unless you're a dev. */
+	public static boolean dev(String action, Object... kv) {
+		Map<String, Object> m = obj("type", "dev", "action", action);
+		for (int i = 0; i + 1 < kv.length; i += 2) {
+			m.put(String.valueOf(kv[i]), kv[i + 1] == null ? Json.NULL : kv[i + 1]);
+		}
 		return send(m);
 	}
 
@@ -404,6 +485,48 @@ public final class Cosmetics {
 
 	public static List<Quest> quests() {
 		return quests;
+	}
+
+	/** Quests for one tab: that category's plus the ones in every tab. */
+	public static List<Quest> quests(String category) {
+		List<Quest> out = new ArrayList<>();
+		for (Quest q : quests) {
+			if (category == null || q.category == null || q.category.equals(category)) {
+				out.add(q);
+			}
+		}
+		return out;
+	}
+
+	public static List<QuestCategory> questCategories() {
+		return questCategories;
+	}
+
+	public static boolean devAllowed() {
+		return devAllowed;
+	}
+
+	/** Changes on every dev panel answer. */
+	public static int devVersion() {
+		return devVersion;
+	}
+
+	public static String devMessage() {
+		return devMessage;
+	}
+
+	public static List<String> devInfo() {
+		return devInfo;
+	}
+
+	/** {id, name, category, type} of today's quests (dev panel). */
+	public static List<String[]> devQuests() {
+		return devQuests;
+	}
+
+	/** The last 40 shop messages from the server, oldest first (dev panel). */
+	public static List<String> protocolLog() {
+		return new ArrayList<>(protocolLog);
 	}
 
 	/** Seconds until the daily quests change, or -1 if unknown. */
