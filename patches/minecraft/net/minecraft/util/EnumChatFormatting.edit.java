@@ -18,7 +18,12 @@
 + 	public static final EnumChatFormatting[] _VALUES = values();
 + 
 
-> CHANGE  61 : 64  @  61 : 62
+> CHANGE  50 : 52  @  50 : 51
+
+~ 		return text == null ? null
+~ 				: formattingCodePattern.matcher(net.plebmc.client.text.RgbText.strip(text)).replaceAll("");
+
+> CHANGE  10 : 13  @  10 : 11
 
 ~ 			EnumChatFormatting[] types = _VALUES;
 ~ 			for (int i = 0; i < types.length; ++i) {

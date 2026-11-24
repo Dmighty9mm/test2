@@ -99,6 +99,12 @@ public final class PlebClient {
 		Apollo.setLog(log);
 		try {
 			Apollo.init();
+			// tells the PlebColors server plugin this client draws RGB text codes
+			PluginChannels.register("plebmc:rgb", new PluginChannels.Handler() {
+				@Override
+				public void onMessage(String channel, byte[] data) {
+				}
+			});
 			net.plebmc.client.cosmetics.Cosmetics.init(new PluginChannels.Log() {
 				@Override
 				public void info(String msg) {

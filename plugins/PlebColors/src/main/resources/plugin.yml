@@ -1,0 +1,7 @@
+name: PlebColors
+version: 1.0.0
+main: net.plebmc.colors.PlebColors
+api-version: '1.16'
+depend: [ProtocolLib]
+softdepend: [ViaVersion, ViaBackwards, ViaRewind, FancyHolograms]
+description: Keeps hex colors and gradients for PlebClient players on 1.8 (through ViaBackwards).

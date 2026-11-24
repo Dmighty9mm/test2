@@ -139,6 +139,12 @@ public final class SettingsScreen extends PlebScreen {
 					() -> ClientPrefs.OPENS[pr.shiftOpens], saved(() -> pr.shiftOpens = wrap(pr.shiftOpens + 1, ClientPrefs.OPENS.length)),
 					saved(() -> pr.shiftOpens = wrap(pr.shiftOpens - 1, ClientPrefs.OPENS.length))), clip);
 			y += step;
+			add(toggle("RGB text colors", "Show hex colors and gradients from newer servers instead of the 16 old colors",
+					lx, y, lw, h, () -> pr.rgbText, saved(() -> pr.rgbText = !pr.rgbText)), clip);
+			y += step;
+			add(toggle("Clean holograms", "Hide \"Armor Stand\" labels and armor stand bodies on server holograms", lx,
+					y, lw, h, () -> pr.cleanHolograms, saved(() -> pr.cleanHolograms = !pr.cleanHolograms)), clip);
+			y += step;
 			break;
 		default: // Developer
 			add(toggle("Developer mode", "Adds Apollo debug to the home screen", lx, y, lw, h, () -> pr.developer,

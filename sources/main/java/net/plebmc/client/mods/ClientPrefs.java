@@ -47,6 +47,12 @@ public final class ClientPrefs {
 	/** What Right Shift opens. */
 	public int shiftOpens;
 
+	// ---- text and holograms ----
+	/** Draw hex/RGB colors and gradients from newer servers instead of the 16 old colors. */
+	public boolean rgbText = true;
+	/** Hide "Armor Stand" labels and stray armor stand bodies on holograms. */
+	public boolean cleanHolograms = true;
+
 	// ---- developer ----
 	/** Shows Apollo debug in the launcher. */
 	public boolean developer;
@@ -83,6 +89,8 @@ public final class ClientPrefs {
 		toastTime = d.toastTime;
 		hudShadow = d.hudShadow;
 		shiftOpens = d.shiftOpens;
+		rgbText = d.rgbText;
+		cleanHolograms = d.cleanHolograms;
 		developer = d.developer;
 		itemNbtLog = d.itemNbtLog;
 	}
@@ -110,6 +118,8 @@ public final class ClientPrefs {
 		toastTime = idx(m.get("toastTime"), toastTime, TOAST_SECONDS.length);
 		hudShadow = ProtoValues.asBool(m.get("hudShadow"), hudShadow);
 		shiftOpens = idx(m.get("shiftOpens"), shiftOpens, OPENS.length);
+		rgbText = ProtoValues.asBool(m.get("rgbText"), rgbText);
+		cleanHolograms = ProtoValues.asBool(m.get("cleanHolograms"), cleanHolograms);
 		developer = ProtoValues.asBool(m.get("developer"), developer);
 		itemNbtLog = ProtoValues.asBool(m.get("itemNbtLog"), itemNbtLog);
 	}
@@ -124,6 +134,8 @@ public final class ClientPrefs {
 		m.put("toastTime", (double) toastTime);
 		m.put("hudShadow", hudShadow);
 		m.put("shiftOpens", (double) shiftOpens);
+		m.put("rgbText", rgbText);
+		m.put("cleanHolograms", cleanHolograms);
 		m.put("developer", developer);
 		m.put("itemNbtLog", itemNbtLog);
 		return Json.write(m);

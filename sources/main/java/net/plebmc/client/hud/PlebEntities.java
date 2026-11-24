@@ -290,4 +290,43 @@ public final class PlebEntities {
 		EntityModule em = Apollo.module(EntityModule.class);
 		return em != null && em.isEnabled() && em.isRainbowSheep(e.getEntityId());
 	}
+
+	// ==================== holograms ====================
+
+	/**
+	 * ArmorStandRenderer.canRenderName: newer servers' holograms (text
+	 * display entities, 1.19.4+) reach 1.8 as name-visible armor stands, one
+	 * per line. A blank line arrives with an empty name, which vanilla shows
+	 * as "Armor Stand". Hide the label when the name has no visible text.
+	 */
+	public static boolean showArmorStandName(net.minecraft.entity.item.EntityArmorStand e) {
+		if (!net.plebmc.client.mods.ClientPrefs.get().cleanHolograms) {
+			return true;
+		}
+		if (!e.hasCustomName()) {
+			return false;
+		}
+		String s = net.plebmc.client.text.RgbText.strip(e.getCustomNameTag());
+		return s != null && !s.trim().isEmpty();
+	}
+
+	/**
+	 * ArmorStandRenderer.renderModel: true when this armor stand is a
+	 * hologram line whose invisible flag got lost on the way to 1.8, so only
+	 * its text should draw. A hologram line always shows its name and holds
+	 * nothing, and it is a marker or floats (no gravity). Decorative stands
+	 * with armor or items, or without a visible name, still draw.
+	 */
+	public static boolean isHologramStand(net.minecraft.entity.item.EntityArmorStand e) {
+		if (!net.plebmc.client.mods.ClientPrefs.get().cleanHolograms || !e.getAlwaysRenderNameTag()) {
+			return false;
+		}
+		for (int i = 0; i < 5; ++i) {
+			if (e.getEquipmentInSlot(i) != null) {
+				return false;
+			}
+		}
+		// func_181026_s = isMarker (1.8.8)
+		return e.hasNoGravity() || e.func_181026_s();
+	}
 }

@@ -49,6 +49,15 @@ public abstract class MixinRendererLivingEntity<T extends EntityLivingBase> exte
 		}
 	}
 
+	/** Holograms from newer servers whose armor stand lost its invisible flag: draw only the text. */
+	@Inject(method = "renderModel", at = @At("HEAD"), cancellable = true)
+	private void plebmc$hologramStand(T entity, float a, float b, float c, float d, float e, float f, CallbackInfo ci) {
+		if (entity instanceof net.minecraft.entity.item.EntityArmorStand
+				&& PlebEntities.isHologramStand((net.minecraft.entity.item.EntityArmorStand) entity)) {
+			ci.cancel();
+		}
+	}
+
 	@Inject(method = "rotateCorpse", at = @At("TAIL"))
 	private void plebmc$flip(T entity, float p1, float p2, float p3, CallbackInfo ci) {
 		if (entity.deathTime > 0 || !PlebEntities.flipped(entity)) {

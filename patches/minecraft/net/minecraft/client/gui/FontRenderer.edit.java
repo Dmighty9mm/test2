@@ -130,8 +130,25 @@
 
 ~ 	protected void renderStringAtPos(String parString1, boolean parFlag) {
 
-> CHANGE  3 : 4  @  3 : 4
+> CHANGE  3 : 21  @  3 : 4
 
+~ 				int rgbLen = net.plebmc.client.text.RgbText.codeLength(parString1, i);
+~ 				if (rgbLen > 0) {
+~ 					this.randomStyle = false;
+~ 					this.boldStyle = false;
+~ 					this.strikethroughStyle = false;
+~ 					this.underlineStyle = false;
+~ 					this.italicStyle = false;
+~ 					int rgb = net.plebmc.client.text.RgbText.displayColor(parString1, i, this.colorCode);
+~ 					if (parFlag) {
+~ 						rgb = net.plebmc.client.text.RgbText.shadow(rgb);
+~ 					}
+~ 					this.textColor = rgb;
+~ 					GlStateManager.color((float) (rgb >> 16 & 255) / 255.0F, (float) (rgb >> 8 & 255) / 255.0F,
+~ 							(float) (rgb & 255) / 255.0F, this.alpha);
+~ 					i += rgbLen - 1;
+~ 					continue;
+~ 				}
 ~ 				int i1 = "0123456789abcdefklmnor".indexOf(Character.toLowerCase(parString1.charAt(i + 1)));
 
 > CHANGE  133 : 134  @  133 : 134
@@ -183,5 +200,9 @@
 > CHANGE  8 : 9  @  8 : 9
 
 ~ 			return s + "\n" + this.wrapFormattedStringToWidth(s1, wrapWidth, ++depthCheck);
+
+> CHANGE  62 : 63  @  62 : 78
+
+~ 		return net.plebmc.client.text.RgbText.formatAtEnd(text);
 
 > EOF

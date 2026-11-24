@@ -239,6 +239,34 @@ the standard `BungeeCord` channel: `{"player":"<uuid>","type":"kill","amount":1}
 covering the server it came from (General everywhere, PlebNite only on PlebNite). Chat
 messages count for `chat` quests on the proxy itself, at most one every 10 seconds. See both plugins' READMEs.
 
+## Hex colors and holograms from newer servers (1.16.5 / 1.21.x through Via)
+
+**RGB text.** The font renderer (`FontRenderer` and `EaglerFontRenderer`) draws
+RGB color codes in their real color everywhere text is drawn: chat, tab list,
+scoreboard, nametags, titles, action bar, item names and lore, signs and
+holograms. Two forms are read (`net.plebmc.client.text.RgbText`): Spigot/Bungee
+`§x§R§R§G§G§B§B`, and a compact `§` + one char `U+E000`-`U+EFFF` (12-bit color).
+Wrapped lines keep their RGB color, and stripping formatting removes RGB codes.
+Settings > Behavior > **RGB text colors** (on) turns it off, which draws the
+nearest of the 16 old colors instead.
+
+ViaBackwards rounds hex colors to the 16 old colors on the server, so the client
+alone never sees them. **PlebColors** (`plugins/PlebColors`, needs ProtocolLib) on
+each newer backend rewrites hex colors into compact RGB codes, only for players
+whose client registered `plebmc:rgb` (PlebClient does on every join).
+
+**Holograms.** Text display holograms (FancyHolograms, 1.19.4+) reach 1.8 as armor
+stands with a visible name. Settings > Behavior > **Clean holograms** (on):
+- a blank hologram line (empty name) no longer shows "Armor Stand";
+- an armor stand that always shows its name, holds and wears nothing, and is a
+  marker or has no gravity draws only its name, even if the invisible flag got lost.
+  Decorative armor stands with gear or without a visible name still draw.
+
+Hooks: `FontRenderer.renderStringAtPos` / `getFormatFromString`,
+`EaglerFontRenderer`, `EnumChatFormatting.getTextWithoutFormattingCodes`,
+`ArmorStandRenderer.canRenderName` / `renderModel`. The Forge port does the same
+through mixins.
+
 ## Custom items on 1.8 (PlebNite): step 1, the item NBT log
 
 The client is called **PlebClient** in its own menus (the server stays "PlebMc").
