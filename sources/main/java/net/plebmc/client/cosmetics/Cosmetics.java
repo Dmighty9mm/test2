@@ -142,13 +142,7 @@ public final class Cosmetics {
 	private static int loginStreak;
 	private static Toasts toasts;
 	private static List<QuestCategory> questCategories = Collections.emptyList();
-	/** Dev panel: only filled in when the server says this player is a dev. */
-	private static boolean devAllowed;
-	private static int devVersion;
-	private static String devMessage;
-	private static List<String> devInfo = Collections.emptyList();
-	private static List<String[]> devQuests = Collections.emptyList();
-	private static final java.util.LinkedList<String> protocolLog = new java.util.LinkedList<>();
+	private static final Account account = new Account();
 	private static boolean serverSupport;
 	private static final Set<String> owned = new HashSet<>();
 	private static final Map<String, String> equipped = new HashMap<>();
@@ -196,10 +190,7 @@ public final class Cosmetics {
 		currency = "PlebMc Coins";
 		quests = Collections.emptyList();
 		questCategories = Collections.emptyList();
-		devAllowed = false;
-		devMessage = null;
-		devInfo = Collections.emptyList();
-		devQuests = Collections.emptyList();
+		account.clear();
 		dailyResetAt = 0;
 		weeklyResetAt = 0;
 		loginStreak = 0;
@@ -232,10 +223,6 @@ public final class Cosmetics {
 		Map<?, ?> m = (Map<?, ?>) o;
 		String type = str(m.get("type"), "");
 		serverSupport = true;
-		protocolLog.add(json.length() > 300 ? json.substring(0, 300) + "..." : json);
-		while (protocolLog.size() > 40) {
-			protocolLog.removeFirst();
-		}
 		if ("state".equals(type)) {
 			if (m.containsKey("coins")) {
 				coins = Math.max(0, num(m.get("coins"), 0));
@@ -319,28 +306,8 @@ public final class Cosmetics {
 					}
 				}
 			}
-		} else if ("dev".equals(type)) {
-			devAllowed = Boolean.TRUE.equals(m.get("allowed"));
-			devMessage = str(m.get("message"), null);
-			if (m.get("info") instanceof List) {
-				List<String> lines = new ArrayList<>();
-				for (Object l : (List<?>) m.get("info")) {
-					lines.add(String.valueOf(l));
-				}
-				devInfo = Collections.unmodifiableList(lines);
-			}
-			if (m.get("quests") instanceof List) {
-				List<String[]> qs = new ArrayList<>();
-				for (Object e : (List<?>) m.get("quests")) {
-					if (e instanceof Map) {
-						Map<?, ?> q = (Map<?, ?>) e;
-						qs.add(new String[] { str(q.get("id"), ""), str(q.get("name"), ""), str(q.get("category"), null),
-								str(q.get("type"), "") });
-					}
-				}
-				devQuests = Collections.unmodifiableList(qs);
-			}
-			devVersion++;
+		} else if ("account".equals(type)) {
+			account.update(m);
 		} else if ("notify".equals(type)) {
 			if (m.containsKey("coins")) {
 				coins = Math.max(0, num(m.get("coins"), 0));
@@ -445,13 +412,21 @@ public final class Cosmetics {
 		return send(m);
 	}
 
-	/** A dev panel request ({@code open}, {@code coins}, {@code complete}, ...). Ignored by the server unless you're a dev. */
-	public static boolean dev(String action, Object... kv) {
-		Map<String, Object> m = obj("type", "dev", "action", action);
-		for (int i = 0; i + 1 < kv.length; i += 2) {
-			m.put(String.valueOf(kv[i]), kv[i + 1] == null ? Json.NULL : kv[i + 1]);
-		}
-		return send(m);
+	/** Asks the server for this player's plebmc.top login. */
+	public static boolean requestAccount() {
+		return send(obj("type", "account"));
+	}
+
+	/** Logs in with the code from plebmc.top (Connections > Minecraft > Link). */
+	public static boolean link(String code) {
+		account.pending = true;
+		account.version++;
+		return send(obj("type", "link", "code", code));
+	}
+
+	/** The plebmc.top login, as the server last reported it. */
+	public static Account account() {
+		return account;
 	}
 
 	private static boolean send(Map<String, Object> m) {
@@ -500,33 +475,6 @@ public final class Cosmetics {
 
 	public static List<QuestCategory> questCategories() {
 		return questCategories;
-	}
-
-	public static boolean devAllowed() {
-		return devAllowed;
-	}
-
-	/** Changes on every dev panel answer. */
-	public static int devVersion() {
-		return devVersion;
-	}
-
-	public static String devMessage() {
-		return devMessage;
-	}
-
-	public static List<String> devInfo() {
-		return devInfo;
-	}
-
-	/** {id, name, category, type} of today's quests (dev panel). */
-	public static List<String[]> devQuests() {
-		return devQuests;
-	}
-
-	/** The last 40 shop messages from the server, oldest first (dev panel). */
-	public static List<String> protocolLog() {
-		return new ArrayList<>(protocolLog);
 	}
 
 	/** Seconds until the daily quests change, or -1 if unknown. */

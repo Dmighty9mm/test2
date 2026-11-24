@@ -660,7 +660,7 @@
 + 			}
 + 		}
 + 
-+ 		return "" + Minecraft.getDebugFPS() + "fps | C: " + j + "/" + i + ", E: " + this.countEntitiesRendered + "+" + k
++ 		return "" + net.plebmc.client.mods.FpsLarp.INSTANCE.forDebug(Minecraft.getDebugFPS(), System.currentTimeMillis()) + "fps | C: " + j + "/" + i + ", E: " + this.countEntitiesRendered + "+" + k
 + 				+ ", " + renderDispatcher.getDebugInfo();
 + 	}
 

@@ -15,8 +15,8 @@ import com.google.gson.GsonBuilder;
 
 /**
  * Everything the shop does, independent of BungeeCord so it can be tested:
- * PlebMc Coins, quests, the cosmetics shop, what everyone wears, admin
- * commands and the secret dev panel. {@link BungeeShop} feeds it events and
+ * PlebMc Coins, quests, the cosmetics shop, what everyone wears and admin
+ * commands. {@link BungeeShop} feeds it events and
  * delivers its messages. All entry points are synchronized (BungeeCord calls
  * from several threads).
  */
@@ -40,10 +40,12 @@ final class ShopCore {
 		boolean hasPermission(UUID player, String permission);
 
 		long now();
+
+		/** Runs slow work (website calls) off the proxy's event threads. */
+		void async(Runnable r);
 	}
 
 	static final String ADMIN = "plebshop.admin";
-	static final String DEV = "plebshop.dev";
 	private static final long ACTION_COOLDOWN_MS = 300;
 
 	private final Gson gson = new GsonBuilder().serializeNulls().create();
@@ -61,11 +63,23 @@ final class ShopCore {
 	/** Players whose client speaks plebmc:shop (sent any shop message). */
 	private final java.util.Set<UUID> clients = new java.util.HashSet<>();
 	private final Map<UUID, Long> lastAction = new HashMap<>();
+	/** plebmc.top logins: the website account of each online player (looked up on join). */
+	private final Website.Http http;
+	Website website;
+	private final Map<UUID, Website.Account> accounts = new HashMap<>();
+	private final java.util.Set<UUID> lookedUp = new java.util.HashSet<>();
+	private final Map<UUID, Long> lastLinkTry = new HashMap<>();
+	private static final long LINK_COOLDOWN_MS = 4000;
 
 	ShopCore(Net net, Store store, Cfg config, Logger log) {
+		this(net, store, config, log, Website.REAL);
+	}
+
+	ShopCore(Net net, Store store, Cfg config, Logger log, Website.Http http) {
 		this.net = net;
 		this.store = store;
 		this.log = log;
+		this.http = http;
 		load(config);
 	}
 
@@ -79,6 +93,7 @@ final class ShopCore {
 		for (String w : quests.warnings) {
 			log.warning(w);
 		}
+		website = new Website(cfg, http);
 		currency = cfg.str("currency-name", "PlebMc Coins");
 		prefix = color(cfg.str("messages.prefix", "&8[&b&lPlebMc&8] &7"));
 		hiddenWorlds.clear();
@@ -164,12 +179,18 @@ final class ShopCore {
 			sendEveryone(p);
 		}
 		broadcastSlots(p);
+		if (firstJoin) {
+			lookupAccount(p, true);
+		}
 	}
 
 	synchronized void quit(UUID p, String server) {
 		lastAction.remove(p);
 		worlds.remove(p);
 		clients.remove(p);
+		accounts.remove(p);
+		lookedUp.remove(p);
+		lastLinkTry.remove(p);
 		Map<String, Object> gone = new LinkedHashMap<>();
 		gone.put(p.toString(), null);
 		broadcast(playersMessage(gone, false), server, p);
@@ -282,12 +303,118 @@ final class ShopCore {
 				equip(p, str(m.get("category")), str(m.get("id")));
 			}
 			break;
-		case "dev":
-			dev(p, m);
+		case "account":
+			if (lookedUp.contains(p) || !website.configured()) {
+				sendAccount(p, null, true);
+			} else {
+				lookupAccount(p, false);
+			}
+			break;
+		case "link":
+			link(p, str(m.get("code")));
 			break;
 		default:
 			break;
 		}
+	}
+
+	// ==================== plebmc.top login ====================
+
+	/** Asks the website which account this player linked (off-thread), then tells the client. */
+	private void lookupAccount(UUID p, boolean greet) {
+		if (!website.configured()) {
+			return;
+		}
+		final Website w = website;
+		net.async(() -> {
+			Website.Result r = w.lookup(p);
+			synchronized (ShopCore.this) {
+				if (!net.online().contains(p)) {
+					return;
+				}
+				lookedUp.add(p);
+				if (r.account != null) {
+					accounts.put(p, r.account);
+				} else if (r.error == null) {
+					accounts.remove(p);
+				}
+				if (r.error != null) {
+					log.warning("website lookup for " + net.name(p) + ": " + r.error);
+				}
+				sendAccount(p, r.error, r.error == null);
+				if (greet && r.account != null) {
+					notify(p, msg("website-login-title", "&bplebmc.top"),
+							msg("website-login-message", "Logged in as %account%").replace("%account%", r.account.displayName));
+				}
+			}
+		});
+	}
+
+	private void link(UUID p, String code) {
+		if (!website.configured()) {
+			sendAccount(p, "Website login isn't set up on this server.", false);
+			return;
+		}
+		code = code == null ? "" : code.trim();
+		if (code.startsWith("/verify ")) {
+			code = code.substring(8).trim(); // pasted the whole command
+		}
+		if (!code.matches("[A-Za-z0-9]{4,64}")) {
+			sendAccount(p, "Paste the code from the website (letters and numbers).", false);
+			return;
+		}
+		long now = System.currentTimeMillis();
+		Long last = lastLinkTry.get(p);
+		if (last != null && now - last < LINK_COOLDOWN_MS) {
+			sendAccount(p, "Wait a few seconds and try again.", false);
+			return;
+		}
+		lastLinkTry.put(p, now);
+		final String c = code;
+		final String name = net.name(p);
+		final Website w = website;
+		net.async(() -> {
+			Website.Result r = w.link(p, name, c);
+			synchronized (ShopCore.this) {
+				if (!net.online().contains(p)) {
+					return;
+				}
+				lookedUp.add(p);
+				if (r.account != null) {
+					accounts.put(p, r.account);
+					log.info(name + " logged in as " + r.account.username + " on the website");
+					sendAccount(p, "Logged in as " + r.account.displayName + "!", true);
+				} else {
+					sendAccount(p, r.error, false);
+				}
+			}
+		});
+	}
+
+	/** The website account of an online player, or null. */
+	synchronized Website.Account account(UUID p) {
+		return accounts.get(p);
+	}
+
+	private void sendAccount(UUID p, String message, boolean ok) {
+		Map<String, Object> m = new LinkedHashMap<>();
+		m.put("type", "account");
+		m.put("enabled", website.configured());
+		Website.Account a = accounts.get(p);
+		m.put("linked", a != null);
+		if (a != null) {
+			m.put("username", a.username);
+			m.put("displayName", a.displayName);
+			m.put("groups", a.groups);
+			m.put("staff", a.staff);
+		}
+		m.put("site", website.url);
+		m.put("linkUrl", website.connectionsUrl());
+		if (message != null) {
+			m.put("message", message);
+			m.put("ok", ok);
+		}
+		send(p, m);
 	}
 
 	private static String str(Object o) {
@@ -368,134 +495,6 @@ final class ShopCore {
 		}
 		sendState(p, false);
 		broadcastSlots(p);
-	}
-
-	// ==================== the secret dev panel ====================
-
-	/**
-	 * {"type":"dev","action":...}. Players without plebshop.dev get no answer
-	 * at all, so the panel stays secret.
-	 */
-	private void dev(UUID p, Map<?, ?> m) {
-		if (!net.hasPermission(p, DEV)) {
-			return;
-		}
-		String action = String.valueOf(m.get("action"));
-		Store.Data d = data(p);
-		long now = net.now();
-		String done;
-		switch (action) {
-		case "open":
-			done = null;
-			break;
-		case "coins": {
-			long n = m.get("amount") instanceof Number ? ((Number) m.get("amount")).longValue() : 0;
-			d.coins = Math.max(0, d.coins + n);
-			done = (n >= 0 ? "+" : "") + fmt(n) + " coins";
-			break;
-		}
-		case "zero":
-			d.coins = 0;
-			done = "Coins set to 0";
-			break;
-		case "complete": {
-			String id = str(m.get("id"));
-			List<Quests.Quest> finished = new ArrayList<>();
-			for (Quests.Quest q : quests.active(now)) {
-				if (id == null || q.id.equals(id)) {
-					Quests.Quest c = quests.complete(d, q.id, now);
-					if (c != null) {
-						finished.add(c);
-					}
-				}
-			}
-			completed(p, finished);
-			done = "Finished " + finished.size() + (finished.size() == 1 ? " quest" : " quests");
-			break;
-		}
-		case "resetquests":
-			d.progress.clear();
-			d.done.clear();
-			done = "Quest progress cleared";
-			break;
-		case "resetlogin":
-			d.lastLogin = 0;
-			d.streak = 0;
-			done = "Daily login can be claimed again (rejoin)";
-			break;
-		case "claimlogin": {
-			long r = quests.login(d, now);
-			done = r < 0 ? "Login reward already claimed" : "Login reward: +" + fmt(r);
-			if (r >= 0) {
-				completed(p, quests.add(d, null, "login", 1, now));
-			}
-			break;
-		}
-		case "unlockall":
-			for (Catalog.Item it : catalog.all()) {
-				d.owned.add(it.id);
-			}
-			done = "Unlocked every cosmetic";
-			break;
-		case "lockall":
-			d.owned.clear();
-			d.equipped.clear();
-			done = "Removed every cosmetic";
-			break;
-		case "progress": {
-			String type = str(m.get("questType"));
-			String cat = str(m.get("category"));
-			if (type == null) {
-				return;
-			}
-			completed(p, quests.add(d, cat, type, 1, now));
-			done = "+1 " + type + (cat == null ? "" : " (" + cat + ")");
-			break;
-		}
-		default:
-			return;
-		}
-		if (done != null) {
-			store.changed();
-			log.info("[dev] " + net.name(p) + ": " + action + " -> " + done);
-		}
-		sendState(p, false);
-		broadcastSlots(p);
-		Map<String, Object> r = new LinkedHashMap<>();
-		r.put("type", "dev");
-		r.put("allowed", true);
-		if (done != null) {
-			r.put("message", done);
-		}
-		r.put("info", devInfo(p, now));
-		List<Object> qs = new ArrayList<>();
-		for (Quests.Quest q : quests.active(now)) {
-			Map<String, Object> qm = new LinkedHashMap<>();
-			qm.put("id", q.id);
-			qm.put("name", q.name);
-			qm.put("category", q.category);
-			qm.put("type", q.type);
-			qs.add(qm);
-		}
-		r.put("quests", qs);
-		send(p, r);
-	}
-
-	private List<String> devInfo(UUID p, long now) {
-		List<String> lines = new ArrayList<>();
-		Map<String, Integer> perServer = new LinkedHashMap<>();
-		for (UUID o : net.online()) {
-			String s = net.server(o);
-			perServer.merge(s == null ? "?" : s, 1, Integer::sum);
-		}
-		lines.add("Online: " + net.online().size() + " " + perServer);
-		lines.add("PlebMc clients online: " + clients.size());
-		lines.add("You: " + net.server(p) + " -> category " + quests.categoryOf(net.server(p))
-				+ (worlds.containsKey(p) ? ", world " + worlds.get(p) : ""));
-		lines.add("Players saved: " + store.size() + ", " + currency + " held: " + fmt(store.totalCoins()));
-		lines.add("Quest day " + quests.dayKey(now) + ", week " + quests.weekKey(now) + ", next reset in "
-				+ (quests.secondsToDailyReset(now) / 60) + " min");
-		return lines;
 	}
 
 	// ==================== messages to clients ====================
@@ -756,6 +755,8 @@ final class ShopCore {
 				s.reply(color("&7Hat: &f" + d.equipped.getOrDefault(Catalog.HAT, "none") + "  &7Trail: &f"
 						+ d.equipped.getOrDefault(Catalog.TRAIL, "none")));
 				s.reply(color("&7Quests done: &f" + (d.done.isEmpty() ? "none" : String.join(", ", d.done))));
+				Website.Account acc = accounts.get(id);
+				s.reply(color("&7Website: &f" + (acc == null ? "not logged in (or offline)" : acc.username + " " + acc.groups)));
 			}
 			return;
 		}

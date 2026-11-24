@@ -9,8 +9,8 @@ work on every server behind the proxy.
   weekly quests in **categories**: one tab per category in the client (by default
   *PlebMc Lobby* and *PlebNite*).
 - **Spending**: hats and trails. Everyone on the PlebMc client sees each other's (per server).
-- **Secret dev panel**: type `plebdev` in the Shop & Quests screen. Only players with
-  `plebshop.dev` get an answer; everyone else sees nothing happen.
+- **plebmc.top login**: players log in to the client with their website (NamelessMC)
+  account and see their website name and rank (Right Shift > Log in).
 
 Players on other clients still earn coins (they get chat messages instead of popups) and
 can spend them once they use the PlebMc client.
@@ -27,7 +27,10 @@ backend server (`plugins/PlebMcBridge`). The protocol is in `docs/PLEBMC.md`.
    `Executed-Commands > Player-Win`, add `- plebquest %player% win`, then `/brx reload`.
 4. **Parkour (lobby):** add `plebquest {player} parkour` to your parkour plugin's finish
    reward commands (ajParkour: `rewards` commands; use its player placeholder).
-5. **Dev panel:** on the proxy, `lpb user <name> permission set plebshop.dev true`.
+5. **Website login:** on plebmc.top, StaffCP > Configuration > API: turn the API on and copy
+   the key into `website.api-key` in the proxy's `plugins/PlebMcShop/config.yml`. Under
+   StaffCP > Integrations > Minecraft, keep Minecraft linking on and turn "UUID linking" off
+   (Eaglercraft names usually aren't Mojang accounts, so the website can't look them up).
 6. Edit `plugins/PlebMcShop/config.yml` on the proxy if you like, then `/plebshop reload`.
 
 ## Quest categories
@@ -61,14 +64,19 @@ send with `/plebquest <player> <type> [amount]` on a backend.
 | Lobby: 3 daily from 4, 2 weekly from 3 | 50 to 400 each |
 | PlebNite: 3 daily from 6, 2 weekly from 4 | 60 to 750 each |
 
-## Dev panel (`plebshop.dev`)
+## plebmc.top login
 
-Type `plebdev` while the Shop & Quests screen is open. Everything only affects
-yourself and is checked on the proxy, so a modded client can't use it:
-+100 / +1,000 / +10,000 coins, coins to 0, finish one or all quests, +1 progress on a
-quest, reset quests, claim or reset the daily login, unlock or remove every cosmetic, and
-a live log of what the server sent. It also shows who's online on which server, the
-server -> category you're in, and the quest day.
+NamelessMC's API can't check an email and password, so players link once instead:
+
+1. Log in on plebmc.top (email and password, as usual).
+2. Account > Connections > Minecraft > **Link**. The site shows a code (`/verify ABC123`).
+3. In the client: Right Shift > **Log in**, type the code, **Log in**.
+
+The proxy sends the code to NamelessMC (`integration/verify`) with the API key, which links
+this Minecraft account to the website account. On every join after that the proxy looks
+the account up (`users/integration_id:minecraft:<uuid>`) and the client shows
+"Logged in as <name>" with their website groups. Unlinking on the website logs them out.
+Passwords never go through the game, and the API key never leaves the proxy.
 
 ## Commands on the proxy (`plebshop.admin`)
 

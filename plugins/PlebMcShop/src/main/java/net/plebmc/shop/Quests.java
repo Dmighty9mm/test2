@@ -312,20 +312,6 @@ final class Quests {
 		return out;
 	}
 
-	/** Finishes one quest right away (dev panel). Returns it, or null. */
-	Quest complete(Store.Data d, String id, long now) {
-		roll(d, now);
-		for (Quest q : active(now)) {
-			if (q.id.equals(id) && !d.done.contains(q.id)) {
-				d.progress.put(q.id, q.goal);
-				d.done.add(q.id);
-				d.coins += q.reward;
-				return q;
-			}
-		}
-		return null;
-	}
-
 	// ==================== login and playtime ====================
 
 	/** Gives the daily login reward if it's due. Returns the coins given, or -1. */

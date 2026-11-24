@@ -27,6 +27,7 @@ public class ShopTest {
         public String name(UUID p) { P x = online.get(p); return x == null ? null : x.name; }
         public boolean hasPermission(UUID p, String perm) { P x = online.get(p); return x != null && x.perms.contains(perm); }
         public long now() { return now; }
+        public void async(Runnable r) { r.run(); }
     }
 
     static class P {
@@ -41,6 +42,33 @@ public class ShopTest {
         }
         long progress(String id) { Map<?, ?> q = quest(id); return q == null ? -1 : ((Number) q.get("progress")).longValue(); }
         boolean done(String id) { Map<?, ?> q = quest(id); return q != null && Boolean.TRUE.equals(q.get("done")); }
+    }
+
+    /** A fake NamelessMC API: one account "Master" linked by code ABC123. */
+    static class FakeSite implements Website.Http {
+        final List<String> calls = new ArrayList<>();
+        String lastBody = "";
+        boolean linked, verified = true, down;
+        String linkedId = "";
+        public Object[] request(String method, String url, String key, String body) throws java.io.IOException {
+            calls.add(method + " " + url + " key=" + key);
+            if (down) throw new java.io.IOException("connect timed out");
+            if (body != null) lastBody = body;
+            if (url.endsWith("/api/v2/integration/verify")) {
+                Map<?, ?> b = new Gson().fromJson(body, Map.class);
+                if (!"ABC123".equals(b.get("code"))) return new Object[] { 400, "{\"error\":\"core:invalid_code\"}" };
+                linked = true; linkedId = (String) b.get("identifier");
+                return new Object[] { 200, "{\"message\":\"ok\"}" };
+            }
+            if (url.contains("/api/v2/users/integration_id:minecraft:")) {
+                String id = url.substring(url.lastIndexOf(':') + 1);
+                if (!linked || !id.equals(linkedId)) return new Object[] { 400, "{\"error\":\"nameless:cannot_find_user\"}" };
+                return new Object[] { 200, "{\"id\":7,\"username\":\"Master\",\"displayname\":\"MasterPleb\",\"banned\":false,"
+                        + "\"groups\":[{\"id\":1,\"name\":\"Member\",\"staff\":false,\"order\":5},{\"id\":2,\"name\":\"Owner\",\"staff\":true,\"order\":1}],"
+                        + "\"integrations\":[{\"integration\":\"Minecraft\",\"identifier\":\"" + linkedId + "\",\"username\":\"Webby\",\"verified\":" + verified + "}]}" };
+            }
+            return new Object[] { 404, "{\"error\":\"nameless:invalid_api_method\"}" };
+        }
     }
 
     static FakeNet net;
@@ -167,32 +195,17 @@ public class ShopTest {
         for (String junk : new String[] { "not json", "[1,2]", "{\"type\":\"buy\",\"id\":5}", "{\"type\":\"equip\",\"category\":\"x\"}", "null" })
             core.fromClient(poor.id, junk);
 
-        // ---- the secret dev panel: silent for normal players ----
-        int gotBefore = poor.got.size();
-        long poorCoins = poor.coins();
-        for (String act : new String[] { "open", "coins", "unlockall", "complete" })
-            core.fromClient(poor.id, "{\"type\":\"dev\",\"action\":\"" + act + "\",\"amount\":99999}");
-        check(poor.got.size() == gotBefore && poor.last("dev") == null, "no answer at all without plebshop.dev");
-        check(poor.coins() == poorCoins && ((List<?>) poor.last("state").get("owned")).isEmpty(), "and nothing changed");
-
-        // ---- the dev panel through the real client code ----
-        mighty.perms.add(ShopCore.DEV);
+        // ---- the real client code reads it ----
         PluginChannels.reset();
-        final P dev = mighty;
+        final P me = mighty;
         PluginChannels.attach((channel, data) -> {
-            if (Cosmetics.CHANNEL.equals(channel)) core.fromClient(dev.id, new String(data, StandardCharsets.UTF_8));
+            if (Cosmetics.CHANNEL.equals(channel)) core.fromClient(me.id, new String(data, StandardCharsets.UTF_8));
             return true;
         });
         Cosmetics.init(null);
         PluginChannels.onJoin();
         Cosmetics.setSelf(mighty.id.toString());
-        List<String> toasts = new ArrayList<>();
-        Cosmetics.setToasts((t, m) -> toasts.add(t + "|" + m));
-        int seen = 0;
-        Runnable deliver = null;
-        final int[] at = { 0 };
-        deliver = () -> { while (at[0] < dev.raw.size()) Cosmetics.handle(dev.raw.get(at[0]++)); };
-        deliver.run();
+        for (String m : mighty.raw) Cosmetics.handle(m);
         check(Cosmetics.questCategories().size() == 2 && "PlebMc Lobby".equals(Cosmetics.questCategories().get(0).name), "client categories");
         List<Cosmetics.Quest> lq = Cosmetics.quests("lobby"), nq = Cosmetics.quests("plebnite");
         check(lq.size() == 1 + 4 + 3 && nq.size() == 1 + 6 + 4, "client quests per tab: " + lq.size() + "/" + nq.size());
@@ -200,53 +213,61 @@ public class ShopTest {
         Cosmetics.Quest k8 = null;
         for (Cosmetics.Quest q : nq) if (q.id.equals("kills_8")) k8 = q;
         check(k8 != null && k8.progress == 3 && k8.goal == 8 && "plebnite".equals(k8.category), "client quest fields");
-        check(!Cosmetics.devAllowed(), "not a dev until the server says so");
+        check(Cosmetics.coins() == mighty.coins(), "client coins");
+        int got = mighty.got.size();
+        core.fromClient(mighty.id, "{\"type\":\"dev\",\"action\":\"coins\",\"amount\":5}");
+        check(mighty.got.size() == got, "old dev messages are ignored");
 
-        Cosmetics.dev("open"); deliver.run();
-        check(Cosmetics.devAllowed() && Cosmetics.devMessage() == null, "dev panel opens for plebshop.dev");
-        check(Cosmetics.devInfo().size() == 5 && Cosmetics.devInfo().get(2).contains("lobby -> category lobby"), "dev info: " + Cosmetics.devInfo());
-        check(Cosmetics.devQuests().size() == 17 && Cosmetics.devQuests().get(0)[2].equals("lobby"), "dev quest list: " + Cosmetics.devQuests().size());
-        int v = Cosmetics.devVersion();
-        long c = Cosmetics.coins();
-        Cosmetics.dev("coins", "amount", 1000L); deliver.run();
-        check(Cosmetics.coins() == c + 1000 && "+1,000 coins".equals(Cosmetics.devMessage()) && Cosmetics.devVersion() != v, "+1000");
-        Cosmetics.dev("zero"); deliver.run();
-        check(Cosmetics.coins() == 0, "coins to 0");
-        Cosmetics.dev("complete", "id", "kills_8"); deliver.run();
-        check(Cosmetics.coins() == 150 && "Finished 1 quest".equals(Cosmetics.devMessage()), "finish one quest: " + Cosmetics.coins());
-        check(toasts.stream().anyMatch(t -> t.contains("Quest complete")), "finishing shows the normal popup");
-        Cosmetics.dev("complete", "id", "kills_8"); deliver.run();
-        check("Finished 0 quests".equals(Cosmetics.devMessage()), "can't finish twice");
-        Cosmetics.dev("progress", "questType", "parkour", "category", "lobby"); deliver.run();
-        check(mighty.progress("lobby_parkour_5") == 2 && mighty.progress("kills_40") == 3, "+1 progress in one category");
-        Cosmetics.dev("complete"); deliver.run();
-        boolean allDone = true;
-        for (Cosmetics.Quest q : Cosmetics.quests()) allDone &= q.done;
-        check(allDone && Cosmetics.coins() > 150, "finish all");
-        Cosmetics.dev("resetquests"); deliver.run();
-        boolean noneDone = true;
-        for (Cosmetics.Quest q : Cosmetics.quests()) if (!q.id.equals("login")) noneDone &= !q.done && q.progress == 0;
-        check(noneDone, "reset quests");
-        Cosmetics.dev("claimlogin"); deliver.run();
-        check("Login reward already claimed".equals(Cosmetics.devMessage()), "login already claimed");
-        Cosmetics.dev("resetlogin"); deliver.run();
-        c = Cosmetics.coins();
-        Cosmetics.dev("claimlogin"); deliver.run();
-        check(Cosmetics.coins() == c + 50 && mighty.progress("login_5") == 1, "reset + claim login: " + (Cosmetics.coins() - c));
-        Cosmetics.dev("unlockall"); deliver.run();
-        check(Cosmetics.owns("rainbow") && Cosmetics.owns("dropzone_crown"), "unlock all");
-        Cosmetics.dev("lockall"); deliver.run();
-        check(!Cosmetics.owns("crown") && Cosmetics.equippedId("hat") == null, "remove all");
-        int before2 = Cosmetics.devVersion();
-        Cosmetics.dev("nonsense"); deliver.run();
-        check(Cosmetics.devVersion() == before2, "unknown action ignored");
-        check(Cosmetics.protocolLog().size() > 5 && Cosmetics.protocolLog().get(Cosmetics.protocolLog().size() - 1).contains("\"dev\""), "protocol log");
-        // a dev only ever touches their own account
-        check(poor.coins() == poorCoins, "dev actions don't touch other players");
-        mighty.perms.clear();
-        int n = mighty.got.size();
-        Cosmetics.dev("coins", "amount", 5L); deliver.run();
-        check(mighty.got.size() == n, "permission taken away: silent again");
+        // ---- plebmc.top login (a fake NamelessMC) ----
+        FakeSite site = new FakeSite();
+        Cfg withSite = cfg("daily-count: 3", "daily-count: 99", "weekly-count: 2", "weekly-count: 99", "api-key: ''", "api-key: 'secret123'");
+        ShopCore old = core;
+        core = new ShopCore(net, old.store, withSite, log, site);
+        check(core.website.configured() && core.website.url.equals("https://plebmc.top"), "website configured");
+        P web = join("Webby", "lobby", true);
+        Map<?, ?> acc = web.last("account");
+        check(acc != null && Boolean.FALSE.equals(acc.get("linked")) && Boolean.TRUE.equals(acc.get("enabled")), "not linked yet: " + acc);
+        check(String.valueOf(acc.get("linkUrl")).equals("https://plebmc.top/index.php?route=/user/connections"), "link url");
+        check(site.calls.get(0).startsWith("GET https://plebmc.top/index.php?route=/api/v2/users/integration_id:minecraft:" + Website.identifier(web.id))
+                && site.calls.get(0).endsWith("key=secret123"), "lookup call: " + site.calls.get(0));
+        core.fromClient(web.id, "{\"type\":\"link\",\"code\":\"bad code!\"}");
+        check(Boolean.FALSE.equals(web.last("account").get("ok")) && site.calls.size() == 1, "junk code refused without calling the site");
+        core.fromClient(web.id, "{\"type\":\"link\",\"code\":\"WRONG1\"}");
+        check(String.valueOf(web.last("account").get("message")).contains("isn't right"), "wrong code: " + web.last("account"));
+        core.fromClient(web.id, "{\"type\":\"link\",\"code\":\"ABC123\"}");
+        check(String.valueOf(web.last("account").get("message")).contains("Wait"), "link cooldown");
+        Thread.sleep(4100);
+        core.fromClient(web.id, "{\"type\":\"link\",\"code\":\"/verify ABC123\"}");
+        acc = web.last("account");
+        check(Boolean.TRUE.equals(acc.get("linked")) && "Master".equals(acc.get("username")) && "MasterPleb".equals(acc.get("displayName")), "linked: " + acc);
+        check(acc.get("groups").toString().equals("[Owner, Member]") && Boolean.TRUE.equals(acc.get("staff")), "groups by rank: " + acc.get("groups"));
+        check(site.lastBody.contains("\"code\":\"ABC123\"") && site.lastBody.contains("\"username\":\"Webby\"") && site.lastBody.contains(Website.identifier(web.id)), "verify body: " + site.lastBody);
+        // next join: logged in straight away, with a popup
+        quit(web);
+        web = join("Webby", "lobby", true);
+        check(Boolean.TRUE.equals(web.last("account").get("linked")), "still logged in after rejoin");
+        check(String.valueOf(web.last("notify").get("message")).contains("Logged in as MasterPleb"), "login popup");
+        admin.clear();
+        cmd("info", "Webby");
+        check(admin.get(admin.size() - 1).contains("Master [Owner, Member]"), "info shows website account: " + admin);
+        // unlinked on the website: logged out next join
+        site.verified = false;
+        quit(web);
+        web = join("Webby", "lobby", true);
+        check(Boolean.FALSE.equals(web.last("account").get("linked")), "unlinked on the website = logged out");
+        // the website being down doesn't break anything
+        site.down = true;
+        quit(web);
+        web = join("Webby", "lobby", true);
+        check(web.coins() >= 0 && Boolean.FALSE.equals(web.last("account").get("ok")), "website down: error shown, shop still works");
+        site.down = false;
+        // the real client reads it
+        Cosmetics.handle("{\"type\":\"account\",\"enabled\":true,\"linked\":true,\"username\":\"Master\",\"displayName\":\"MasterPleb\",\"groups\":[\"Owner\"],\"staff\":true,\"site\":\"https://plebmc.top\",\"linkUrl\":\"x\"}");
+        check(Cosmetics.account().linked && "Owner".equals(Cosmetics.account().rank()) && "MasterPleb".equals(Cosmetics.account().displayName), "client account");
+        // no key = feature off
+        check(!old.website.configured(), "no api key: login off");
+        quit(web);
+        core = old;
 
         // ---- admin commands ----
         admin.clear();
@@ -289,7 +310,7 @@ public class ShopTest {
         core = new ShopCore(net, new Store(new File(dir, "players.yml"), log), cfg(), log);
         P back = join("Mighty", "plebnite", true);
         check(back.coins() == keep + 75, "coins survive restart, day 2 reward: " + back.coins() + " vs " + keep);
-        check(((List<?>) back.last("state").get("owned")).isEmpty() && back.progress("login_5") == 2, "progress survives restart");
+        check(((List<?>) back.last("state").get("owned")).contains("crown") && back.progress("login_5") == 2, "progress survives restart");
         check(((Map<?, ?>) back.quest("login")).get("reward").equals(75.0), "streak day 2");
 
         System.out.println(checks - failed + "/" + checks + " plugin checks passed");

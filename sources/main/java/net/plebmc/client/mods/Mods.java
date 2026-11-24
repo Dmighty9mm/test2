@@ -58,7 +58,7 @@ public final class Mods {
 
                 @Override
                 protected List<String> lines(ClientView v) {
-                        return one(v.fps() + " FPS");
+                        return one(FpsLarp.INSTANCE.hudText(v.fps(), System.currentTimeMillis()));
                 }
         }
 

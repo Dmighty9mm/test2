@@ -79,9 +79,6 @@ public class QuestsTest {
         all.add(p, "lobby", "parkour", 1, mon);
         check(p.done.contains("lobby_parkour") && p.progress.get("lobby_parkour_5") == 1, "parkour");
         check(all.add(p, "plebnite", "kill", 0, mon).isEmpty(), "0 does nothing");
-        Quests.Quest c = all.complete(p, "wins_5", mon);
-        check(c != null && p.done.contains("wins_5") && all.complete(p, "wins_5", mon) == null && all.complete(p, "nope", mon) == null,
-                "complete once");
 
         // login streak
         Store.Data d = new Store.Data();

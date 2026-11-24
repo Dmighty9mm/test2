@@ -196,17 +196,4 @@ final class Store {
 	List<UUID> ids() {
 		return new ArrayList<>(players.keySet());
 	}
-
-	/** Coins held by everyone (dev panel stats). */
-	long totalCoins() {
-		long t = 0;
-		for (Data d : players.values()) {
-			t += d.coins;
-		}
-		return t;
-	}
-
-	int size() {
-		return players.size();
-	}
 }

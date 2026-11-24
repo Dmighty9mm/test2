@@ -21,6 +21,9 @@ public final class ModMenuScreen extends GuiScreen {
 	private static final int ID_DONE = 1002;
 	private static final int ID_COSMETICS = 1003;
 	private static final int ID_SCALE = 1004;
+	private static final int ID_ACCOUNT = 1005;
+	private static final String SECRET = "fpslarp";
+	private String typed = "";
 
 	private final GuiScreen parent;
 
@@ -57,8 +60,11 @@ public final class ModMenuScreen extends GuiScreen {
 		this.buttonList.add(new GuiButton(ID_COSMETICS, half - 152, by, 100, 20, "§6Shop & Quests"));
 		this.buttonList.add(new GuiButton(ID_EDITOR, half - 50, by, 100, 20, "Edit HUD"));
 		this.buttonList.add(new GuiButton(ID_DEBUG, half + 52, by, 100, 20, "Apollo debug"));
-		this.buttonList.add(new GuiButton(ID_SCALE, half - 152, by + rowH, 150, 20, scaleLabel()));
-		this.buttonList.add(new GuiButton(ID_DONE, half + 2, by + rowH, 150, 20, "Done"));
+		net.plebmc.client.cosmetics.Account acc = net.plebmc.client.cosmetics.Cosmetics.account();
+		this.buttonList.add(new GuiButton(ID_ACCOUNT, half - 152, by + rowH, 74, 20,
+				acc.linked ? "§b" + Draw.fit(acc.displayName, 64) : "§bLog in"));
+		this.buttonList.add(new GuiButton(ID_SCALE, half - 76, by + rowH, 150, 20, scaleLabel()));
+		this.buttonList.add(new GuiButton(ID_DONE, half + 76, by + rowH, 76, 20, "Done"));
 	}
 
 	@Override
@@ -75,6 +81,8 @@ public final class ModMenuScreen extends GuiScreen {
 			this.mc.displayGuiScreen(new ApolloDebugScreen(this));
 		} else if (b.id == ID_COSMETICS) {
 			this.mc.displayGuiScreen(new CosmeticsScreen(this));
+		} else if (b.id == ID_ACCOUNT) {
+			this.mc.displayGuiScreen(new AccountScreen(this));
 		} else if (b.id == ID_SCALE) {
 			FpsBoost.cycleScale();
 			this.initGui();
@@ -108,6 +116,18 @@ public final class ModMenuScreen extends GuiScreen {
 
 	@Override
 	protected void keyTyped(char c, int key) {
+		// secret: typing "fpslarp" here opens Fps Larp (it has no button)
+		if (Character.isLetter(c)) {
+			typed = typed + Character.toLowerCase(c);
+			if (typed.length() > SECRET.length()) {
+				typed = typed.substring(typed.length() - SECRET.length());
+			}
+			if (typed.equals(SECRET)) {
+				typed = "";
+				this.mc.displayGuiScreen(new FpsLarpScreen(this));
+				return;
+			}
+		}
 		if (key == 1 || key == PlebClient.KEY_RSHIFT) {
 			close();
 		}

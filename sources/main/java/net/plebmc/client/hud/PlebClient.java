@@ -120,6 +120,7 @@ public final class PlebClient {
 				}
 			});
 			mods.load(STORE);
+			net.plebmc.client.mods.FpsLarp.INSTANCE.load(STORE);
 		} catch (Throwable t) {
 			LOG.warn("mod/Apollo init failed: " + t);
 		}
@@ -140,6 +141,16 @@ public final class PlebClient {
 		return mods;
 	}
 
+	/** The frame count the debug lines show (Fps Larp can change it; the game never runs differently). */
+	public static String larpDebug(String line) {
+		try {
+			return net.plebmc.client.mods.FpsLarp.INSTANCE.debugLine(line, Minecraft.getDebugFPS(),
+					System.currentTimeMillis());
+		} catch (Throwable t) {
+			return line;
+		}
+	}
+
 	static GameView view() {
 		return view;
 	}
@@ -147,6 +158,7 @@ public final class PlebClient {
 	public static void saveSettings() {
 		try {
 			mods.save(STORE);
+			net.plebmc.client.mods.FpsLarp.INSTANCE.save(STORE);
 		} catch (Throwable t) {
 			LOG.warn("could not save mod settings: " + t);
 		}

@@ -518,12 +518,12 @@
 
 > CHANGE  6 : 7  @  6 : 7
 
-~ 			this.debug = HString.format("%d fps (%d chunk update%s) T: %s%s%s%s",
+~ 			this.debug = net.plebmc.client.hud.PlebClient.larpDebug(HString.format("%d fps (%d chunk update%s) T: %s%s%s%s",
 
 > CHANGE  5 : 7  @  5 : 9
 
 ~ 							this.gameSettings.fancyGraphics ? "" : " fast", this.gameSettings.clouds == 0 ? ""
-~ 									: (this.gameSettings.clouds == 1 ? " fast-clouds" : " fancy-clouds") });
+~ 									: (this.gameSettings.clouds == 1 ? " fast-clouds" : " fancy-clouds") }));
 
 > DELETE  3  @  3 : 7
 

@@ -70,7 +70,8 @@ public final class BungeeShop extends Plugin implements Listener {
 		getProxy().getScheduler().schedule(this, core::minute, 1, 1, TimeUnit.MINUTES);
 		getProxy().getScheduler().schedule(this, core::saveIfDirty, 30, 30, TimeUnit.SECONDS);
 		getLogger().info(core.catalog.all().size() + " cosmetics, " + core.quests.allQuests().size() + " quests in "
-				+ core.quests.categories.keySet());
+				+ core.quests.categories.keySet() + (core.website.configured() ? ", website login via " + core.website.url
+						: ", website login off (set website.url and website.api-key)"));
 	}
 
 	@Override
@@ -205,6 +206,11 @@ public final class BungeeShop extends Plugin implements Listener {
 		@Override
 		public long now() {
 			return System.currentTimeMillis();
+		}
+
+		@Override
+		public void async(Runnable r) {
+			ProxyServer.getInstance().getScheduler().runAsync(BungeeShop.this, r);
 		}
 	}
 

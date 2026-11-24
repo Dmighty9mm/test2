@@ -26,9 +26,6 @@ public final class CosmeticsScreen extends GuiScreen {
 	private static final int ROWS = 5;
 	/** Tabs from here on are quest tabs (one per server category, or one "Quests" tab). */
 	private static final int TAB_QUESTS = 2;
-	private static final String SECRET = "plebdev";
-	private String typed = "";
-	private int devAsked = -1;
 
 	private final GuiScreen parent;
 	private int tab;
@@ -179,11 +176,6 @@ public final class CosmeticsScreen extends GuiScreen {
 
 	@Override
 	public void updateScreen() {
-		if (devAsked >= 0 && Cosmetics.devVersion() != devAsked && Cosmetics.devAllowed()) {
-			devAsked = -1;
-			this.mc.displayGuiScreen(new DevScreen(this));
-			return;
-		}
 		if (Cosmetics.version() != seenVersion) {
 			this.initGui();
 		}
@@ -338,18 +330,6 @@ public final class CosmeticsScreen extends GuiScreen {
 
 	@Override
 	protected void keyTyped(char c, int key) {
-		// the secret dev panel: type "plebdev" here (the server only answers devs)
-		if (Character.isLetter(c)) {
-			typed = (typed + Character.toLowerCase(c));
-			if (typed.length() > SECRET.length()) {
-				typed = typed.substring(typed.length() - SECRET.length());
-			}
-			if (typed.equals(SECRET)) {
-				typed = "";
-				devAsked = Cosmetics.devVersion();
-				Cosmetics.dev("open");
-			}
-		}
 		if (key == 1) {
 			close();
 		}

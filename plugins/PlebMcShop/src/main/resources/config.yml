@@ -5,6 +5,16 @@
 
 currency-name: 'PlebMc Coins'
 
+# Log in with a plebmc.top account. NamelessMC can't check passwords over its API, so
+# players link once: on the website, Account > Connections > Minecraft > Link shows a
+# code, and they type it in the client (Right Shift > Account). After that they're logged
+# in on every join. Get the key in the website's StaffCP > Configuration > API (turn the
+# API on). The key stays on the proxy. Leave api-key empty to turn website login off.
+website:
+  url: 'https://plebmc.top'
+  api-key: ''
+  integration: 'Minecraft'
+
 # Quest days and the daily login use this time zone. Empty = the proxy's.
 timezone: 'America/Chicago'
 
@@ -79,10 +89,11 @@ chat-for-other-clients: true
 # Worlds where nobody's hat or trail is shown: 'world' or 'server:world' (needs PlebMcBridge on that server).
 hidden-in-worlds: []
 
-# The secret dev panel (type 'plebdev' in the Shop & Quests screen) only opens for players
-# with the plebshop.dev permission. /plebshop needs plebshop.admin.
+# /plebshop needs plebshop.admin.
 
 messages:
+  website-login-title: '&bplebmc.top'
+  website-login-message: 'Logged in as %account%'
   prefix: '&8[&b&lPlebMc&8] &7'
   bought: 'Bought %item%!'
   not-enough: 'You need %need% more coins.'
