@@ -34,6 +34,9 @@ need the official **1.8.8** client jar in `mcp918/`). Details, the Spigot + Apol
 EaglerXBungee test setup and the test command list are in
 [docs/PLEBMC.md](docs/PLEBMC.md). Unit tests: `sh tests/plebmc/run_tests.sh`.
 
+**Java Edition:** the same client as a Forge 1.8.9 mod is in [java-client/](java-client/README.md)
+(`cd java-client && ./gradlew build`).
+
 ## Getting Started:
 
 ### To compile the latest version of the client, on Windows:

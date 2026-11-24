@@ -1,4 +1,4 @@
-name: PlebMcShop
+name: PlebioAPI
 version: 2.0.0
 main: net.plebmc.shop.BungeeShop
 author: PlebMc

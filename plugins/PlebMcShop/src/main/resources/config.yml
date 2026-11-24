@@ -1,4 +1,4 @@
-# PlebMcShop (BungeeCord) - PlebMc Coins, quests and the cosmetics shop behind the PlebMc
+# PlebioAPI (BungeeCord, formerly PlebMcShop) - PlebMc Coins, quests and the cosmetics shop behind the PlebMc
 # client's "Shop & Quests" menu (Right Shift). Runs on the proxy, so one balance works on
 # every server. PlebMc Coins are separate from every other economy on the network.
 # Run /plebshop reload after editing.

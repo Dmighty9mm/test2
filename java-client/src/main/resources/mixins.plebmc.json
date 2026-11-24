@@ -1,0 +1,21 @@
+{
+  "package": "net.plebmc.forge.mixin",
+  "refmap": "mixins.${modid}.refmap.json",
+  "minVersion": "0.7",
+  "compatibilityLevel": "JAVA_8",
+  "client": [
+    "MixinEntityPlayerSP",
+    "MixinEntityRenderer",
+    "MixinFontRenderer",
+    "MixinLayerArmorBase",
+    "MixinLayerCape",
+    "MixinLayerSheepWool",
+    "MixinMinecraft",
+    "MixinNetHandlerPlayClient",
+    "MixinRender",
+    "MixinRenderPlayer",
+    "MixinRenderTNTPrimed",
+    "MixinRendererLivingEntity",
+    "MixinS3FPacketCustomPayload"
+  ]
+}
