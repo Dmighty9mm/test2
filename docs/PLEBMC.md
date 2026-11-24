@@ -239,6 +239,29 @@ the standard `BungeeCord` channel: `{"player":"<uuid>","type":"kill","amount":1}
 covering the server it came from (General everywhere, PlebNite only on PlebNite). Chat
 messages count for `chat` quests on the proxy itself, at most one every 10 seconds. See both plugins' READMEs.
 
+## Custom items on 1.8 (PlebNite): step 1, the item NBT log
+
+The client is called **PlebClient** in its own menus (the server stays "PlebMc").
+
+PlebNite runs QualityArmory on a 1.16.5 server; Via translates its items down to
+1.8. Before any model swapping, **Settings > Developer > Log item NBT** (off by
+default, saved in `plebmc.prefs` as `itemNbtLog`) records what actually arrives:
+
+- your held item, hotbar, inventory, armor, the item on the cursor, the open
+  container's slots (shops, chests), and the held item and armor of players within
+  32 blocks;
+- a new entry only when an item changes (a stack that only changed size is skipped);
+- the registry name, numeric id, damage, count, display name, lore and the whole NBT;
+- hints: `CustomModelData` at any depth, ViaBackwards/ViaRewind backup tags,
+  `PublicBukkitValues`, QualityArmory-looking keys and original item ids.
+
+**Open item NBT log** (same section) shows the entries with **Copy all** and
+**Save .txt**; every entry is also printed to the browser console as
+`[item nbt] ...`. The log keeps the last 400 entries in memory only. With the
+switch off, the check returns before doing anything. Code: `items/ItemNbtLog`
+(pure Java, `ItemNbtLogTest`), `hud/ItemNbtWatch` (called from `PlebClient.renderHud`,
+at most 10 scans a second), `hud/ItemNbtScreen`.
+
 ## Testing with a real server (Spigot/Paper 1.8.8 + Apollo + EaglerXBungee)
 
 Requirements: Java 8 for the 1.8.8 server, Java 17+ for BungeeCord.

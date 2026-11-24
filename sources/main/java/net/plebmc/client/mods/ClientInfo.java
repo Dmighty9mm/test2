@@ -6,7 +6,7 @@ package net.plebmc.client.mods;
  */
 public final class ClientInfo {
 
-        public static final String NAME = "PlebMc";
+        public static final String NAME = "PlebClient";
 
         private ClientInfo() {
         }

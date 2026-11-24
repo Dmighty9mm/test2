@@ -23,11 +23,11 @@ public final class ClientPrefs {
 
 	// ---- interface ----
 	public static final int[] ACCENTS = { 0xFF3FD8E6, 0xFF4C9BFF, 0xFF4FE39A, 0xFFB085FF, 0xFFF5B942, 0xFFFF6FAE };
-	public static final String[] ACCENT_NAMES = { "PlebMc Cyan", "Blue", "Mint", "Violet", "Amber", "Rose" };
+	public static final String[] ACCENT_NAMES = { "PlebClient Cyan", "Blue", "Mint", "Violet", "Amber", "Rose" };
 	public int accent;
 	/** Menus slide and fade in, hover states ease. */
 	public boolean animations = true;
-	/** Click sounds in PlebMc menus. */
+	/** Click sounds in PlebClient menus. */
 	public boolean uiSounds = true;
 	public static final String[] BACKDROPS = { "Dim", "Dark", "Light" };
 	/** How much of the game shows behind menus. */
@@ -50,6 +50,8 @@ public final class ClientPrefs {
 	// ---- developer ----
 	/** Shows Apollo debug in the launcher. */
 	public boolean developer;
+	/** Records the full NBT of items as they change (custom item models, step 1). Off by default. */
+	public boolean itemNbtLog;
 
 	public int accentColor() {
 		return ACCENTS[clamp(accent, ACCENTS.length)];
@@ -82,6 +84,7 @@ public final class ClientPrefs {
 		hudShadow = d.hudShadow;
 		shiftOpens = d.shiftOpens;
 		developer = d.developer;
+		itemNbtLog = d.itemNbtLog;
 	}
 
 	public void load(SettingsStore store) {
@@ -108,6 +111,7 @@ public final class ClientPrefs {
 		hudShadow = ProtoValues.asBool(m.get("hudShadow"), hudShadow);
 		shiftOpens = idx(m.get("shiftOpens"), shiftOpens, OPENS.length);
 		developer = ProtoValues.asBool(m.get("developer"), developer);
+		itemNbtLog = ProtoValues.asBool(m.get("itemNbtLog"), itemNbtLog);
 	}
 
 	public String serialize() {
@@ -121,6 +125,7 @@ public final class ClientPrefs {
 		m.put("hudShadow", hudShadow);
 		m.put("shiftOpens", (double) shiftOpens);
 		m.put("developer", developer);
+		m.put("itemNbtLog", itemNbtLog);
 		return Json.write(m);
 	}
 

@@ -111,7 +111,7 @@ public final class LauncherScreen extends PlebScreen {
 		int ww = Math.round(Ui.width(word) * sc);
 		Ui.big(word, this.width / 2 - ww / 2, y - 46, sc, Ui.TEXT, true);
 		Ui.rect(this.width / 2 - ww / 2, y - 20, ww, 1, Ui.alpha(acc, 0x90));
-		Ui.centered("CLIENT", this.width / 2, y - 16, acc);
+		Ui.centered("PLAY.PLEBMC.TOP", this.width / 2, y - 16, acc);
 		// status strip
 		int sy = y + tile + 12;
 		StringBuilder status = new StringBuilder();

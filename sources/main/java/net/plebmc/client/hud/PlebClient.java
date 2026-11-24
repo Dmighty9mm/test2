@@ -234,6 +234,7 @@ public final class PlebClient {
 
 	/** Disconnect or world unload: drop all per-connection state. */
 	public static void onLeave() {
+		ItemNbtWatch.reset();
 		if (mc != null && PluginChannels.isJoined()) {
 			PluginChannels.reset();
 		}
@@ -385,6 +386,7 @@ public final class PlebClient {
 		} catch (Throwable t) {
 			LOG.warn("FPS boost failed: " + t);
 		}
+		ItemNbtWatch.tick(mc);
 		try {
 			Apollo.tick();
 			long now = Apollo.now();

@@ -86,7 +86,7 @@ public final class SettingsScreen extends PlebScreen {
 		ClientPrefs pr = p();
 		switch (section) {
 		case 0: // Interface (incl. sound, motion)
-			add(choice("Accent color", "The color of highlights in every PlebMc menu", lx, y, lw, h,
+			add(choice("Accent color", "The color of highlights in every PlebClient menu", lx, y, lw, h,
 					() -> ClientPrefs.ACCENT_NAMES[pr.accent], saved(() -> pr.accent = wrap(pr.accent + 1, ClientPrefs.ACCENTS.length)),
 					saved(() -> pr.accent = wrap(pr.accent - 1, ClientPrefs.ACCENTS.length))), clip);
 			y += step;
@@ -97,7 +97,7 @@ public final class SettingsScreen extends PlebScreen {
 			add(toggle("Animations", "Menus slide in and hovers fade. Turn off to reduce motion.", lx, y, lw, h,
 					() -> pr.animations, saved(() -> pr.animations = !pr.animations)), clip);
 			y += step;
-			add(toggle("Click sounds", "Play a click in PlebMc menus", lx, y, lw, h, () -> pr.uiSounds,
+			add(toggle("Click sounds", "Play a click in PlebClient menus", lx, y, lw, h, () -> pr.uiSounds,
 					saved(() -> pr.uiSounds = !pr.uiSounds)), clip);
 			y += step;
 			break;
@@ -156,6 +156,17 @@ public final class SettingsScreen extends PlebScreen {
 				add(dbg, clip);
 				y += 26;
 			}
+			add(toggle("Log item NBT", "Records the data of items you and nearby players hold (for custom items)", lx, y,
+					lw, h, () -> pr.itemNbtLog, saved(() -> {
+						pr.itemNbtLog = !pr.itemNbtLog;
+						rebuildLater = true;
+					})), clip);
+			y += step;
+			Button nbt = button("Open item NBT log (" + ItemNbtWatch.LOG_DATA.size() + ")", lx, y, lw, 20,
+					() -> this.mc.displayGuiScreen(new ItemNbtScreen(this)));
+			nbt.icon("debug");
+			add(nbt, clip);
+			y += 26;
 			break;
 		}
 		scroll.set(ly, lh, y - ly);
