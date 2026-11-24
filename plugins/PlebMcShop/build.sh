@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds PlebMcShop.jar (a BungeeCord plugin) with only a JDK 8+. The BungeeCord API,
+# Builds PlebioAPI.jar (a BungeeCord plugin) with only a JDK 8+. The BungeeCord API,
 # Gson and SnakeYAML are downloaded from Maven Central for compiling only; BungeeCord
 # provides them at runtime.
 set -e
@@ -14,6 +14,6 @@ CP=$(ls lib/bungeecord-*-$V.jar | tr '\n' ':')lib/gson-2.8.0.jar:lib/snakeyaml-2
 rm -rf build/classes && mkdir -p build/classes
 javac --release 8 -Xlint:-options -cp "$CP" -d build/classes $(find src/main/java -name '*.java')
 cp -r src/main/resources/bungee.yml src/main/resources/config.yml src/main/resources/cloaks build/classes/
-rm -f PlebMcShop.jar
-jar cf PlebMcShop.jar -C build/classes .
-echo "built $(pwd)/PlebMcShop.jar"
+rm -f PlebioAPI.jar
+jar cf PlebioAPI.jar -C build/classes .
+echo "built $(pwd)/PlebioAPI.jar"

@@ -45,12 +45,31 @@ public final class BungeeShop extends Plugin implements Listener {
 	static final String BRIDGE = "PlebMcBridge";
 
 	private ShopCore core;
+
+	/**
+	 * The plugin used to be called PlebMcShop. On the first start as PlebioAPI,
+	 * move its folder (config, players, cloaks) over so balances and quests carry on.
+	 */
+	private void migrateOldFolder() {
+		File now = getDataFolder();
+		File old = new File(now.getParentFile(), "PlebMcShop");
+		if (now.exists() || !old.isDirectory()) {
+			return;
+		}
+		if (old.renameTo(now)) {
+			getLogger().info("Moved plugins/PlebMcShop to plugins/" + now.getName() + " (config and player data kept)");
+		} else {
+			getLogger().warning("Could not move plugins/PlebMcShop to plugins/" + now.getName()
+					+ ": move it by hand to keep balances and quests");
+		}
+	}
 	/** The server each player is on, as we last saw it (for the switch "from"). */
 	private final Map<UUID, String> lastServer = new ConcurrentHashMap<>();
 	private final Gson gson = new Gson();
 
 	@Override
 	public void onEnable() {
+		migrateOldFolder();
 		File cfg = new File(getDataFolder(), "config.yml");
 		try {
 			if (!cfg.exists()) {

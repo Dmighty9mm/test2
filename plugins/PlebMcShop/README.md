@@ -1,4 +1,6 @@
-# PlebMcShop
+# PlebioAPI (formerly PlebMcShop)
+
+> Renamed from PlebMcShop. On its first start PlebioAPI moves `plugins/PlebMcShop/` to `plugins/PlebioAPI/`, so config, balances and quests carry over. Remove the old `PlebMcShop.jar` from `plugins/`.
 
 The proxy plugin behind the PlebMc client's **Shop**, **Quests** and **Account** screens (Right Shift).
 It runs on **BungeeCord**, so one balance, one set of quests and one wardrobe
@@ -20,16 +22,16 @@ backend server (`plugins/PlebMcBridge`). The protocol is in `docs/PLEBMC.md`.
 
 ## Install
 
-1. **Proxy:** put `PlebMcShop.jar` in the BungeeCord `plugins/` folder and restart the proxy.
+1. **Proxy:** put `PlebioAPI.jar` in the BungeeCord `plugins/` folder and restart the proxy.
 2. **Backends:** put `PlebMcBridge.jar` in `plugins/` on the lobby and PlebNite servers
    (Spigot/Paper/Purpur 1.13+) and restart them.
 3. **Wins (PlebNite):** in `plugins/BattleRoyaleX/config.yml`, under
    `Executed-Commands > Player-Win`, add `- plebquest %player% win`, then `/brx reload`.
 4. **Website login:** on plebmc.top, StaffCP > Configuration > API: turn the API on and copy
-   the key into `website.api-key` in the proxy's `plugins/PlebMcShop/config.yml`. Under
+   the key into `website.api-key` in the proxy's `plugins/PlebioAPI/config.yml`. Under
    StaffCP > Integrations > Minecraft, keep Minecraft linking on and turn "UUID linking" off
    (Eaglercraft names usually aren't Mojang accounts, so the website can't look them up).
-5. Edit `plugins/PlebMcShop/config.yml` on the proxy if you like, then `/plebshop reload`.
+5. Edit `plugins/PlebioAPI/config.yml` on the proxy if you like, then `/plebshop reload`.
 
 ## Quest categories
 
@@ -118,7 +120,7 @@ client draws; leave it out for cloaks), a `price` (`-1` = not for sale, give it 
 
 ### HD cloaks
 
-Put a PNG in the plugin folder (for example `plugins/PlebMcShop/cloaks/mycloak.png`) and add:
+Put a PNG in the plugin folder (for example `plugins/PlebioAPI/cloaks/mycloak.png`) and add:
 
 ```yaml
   my_cloak: {name: 'My Cloak', category: cloak, texture: 'cloaks/mycloak.png', price: 5000, description: 'HD cloak'}
@@ -146,6 +148,6 @@ Item and quest ids are what `players.yml` saves, so don't rename ones players al
 Only a JDK is needed (the BungeeCord API is downloaded for compiling):
 
 ```
-sh build.sh       # -> PlebMcShop.jar
+sh build.sh       # -> PlebioAPI.jar
 sh test/run.sh    # the shop on a fake proxy with the real client code, and quest logic with a fixed clock
 ```

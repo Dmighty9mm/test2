@@ -71,7 +71,7 @@ final class Website {
 		// some hosts drop Authorization; NamelessMC also reads this one
 		c.setRequestProperty("X-API-Key", apiKey);
 		c.setRequestProperty("Accept", "application/json");
-		c.setRequestProperty("User-Agent", "PlebMcShop");
+		c.setRequestProperty("User-Agent", "PlebioAPI");
 		if (jsonBody != null) {
 			c.setDoOutput(true);
 			c.setRequestProperty("Content-Type", "application/json");
