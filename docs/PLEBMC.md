@@ -108,8 +108,8 @@ open Mods, Quests or the Shop directly instead. Every screen closes with Esc or 
 
 | Screen | What it does |
 |---|---|
-| **Mods** | Every mod as a card with its state (on, off, or locked when the server blocks it). Click a card to toggle it; right-click it or its gear for its settings page (every option, reset to defaults, "Move on HUD"). Categories on the left (HUD, Gameplay, Squad, Performance) with on/total counts, and a search box (start typing anywhere). |
-| **Shop** | Cosmetics only: Hats and Trails tabs (owned/total), item cards with price, Owned, Equipped or Exclusive (never sold), pages, and your player on the left (drag or arrow keys to spin). Picking a card tries it on (only you see it, until you leave). Buy, Equip and Unequip go to the server. |
+| **Mods** | Every mod as a card with its state (on, off, or locked when the server blocks it). Click a card to toggle it; right-click it or its gear for its settings page (every option, reset to defaults, "Move on HUD"). Categories on the left (PlebNite, HUD, Gameplay, Performance) with on/total counts, and a search box (start typing anywhere). |
+| **Shop** | Cosmetics only: Hats, Trails and Cloaks tabs (owned/total; cloak cards show the cloak's own art, and the preview turns around to show it), item cards with price, Owned, Equipped or Exclusive (never sold), pages, and your player on the left (drag or arrow keys to spin). Picking a card tries it on (only you see it, until you leave). Buy, Equip and Unequip go to the server. |
 | **Quests** | All / General / PlebNite on the left with done/total counts and a dot for new quests; Daily and Weekly sections with reset timers; each quest's progress bar, count and reward; finished quests fold into compact "claimed" rows; the daily login row with streak pips. |
 | **HUD** | The HUD editor (below). |
 | **Account** | plebmc.top login: status, profile (name, ranks), log in with a code, log out. |
@@ -121,15 +121,19 @@ open Mods, Quests or the Shop directly instead. Every screen closes with Esc or 
 | CPS | `cps` | on | left \| right |
 | Keystrokes | `keystrokes` | on | WASD, LMB/RMB with CPS, jump |
 | Coordinates | `coordinates` | on | XYZ + facing |
-| Armor | `armorstatus` | off | durability |
+| Armor | `armorstatus` | off | worn armor drawn as the real item icons (enchant glint included) with a green-to-red durability bar and uses left (number, percent or hidden), plus the held item; vertical or horizontal |
 | Potion effects | `potion-effects` | off | name, level, time left |
 | Ping | `ping` | off | from the tab list latency |
 | Clock | `clock` | off | local time |
 | Toggle Sprint | `toggle-sneak` | off | tap sprint; server option `toggle-sprint=false` blocks it |
 | Zoom | `zoom` | on | hold **C** (Eaglercraft's zoom key, scroll to adjust); blocked when the server disables `zoom` |
 | Fullbright | `lighting` | off | server option `full-bright=false` blocks it; a server brightness rule wins |
-| Compass | `compass` | on | heading strip (top center) with a pip for every teammate and waypoint |
-| Squad Ping | `squad-ping` | on | **Sneak + F** sends the swap-hands action modern servers use for pings (Apollo servers only) |
+| Compass | `compass` | on | PlebNite: heading strip (top center) with a pip for every teammate and waypoint, and a square pointing at the middle of the storm (red while you're outside it) |
+| Squad Ping | `squad-ping` | on | PlebNite: **Sneak + F** sends the swap-hands action modern servers use for pings (Apollo servers only) |
+| Storm Tracker | `storm` | on | PlebNite: blocks to the storm edge (red "IN THE STORM" with the way back when you're outside), closing/opening timer, optional safe-zone size. Read from the vanilla world border packets, hidden when the world has no border |
+| Squad | `squad-hud` | on | PlebNite: each teammate (Apollo teams) with their color, a health bar (when they're loaded near you; gray when too far to know) and distance |
+| Supplies | `supplies` | off | PlebNite: building blocks, arrows, golden apples, ender pearls, potions and TNT in your inventory as item icons with counts |
+| Low Health Warning | `low-health` | on | PlebNite: red screen edges at 2 to 5 hearts, pulsing faster the lower you are |
 | FPS Boost | `fps-boost` | off | fastest video settings while on; your own values come back when it's off |
 
 The **HUD editor** draws the live HUD with a side panel. Drag an element to move it: it
@@ -189,7 +193,7 @@ orange "unknown".
 
 ## Cosmetics shop protocol
 
-Cosmetics (hats and trails) are bought with the server's coins (on PlebMc: PlebMc Coins, earned from quests, a daily login reward and time online). The server owns the balance, ownership and what is equipped; the client only displays them and sends requests. Messages are UTF-8 JSON objects on the plugin channel `plebmc:shop`. The client sends `REGISTER plebmc:shop` when it joins (Bukkit needs this before it will deliver messages to the client). Open it with Right Shift, then **Shop** or **Quests**. "Try on" works everywhere and is local only.
+Cosmetics (hats, trails and cloaks) are bought with the server's coins (on PlebMc: PlebMc Coins, earned from quests, a daily login reward and time online). The server owns the balance, ownership and what is equipped; the client only displays them and sends requests. Messages are UTF-8 JSON objects on the plugin channel `plebmc:shop`. The client sends `REGISTER plebmc:shop` when it joins (Bukkit needs this before it will deliver messages to the client). Open it with Right Shift, then **Shop** or **Quests**. "Try on" works everywhere and is local only.
 
 **Client to server**
 
@@ -198,6 +202,7 @@ Cosmetics (hats and trails) are bought with the server's coins (on PlebMc: PlebM
 | `{"type":"open"}` | On join and when the shop opens: send a `state` back. |
 | `{"type":"buy","id":"crown"}` | Buy an item. Check the price and balance, take the coins, reply with `result` and a fresh `state`. |
 | `{"type":"equip","category":"hat","id":"crown"}` | Equip an owned item (`"id":null` takes the slot off). Reply with `state`, and send the change to nearby players as `players`. |
+| `{"type":"texture","id":"5707c10a4d93e2b1"}` | Download a cloak texture the catalog names. |
 
 **Server to client**
 
@@ -206,6 +211,7 @@ Cosmetics (hats and trails) are bought with the server's coins (on PlebMc: PlebM
 | `{"type":"state","coins":1250,"owned":["tophat"],"equipped":{"hat":"tophat","trail":"flame"},"catalog":[...]}` | Balance, owned ids, equipped slots. Every field is optional; a missing field keeps its last value. `catalog` replaces the built-in list. |
 | `{"type":"players","players":{"<uuid>":{"hat":"crown","trail":"rainbow"},"<uuid2>":null}}` | What other players wear (so everyone sees each other's cosmetics). `null` or `{}` removes a player. `"clear":true` drops everyone first (send on world change). |
 | `{"type":"result","ok":false,"message":"Not enough coins","coins":100}` | Answer to buy/equip, shown in the shop. `coins` is optional. |
+| `{"type":"texture","id":"5707c10a4d93e2b1","part":0,"parts":3,"data":"iVBORw0..."}` | One part of a cloak PNG, base64 (parts are joined in order, then decoded). The id is a content hash, so the client keeps the image across servers. |
 | `{"type":"notify","title":"§aQuest complete!","message":"Get 3 kills: +75 PlebMc Coins","coins":425}` | A popup (top right, like Apollo notifications). `coins` optional. |
 
 `state` can also carry the quests: `"currency":"PlebMc Coins"`, `"dailyResetIn":18720` and `"weeklyResetIn":...` (seconds), `"loginStreak":4`, `"questCategories":[{"id":"general","name":"General","icon":"general","color":"#3FD8E6"},{"id":"plebnite","name":"PlebNite","icon":"plebnite","color":"#FF9A3C"}]` (one entry each on the Quests screen, after "All"; `icon` and `color` are optional), and `"quests":[{"id":"kills_3","category":"plebnite","cycle":"2026-11-24","name":"Get 3 kills","description":"...","period":"daily","progress":1,"goal":3,"reward":75,"done":false}]` (`period` is `daily`, `weekly` or `login`; `cycle` names the day or week the quest belongs to, so the client can tag it NEW again when it comes back; the login row also has `"streak"` and `"streakLength"`; a quest without `category` shows in every category). Rewards are paid by the server the moment a quest is done, once; the client shows done quests as claimed.
@@ -214,7 +220,7 @@ Cosmetics (hats and trails) are bought with the server's coins (on PlebMc: PlebM
 
 Catalog items that are never sold (given by staff or events) carry `"forSale":false` (and, for older clients, a price nobody can reach); the shop shows them as Exclusive.
 
-Catalog item: `{"id":"gold_tophat","name":"Gold Top Hat","category":"hat","render":"tophat","price":900,"color":"#FFD700","description":"..."}`. `category` is `hat` or `trail`. `render` is the look the client draws: hats `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`; trails `flame`, `hearts`, `notes`, `rainbow`, `cloud`, `portal`, `emerald`, `snow`. `color` tints a hat (optional). Items with a `render` this client doesn't know are hidden, so newer items don't break older clients. Without a catalog the client shows the built-in one (ids equal to the render names, prices 250 to 2,500).
+Catalog item: `{"id":"gold_tophat","name":"Gold Top Hat","category":"hat","render":"tophat","price":900,"color":"#FFD700","description":"..."}`. `category` is `hat`, `trail` or `cloak`. A cloak has `"render":"cloak"` and either a `"texture"` id (plus `"textureWidth"`) for an image the client downloads with `texture`, or just a `color` for a plain cloak. Cloak images use the vanilla cape layout (64x32) at any multiple up to 4096x2048; the model's UVs are fractions of the image, so a 512x256 cloak draws at 8x detail. `render` is the look the client draws: hats `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`; trails `flame`, `hearts`, `notes`, `rainbow`, `cloud`, `portal`, `emerald`, `snow`. `color` tints a hat (optional). Items with a `render` this client doesn't know are hidden, so newer items don't break older clients. Without a catalog the client shows the built-in one (ids equal to the render names, prices 250 to 2,500).
 
 ### Server plugins
 

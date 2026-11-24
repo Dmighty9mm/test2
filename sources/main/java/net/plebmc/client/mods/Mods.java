@@ -179,44 +179,132 @@ public final class Mods {
                 }
         }
 
-        public static final class Armor extends TextMod {
+        /**
+         * Armor: the pieces you're wearing drawn as their real item icons, each
+         * with a durability bar and uses left colored green to red, plus the
+         * item in your hand if you want it.
+         */
+        public static final class Armor extends Mod {
+                public static final int ROW = 17;
+
                 public Armor() {
-                        super("armorstatus", "Armor", "Worn armor and durability", false, 0.005f, 0.70f);
-                        hudLook(true);
-                        durability = setting("durability", "Durability", "How durability is shown",
+                        super("armorstatus", "Armor", "Your armor as item icons with durability", false, 0.005f, 0.68f);
+                        hudLook(false);
+                        durability = setting("durability", "Durability", "How uses left are written next to each piece",
                                         new String[] { "Numbers", "Percent", "Hidden" }, 0);
+                        bars = setting("bars", "Durability bars", "A colored bar under each icon", OFF_ON, 1);
+                        layout = setting("layout", "Layout", "A column or a row", new String[] { "Vertical", "Horizontal" }, 0);
+                        held = setting("held", "Held item", "Also show what's in your hand", OFF_ON, 1);
                 }
 
                 private final Setting durability;
+                private final Setting bars;
+                private final Setting layout;
+                private final Setting held;
 
-                /** "Helmet 363/363" in the chosen style. */
-                String style(String s) {
-                        int sp = s.lastIndexOf(' ');
-                        int sl = s.lastIndexOf('/');
-                        if (durability.get() == 0 || sp < 0 || sl < sp) {
-                                return s;
+                @Override
+                public boolean hasHud() {
+                        return true;
+                }
+
+                /** The words next to a piece: "363", "100%" or nothing; a held stack shows its count. */
+                String label(Gear g) {
+                        if (!g.damageable()) {
+                                return g.count > 1 ? Integer.toString(g.count) : "";
                         }
-                        if (durability.get() == 2) {
-                                return s.substring(0, sp);
-                        }
-                        try {
-                                int a = Integer.parseInt(s.substring(sp + 1, sl));
-                                int b = Integer.parseInt(s.substring(sl + 1));
-                                return s.substring(0, sp) + " " + (b <= 0 ? 100 : Math.round(a * 100f / b)) + "%";
-                        } catch (NumberFormatException e) {
-                                return s;
+                        switch (durability.get()) {
+                        case 0:
+                                return Integer.toString(g.durability);
+                        case 1:
+                                return Math.round(g.fraction() * 100f) + "%";
+                        default:
+                                return "";
                         }
                 }
 
-                @Override
-                protected List<String> lines(ClientView v) {
-                        List<String> l = new ArrayList<>();
-                        for (String s : v.armor()) {
-                                if (!s.isEmpty()) {
-                                        l.add(style(s));
+                private List<Gear> pieces(ClientView v) {
+                        List<Gear> out = new ArrayList<>();
+                        for (Gear g : v.armor()) {
+                                if (g != null) {
+                                        out.add(g);
                                 }
                         }
-                        return l;
+                        Gear h = held.on() ? v.held() : null;
+                        if (h != null) {
+                                out.add(h);
+                        }
+                        return out;
+                }
+
+                @Override
+                public HudBox layout(ClientView v, HudBox.Measure m) {
+                        List<Gear> l = pieces(v);
+                        return l.isEmpty() ? null : draw(l, m);
+                }
+
+                HudBox draw(List<Gear> l, HudBox.Measure m) {
+                        HudBox b = new HudBox();
+                        boolean row = layout.on();
+                        int p = HudBox.PAD;
+                        if (row) {
+                                int x = p;
+                                List<int[]> cols = new ArrayList<>();
+                                boolean anyText = false;
+                                for (Gear g : l) {
+                                        String t = label(g);
+                                        int cw = Math.max(HudBox.ITEM, t.isEmpty() ? 0 : m.width(t));
+                                        cols.add(new int[] { x, cw });
+                                        anyText |= !t.isEmpty();
+                                        x += cw + 4;
+                                }
+                                int h = HudBox.ITEM + p * 2 + (anyText ? 10 : 0) + (bars.on() ? 2 : 0);
+                                b.rect(0, 0, x - 4 + p, h, HudBox.BG);
+                                for (int i = 0; i < l.size(); i++) {
+                                        Gear g = l.get(i);
+                                        int ix = cols.get(i)[0] + (cols.get(i)[1] - HudBox.ITEM) / 2;
+                                        b.item(g.stack, g.id, ix, p);
+                                        int ty = p + HudBox.ITEM + 1;
+                                        if (bars.on() && g.damageable()) {
+                                                bar(b, g, ix + 1, p + HudBox.ITEM + 1);
+                                        }
+                                        if (bars.on()) {
+                                                ty += 2;
+                                        }
+                                        String t = label(g);
+                                        if (!t.isEmpty()) {
+                                                b.text(t, cols.get(i)[0] + cols.get(i)[1] / 2, ty + 1, g.damageable() ? g.color() : HudBox.TEXT, true);
+                                        }
+                                }
+                        } else {
+                                int tw = 0;
+                                for (Gear g : l) {
+                                        tw = Math.max(tw, m.width(label(g)));
+                                }
+                                int w = p + HudBox.ITEM + (tw > 0 ? 3 + tw : 0) + p;
+                                b.rect(0, 0, w, p + l.size() * ROW + p - 1, HudBox.BG);
+                                for (int i = 0; i < l.size(); i++) {
+                                        Gear g = l.get(i);
+                                        int y = p + i * ROW;
+                                        b.item(g.stack, g.id, p, y);
+                                        if (bars.on() && g.damageable()) {
+                                                bar(b, g, p + 1, y + 14);
+                                        }
+                                        String t = label(g);
+                                        if (!t.isEmpty()) {
+                                                b.text(t, p + HudBox.ITEM + 3, y + 4, g.damageable() ? g.color() : HudBox.TEXT, false);
+                                        }
+                                }
+                        }
+                        return b;
+                }
+
+                /** Vanilla-style durability bar: 14 px, black under the colored part. */
+                private static void bar(HudBox b, Gear g, int x, int y) {
+                        b.rect(x, y, 14, 2, 0xFF000000);
+                        int w = Math.round(13 * g.fraction());
+                        if (w > 0) {
+                                b.rect(x, y, w, 1, g.color());
+                        }
                 }
 
                 @Override
@@ -225,12 +313,15 @@ public final class Mods {
                         if (b != null) {
                                 return b;
                         }
-                        List<String> l = new ArrayList<>();
-                        l.add(style("Helmet 363/363"));
-                        l.add(style("Chestplate 528/528"));
-                        l.add(style("Leggings 495/495"));
-                        l.add(style("Boots 429/429"));
-                        return HudBox.lines(l, m);
+                        List<Gear> l = new ArrayList<>();
+                        l.add(new Gear(null, "diamond_helmet", "Diamond Helmet", 1, 363, 363));
+                        l.add(new Gear(null, "diamond_chestplate", "Diamond Chestplate", 1, 401, 528));
+                        l.add(new Gear(null, "iron_leggings", "Iron Leggings", 1, 120, 225));
+                        l.add(new Gear(null, "diamond_boots", "Diamond Boots", 1, 40, 429));
+                        if (held.on()) {
+                                l.add(new Gear(null, "diamond_sword", "Diamond Sword", 1, 1561, 1561));
+                        }
+                        return draw(l, m);
                 }
         }
 
@@ -428,7 +519,7 @@ public final class Mods {
                 }
         }
 
-        // ==================== squad / performance ====================
+        // ==================== PlebNite / performance ====================
 
         /**
          * Compass: a heading strip (top center by default) with a colored pip
@@ -461,12 +552,15 @@ public final class Mods {
                 private List<Marker> markers = new ArrayList<>();
 
                 public Compass() {
-                        super("compass", "Compass", "Heading strip with your squad and waypoints", true, 0.5f, 0.09f);
+                        super("compass", "Compass", "Heading strip with your squad, waypoints and the storm", true, 0.5f, 0.09f);
                         hudLook(false);
+                        category(PLEBNITE);
                         pips = setting("markers", "Squad markers", "Show teammates and waypoints on the strip", OFF_ON, 1);
+                        safe = setting("safezone", "Safe zone", "A white square points to the middle of the storm", OFF_ON, 1);
                 }
 
                 private final Setting pips;
+                private final Setting safe;
 
                 public void setMarkers(List<Marker> m) {
                         markers = m == null ? new ArrayList<Marker>() : m;
@@ -534,7 +628,22 @@ public final class Mods {
                                         b.rect(x - 1, 4, 3, 1, c);
                                 }
                         }
-                        // center notch
+                        // the middle of the safe zone (world border center)
+                Storm st = safe.on() ? v.storm() : null;
+                if (st != null && st.size < Storm.NO_STORM) {
+                        double dx = st.centerX - v.x(), dz = st.centerZ - v.z();
+                        if (dx * dx + dz * dz > 4.0) {
+                                float rel = relative((float) Math.toDegrees(Math.atan2(-dx, dz)), yaw);
+                                float clamped = Math.max(-SPAN, Math.min(SPAN, rel));
+                                int x = mid + Math.round(clamped * (mid - 4) / SPAN);
+                                int c = st.inside() ? 0xFFFFFFFF : 0xFFFF5555;
+                                b.rect(x - 2, 0, 5, 1, c);
+                                b.rect(x - 2, 4, 5, 1, c);
+                                b.rect(x - 2, 1, 1, 3, c);
+                                b.rect(x + 2, 1, 1, 3, c);
+                        }
+                }
+                // center notch
                         b.rect(mid, HEIGHT - 2, 1, 2, 0xFFFFFF55);
                         b.rect(mid - 1, HEIGHT - 1, 3, 1, 0xFFFFFF55);
                         return b;
@@ -548,7 +657,302 @@ public final class Mods {
         public static final class SquadPing extends Mod {
                 public SquadPing() {
                         super("squad-ping", "Squad Ping", "Sneak + F marks a spot for your squad", true, 0f, 0f);
-                        category(SQUAD);
+                        category(PLEBNITE);
+                }
+        }
+
+        /**
+         * Storm tracker: how far the storm (world border) is, whether it is
+         * closing and how long until it stops, and a red warning when you are
+         * caught outside it.
+         */
+        public static final class StormTracker extends Mod {
+                public StormTracker() {
+                        super("storm", "Storm Tracker", "Distance to the storm and when it closes", true, 0.5f, 0.25f);
+                        hudLook(false);
+                        category(PLEBNITE);
+                        timer = setting("timer", "Closing timer", "Show when the storm stops moving", OFF_ON, 1);
+                        size = setting("size", "Safe zone size", "Show how wide the safe zone is", OFF_ON, 0);
+                }
+
+                private final Setting timer;
+                private final Setting size;
+
+                @Override
+                public boolean hasHud() {
+                        return true;
+                }
+
+                @Override
+                public boolean centerAnchored() {
+                        return true;
+                }
+
+                public static String clock(long ms) {
+                        long s = Math.max(0, (ms + 999) / 1000);
+                        long m = s / 60;
+                        s %= 60;
+                        return m + ":" + (s < 10 ? "0" : "") + s;
+                }
+
+                @Override
+                public HudBox layout(ClientView v, HudBox.Measure m) {
+                        Storm st = v.storm();
+                        if (st == null || st.size >= Storm.NO_STORM) {
+                                return null;
+                        }
+                        return draw(st, m);
+                }
+
+                HudBox draw(Storm st, HudBox.Measure m) {
+                        String head;
+                        int hc;
+                        if (!st.inside()) {
+                                head = "IN THE STORM  " + (int) Math.ceil(-st.edge) + "m to safety";
+                                hc = 0xFFFF5555;
+                        } else {
+                                head = "Storm " + (int) Math.floor(st.edge) + "m away";
+                                hc = st.edge < 15 ? 0xFFFFAA00 : HudBox.TEXT;
+                        }
+                        List<String> rest = new ArrayList<>();
+                        if (timer.on()) {
+                                if (st.shrinking()) {
+                                        rest.add("Closing  " + clock(st.msLeft));
+                                } else if (st.growing()) {
+                                        rest.add("Opening  " + clock(st.msLeft));
+                                } else {
+                                        rest.add("Holding");
+                                }
+                        }
+                        if (size.on()) {
+                                rest.add("Safe zone " + (int) Math.round(st.size)
+                                                + (st.shrinking() || st.growing() ? " to " + (int) Math.round(st.target) : ""));
+                        }
+                        int w = m.width(head);
+                        for (String r : rest) {
+                                w = Math.max(w, m.width(r));
+                        }
+                        int p = HudBox.PAD;
+                        int iw = 9 + 3;
+                        HudBox b = new HudBox();
+                        b.rect(0, 0, p + iw + w + p, p + (1 + rest.size()) * HudBox.LINE_H + p - 1, HudBox.BG);
+                        // storm icon: a ring, red when you're outside it
+                        int ic = st.inside() ? 0xFFB28CFF : 0xFFFF5555;
+                        b.rect(p + 2, p, 5, 1, ic);
+                        b.rect(p + 2, p + 6, 5, 1, ic);
+                        b.rect(p + 1, p + 1, 1, 5, ic);
+                        b.rect(p + 7, p + 1, 1, 5, ic);
+                        b.rect(p + 3, p + 3, 3, 1, ic);
+                        b.text(head, p + iw, p, hc, false);
+                        for (int i = 0; i < rest.size(); i++) {
+                                b.text(rest.get(i), p + iw, p + (i + 1) * HudBox.LINE_H, st.shrinking() && i == 0 ? 0xFFD6C2FF : HudBox.TEXT, false);
+                        }
+                        return b;
+                }
+
+                @Override
+                public HudBox preview(ClientView v, HudBox.Measure m) {
+                        HudBox b = layout(v, m);
+                        return b != null ? b : draw(new Storm(0, 0, 240, 120, 35_000, 42), m);
+                }
+        }
+
+        /**
+         * Squad: everyone on your team with their color, health (when they are
+         * close enough for the game to know it) and how far away they are.
+         */
+        public static final class Squad extends Mod {
+                public Squad() {
+                        super("squad-hud", "Squad", "Your teammates' health and distance", true, 0.99f, 0.40f);
+                        hudLook(false);
+                        category(PLEBNITE);
+                        health = setting("health", "Health bars", "Show each teammate's health", OFF_ON, 1);
+                        distance = setting("distance", "Distance", "Show how far away they are", OFF_ON, 1);
+                }
+
+                private final Setting health;
+                private final Setting distance;
+
+                @Override
+                public boolean hasHud() {
+                        return true;
+                }
+
+                @Override
+                public HudBox layout(ClientView v, HudBox.Measure m) {
+                        List<Mate> l = v.squad();
+                        return l.isEmpty() ? null : draw(l, m);
+                }
+
+                static final int BAR = 28;
+
+                HudBox draw(List<Mate> l, HudBox.Measure m) {
+                        int p = HudBox.PAD;
+                        int nw = 0, dw = 0;
+                        for (Mate mt : l) {
+                                nw = Math.max(nw, m.width(mt.name));
+                                if (distance.on() && mt.distance >= 0) {
+                                        dw = Math.max(dw, m.width(mt.distance + "m"));
+                                }
+                        }
+                        int x0 = p + 8;
+                        int barX = x0 + nw + 4;
+                        int distX = barX + (health.on() ? BAR + 4 : 0);
+                        int w = distX + dw + p - (dw == 0 ? 4 : 0);
+                        HudBox b = new HudBox();
+                        b.rect(0, 0, w, p + l.size() * 11 + p - 1, HudBox.BG);
+                        for (int i = 0; i < l.size(); i++) {
+                                Mate mt = l.get(i);
+                                int y = p + i * 11;
+                                b.rect(p, y + 1, 5, 7, mt.argb | 0xFF000000);
+                                boolean down = mt.health == 0f;
+                                b.text(mt.name, x0, y, down ? 0xFF888888 : HudBox.TEXT, false);
+                                if (health.on()) {
+                                        b.rect(barX, y + 3, BAR, 3, 0xFF000000);
+                                        if (mt.health > 0) {
+                                                float f = Math.min(1f, mt.health / Math.max(1f, mt.maxHealth));
+                                                int c = f > 0.5f ? 0xFF55FF55 : f > 0.25f ? 0xFFFFFF55 : 0xFFFF5555;
+                                                b.rect(barX, y + 3, Math.max(1, Math.round(BAR * f)), 3, c);
+                                        } else if (mt.health < 0) {
+                                                b.rect(barX, y + 4, BAR, 1, 0xFF555555); // too far to see
+                                        }
+                                }
+                                if (distance.on() && mt.distance >= 0) {
+                                        b.text(mt.distance + "m", distX, y, 0xFFAAAAAA, false);
+                                }
+                        }
+                        return b;
+                }
+
+                @Override
+                public HudBox preview(ClientView v, HudBox.Measure m) {
+                        HudBox b = layout(v, m);
+                        if (b != null) {
+                                return b;
+                        }
+                        List<Mate> l = new ArrayList<>();
+                        l.add(new Mate("Teammate1", 0xFF55FFFF, 12, 18f, 20f, 0f));
+                        l.add(new Mate("Teammate2", 0xFFFFAA00, 87, 6f, 20f, 0f));
+                        l.add(new Mate("Teammate3", 0xFFFF55FF, 240, -1f, 20f, 0f));
+                        return draw(l, m);
+                }
+        }
+
+        /**
+         * Supplies: the building blocks, arrows, golden apples, pearls, potions
+         * and TNT in your inventory, as item icons with counts.
+         */
+        public static final class Supplies extends Mod {
+                /** Group key and the item drawn for it. */
+                public static final String[][] GROUPS = { { "blocks", "planks" }, { "arrows", "arrow" },
+                                { "gapples", "golden_apple" }, { "pearls", "ender_pearl" }, { "potions", "potion" },
+                                { "tnt", "tnt" } };
+
+                public Supplies() {
+                        super("supplies", "Supplies", "Blocks, arrows, gapples and pearls you're carrying", false, 0.99f, 0.60f);
+                        hudLook(false);
+                        category(PLEBNITE);
+                        layout = setting("layout", "Layout", "A column or a row", new String[] { "Vertical", "Horizontal" }, 0);
+                        empty = setting("empty", "Show empty", "Keep showing supplies you have none of", OFF_ON, 0);
+                }
+
+                private final Setting layout;
+                private final Setting empty;
+
+                @Override
+                public boolean hasHud() {
+                        return true;
+                }
+
+                @Override
+                public HudBox layout(ClientView v, HudBox.Measure m) {
+                        int[] n = new int[GROUPS.length];
+                        for (int i = 0; i < GROUPS.length; i++) {
+                                n[i] = Math.max(0, v.supply(GROUPS[i][0]));
+                        }
+                        return draw(n, m, false);
+                }
+
+                HudBox draw(int[] n, HudBox.Measure m, boolean all) {
+                        List<Integer> shown = new ArrayList<>();
+                        for (int i = 0; i < n.length; i++) {
+                                if (n[i] > 0 || empty.on() || all) {
+                                        shown.add(i);
+                                }
+                        }
+                        if (shown.isEmpty()) {
+                                return null;
+                        }
+                        int p = HudBox.PAD;
+                        HudBox b = new HudBox();
+                        if (layout.on()) {
+                                int step = HudBox.ITEM + 4;
+                                b.rect(0, 0, p + shown.size() * step - 4 + p, p + HudBox.ITEM + p, HudBox.BG);
+                                for (int k = 0; k < shown.size(); k++) {
+                                        int i = shown.get(k);
+                                        int x = p + k * step;
+                                        b.item(null, GROUPS[i][1], x, p);
+                                        String t = Integer.toString(n[i]);
+                                        b.text(t, x + HudBox.ITEM + 1 - m.width(t), p + 9, n[i] == 0 ? 0xFFFF5555 : HudBox.TEXT, false);
+                                }
+                        } else {
+                                int tw = 0;
+                                for (int i : shown) {
+                                        tw = Math.max(tw, m.width(Integer.toString(n[i])));
+                                }
+                                b.rect(0, 0, p + HudBox.ITEM + 3 + tw + p, p + shown.size() * Armor.ROW + p - 1, HudBox.BG);
+                                for (int k = 0; k < shown.size(); k++) {
+                                        int i = shown.get(k);
+                                        int y = p + k * Armor.ROW;
+                                        b.item(null, GROUPS[i][1], p, y);
+                                        b.text(Integer.toString(n[i]), p + HudBox.ITEM + 3, y + 4, n[i] == 0 ? 0xFFFF5555 : HudBox.TEXT, false);
+                                }
+                        }
+                        return b;
+                }
+
+                @Override
+                public HudBox preview(ClientView v, HudBox.Measure m) {
+                        HudBox b = layout(v, m);
+                        return b != null ? b : draw(new int[] { 128, 32, 3, 2, 0, 0 }, m, false);
+                }
+        }
+
+        /**
+         * Low health warning: the screen edges glow red (and pulse) when your
+         * health drops to the chosen number of hearts.
+         */
+        public static final class LowHealth extends Mod {
+                public static final int[] AT = { 4, 6, 8, 10 };
+
+                public LowHealth() {
+                        super("low-health", "Low Health Warning", "Red screen edges when you're about to die", true, 0f, 0f);
+                        category(PLEBNITE);
+                        at = setting("at", "Warn at", "How low your health must be",
+                                        new String[] { "2 hearts", "3 hearts", "4 hearts", "5 hearts" }, 2);
+                        pulse = setting("pulse", "Pulse", "Throb like a heartbeat", OFF_ON, 1);
+                }
+
+                private final Setting at;
+                private final Setting pulse;
+
+                /** 0..1 strength of the red edges right now. */
+                public float intensity(float health, long nowMs) {
+                        if (!isActive() || health <= 0f) {
+                                return 0f;
+                        }
+                        float limit = AT[at.get()];
+                        if (health > limit) {
+                                return 0f;
+                        }
+                        float base = 0.45f + 0.55f * (1f - health / limit);
+                        if (!pulse.on()) {
+                                return base;
+                        }
+                        // faster heartbeat the lower you are
+                        float period = 500f + 700f * (health / limit);
+                        float ph = (nowMs % (long) period) / period;
+                        return base * (0.6f + 0.4f * (float) Math.abs(Math.cos(ph * Math.PI)));
                 }
         }
 

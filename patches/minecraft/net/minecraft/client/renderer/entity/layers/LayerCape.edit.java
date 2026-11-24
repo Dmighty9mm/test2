@@ -17,7 +17,7 @@
 
 > CHANGE  14 : 16  @  14 : 15
 
-~ 				&& abstractclientplayer.getLocationCape() != null
+~ 				&& abstractclientplayer.getLocationCape() != null && !net.plebmc.client.hud.CloakLayer.covers(abstractclientplayer)
 ~ 				&& this.playerRenderer.getMainModel() instanceof ModelPlayer) {
 
 > CHANGE  42 : 43  @  42 : 43

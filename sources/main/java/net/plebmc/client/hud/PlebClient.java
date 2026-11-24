@@ -404,6 +404,7 @@ public final class PlebClient {
 			ApolloOverlay.INSTANCE.render(guiW, guiH, now, have, ex, ey, ez, yaw, pitch, fov, mc.displayWidth,
 					mc.displayHeight, partialTicks);
 			if (!(mc.currentScreen instanceof HudEditorScreen) && !mc.gameSettings.showDebugInfo) {
+				lowHealth(guiW, guiH);
 				for (Mod m : mods.all()) {
 					if (m.hasHud() && m.isActive()) {
 						drawMod(m, m.layout(view, MEASURE), guiW, guiH, false);
@@ -445,6 +446,11 @@ public final class PlebClient {
 			}
 			Draw.fill(r.x, r.y, r.w, r.h, c);
 		}
+		if (!box.items.isEmpty()) {
+			drawItems(box.items);
+			// text over the icons (item models draw in front of z 0)
+			net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.translate(0f, 0f, 200f);
+		}
 		for (HudBox.Text t : box.texts) {
 			int c = textColor != 0 && t.argb == HudBox.TEXT ? textColor : t.argb;
 			float tx = t.centered ? t.x - Draw.width(t.text) / 2f : t.x;
@@ -458,6 +464,50 @@ public final class PlebClient {
 			Draw.fill(p[0] + w, p[1], 1, h, outline);
 		}
 		return new int[] { p[0], p[1], w, h };
+	}
+
+	/** Real item icons (the stack when there is one, else the named item). */
+	static void drawItems(java.util.List<HudBox.Item> items) {
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.enableRescaleNormal();
+		net.minecraft.client.renderer.RenderHelper.enableGUIStandardItemLighting();
+		try {
+			for (HudBox.Item it : items) {
+				net.minecraft.item.ItemStack st = it.stack instanceof net.minecraft.item.ItemStack
+						? (net.minecraft.item.ItemStack) it.stack
+						: ItemIcons.forName(it.id);
+				if (st != null) {
+					mc.getRenderItem().renderItemAndEffectIntoGUI(st, it.x, it.y);
+				}
+			}
+		} catch (Throwable t) {
+			LOG.warn("item icon failed: " + t);
+		}
+		net.minecraft.client.renderer.RenderHelper.disableStandardItemLighting();
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.disableRescaleNormal();
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.disableLighting();
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.enableBlend();
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.enableAlpha();
+	}
+
+	/** Red screen edges while health is low (Low Health Warning). */
+	private static void lowHealth(int w, int h) {
+		float k = mods.lowHealth.intensity(view.health(), System.currentTimeMillis());
+		if (k <= 0f) {
+			return;
+		}
+		int band = Math.max(12, Math.min(w, h) / 6);
+		for (int i = 0; i < band; i++) {
+			float f = 1f - i / (float) band;
+			int a = Math.round(170 * k * f * f);
+			if (a <= 0) {
+				continue;
+			}
+			int c = (a << 24) | 0xC01010;
+			Draw.fill(i, i, w - i * 2, 1, c);
+			Draw.fill(i, h - 1 - i, w - i * 2, 1, c);
+			Draw.fill(i, i + 1, 1, h - i * 2 - 2, c);
+			Draw.fill(w - 1 - i, i + 1, 1, h - i * 2 - 2, c);
+		}
 	}
 
 	static EntityPlayerSP player() {

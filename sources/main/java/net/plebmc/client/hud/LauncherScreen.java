@@ -35,7 +35,7 @@ public final class LauncherScreen extends PlebScreen {
 	public LauncherScreen(GuiScreen parent) {
 		super(parent);
 		doors.add(new Door("Mods", "mods", "Turn mods on and off and change their settings", () -> new ModsScreen(this)));
-		doors.add(new Door("Shop", "shop", "Hats and trails for " + Cosmetics.currency(), () -> new ShopScreen(this)));
+		doors.add(new Door("Shop", "shop", "Hats, trails and cloaks for " + Cosmetics.currency(), () -> new ShopScreen(this)));
 		doors.add(new Door("Quests", "quests", "Daily and weekly quests for coins", () -> new QuestsScreen(this)));
 		doors.add(new Door("HUD", "hud", "Move, resize and recolor your HUD", () -> new HudEditorScreen(this)));
 		doors.add(new Door("Account", "account", "Your plebmc.top login and profile", () -> new AccountScreen(this)));

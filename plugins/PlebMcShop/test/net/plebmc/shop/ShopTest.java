@@ -94,6 +94,75 @@ public class ShopTest {
     static void move(P p, String to) { String from = p.server; p.server = to; core.connected(p.id, from, false); }
     static void sleepCooldown() throws InterruptedException { Thread.sleep(320); }
 
+    /** HD cloaks: the proxy reads the PNG from its folder and streams it in parts the client puts back together. */
+    static void cloaks(File dir, Logger log) throws Exception {
+        File cl = new File(dir, "cloaks");
+        cl.mkdirs();
+        try (java.io.InputStream in = ShopTest.class.getClassLoader().getResourceAsStream("cloaks/plebmc.png")) {
+            Files.write(new File(cl, "plebmc.png").toPath(), QuestsTest.readAll(in));
+        }
+        // a big noisy 1024x512 cloak, so it needs several messages
+        java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(1024, 512, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        java.util.Random r = new java.util.Random(1);
+        for (int y = 0; y < 512; y++) for (int x = 0; x < 1024; x++) img.setRGB(x, y, 0xFF000000 | r.nextInt(0xFFFFFF));
+        javax.imageio.ImageIO.write(img, "png", new File(cl, "storm.png"));
+        byte[] big = Files.readAllBytes(new File(cl, "storm.png").toPath());
+        // a texture with the wrong shape is refused with a clear warning
+        java.awt.image.BufferedImage sq = new java.awt.image.BufferedImage(64, 64, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        javax.imageio.ImageIO.write(sq, "png", new File(cl, "square.png"));
+        net = new FakeNet();
+        core = new ShopCore(net, new Store(new File(dir, "cloak-players.yml"), log),
+                cfg("  red_cloak:", "  bad_cloak: {name: Bad, category: cloak, texture: 'cloaks/square.png', price: 5, description: x}\n  esc_cloak: {name: Esc, category: cloak, texture: '../players.yml', price: 5, description: x}\n  red_cloak:"), log);
+        core.folder(dir);
+        check(core.catalog.get("plebmc_cloak").textureHash != null && core.catalog.get("storm_cloak").textureWidth == 1024,
+                "cloak textures load from the plugin folder");
+        check(core.catalog.get("bad_cloak").textureHash == null && core.catalog.get("esc_cloak").textureHash == null
+                && core.catalog.warnings().size() == 2, "wrong-size and outside-folder textures refused: " + core.catalog.warnings());
+        P c = join("Caper", "lobby", true);
+        Map<?, ?> storm = null;
+        List<?> cat = null;
+        for (Map<?, ?> m : c.got) if (m.containsKey("catalog")) cat = (List<?>) m.get("catalog");
+        for (Object o : cat) if ("storm_cloak".equals(((Map<?, ?>) o).get("id"))) storm = (Map<?, ?>) o;
+        String hash = (String) storm.get("texture");
+        check("cloak".equals(storm.get("category")) && "cloak".equals(storm.get("render")) && hash.length() == 16, "catalog lists the cloak texture id");
+
+        // the real client asks for the texture and rebuilds it
+        PluginChannels.reset();
+        PluginChannels.attach((channel, data) -> {
+            if (Cosmetics.CHANNEL.equals(channel)) core.fromClient(c.id, new String(data, StandardCharsets.UTF_8));
+            return true;
+        });
+        PluginChannels.onJoin();
+        Cosmetics.setSelf(c.id.toString());
+        for (String m : c.raw) Cosmetics.handle(m);
+        Cosmetics.Item ci = Cosmetics.item("storm_cloak");
+        check(ci != null && hash.equals(ci.texture), "client knows the cloak's texture");
+        int before = c.got.size();
+        check(Cosmetics.texture(ci.texture) == null, "texture requested");
+        int parts = 0;
+        for (int i = before; i < c.got.size(); i++) if ("texture".equals(c.got.get(i).get("type"))) parts++;
+        check(parts > 1 && parts == ((Number) c.last("texture").get("parts")).intValue(), "big texture sent in " + parts + " parts");
+        for (int i = before; i < c.raw.size(); i++) Cosmetics.handle(c.raw.get(i));
+        check(java.util.Arrays.equals(Cosmetics.texture(ci.texture), big), "client rebuilt the exact PNG");
+        int n = c.got.size();
+        core.fromClient(c.id, "{\"type\":\"texture\",\"id\":\"" + hash + "\"}");
+        core.fromClient(c.id, "{\"type\":\"texture\",\"id\":\"0123456789abcdef\"}");
+        check(c.got.size() == n, "no resend inside 15s, unknown ids ignored");
+
+        // buy and wear it: everyone sees the cloak slot
+        core.store.get(c.id).coins = 20000;
+        sleepCooldown();
+        core.fromClient(c.id, "{\"type\":\"buy\",\"id\":\"storm_cloak\"}");
+        sleepCooldown();
+        core.fromClient(c.id, "{\"type\":\"equip\",\"category\":\"cloak\",\"id\":\"storm_cloak\"}");
+        Map<?, ?> eq = (Map<?, ?>) c.last("state").get("equipped");
+        check("storm_cloak".equals(eq.get("cloak")), "cloak equipped: " + eq);
+        for (String m : c.raw) Cosmetics.handle(m);
+        check(Cosmetics.shown(c.id.toString(), Cosmetics.CLOAK) != null, "client shows the cloak");
+        cmd("equip", "Caper", "cloak", "red_cloak");
+        check("red_cloak".equals(((Map<?, ?>) c.last("state").get("equipped")).get("cloak")), "admin equip cloak");
+    }
+
     static List<String> admin = new ArrayList<>();
     static void cmd(String... args) {
         core.command(new ShopCore.Sender() {
@@ -127,7 +196,7 @@ public class ShopTest {
                 "questCategories: " + cats);
         Map<?, ?> withCatalog = null;
         for (Map<?, ?> m : mighty.got) if (m.containsKey("catalog")) withCatalog = m;
-        check(withCatalog != null && ((List<?>) withCatalog.get("catalog")).size() == 19, "catalog has 19 items");
+        check(withCatalog != null && ((List<?>) withCatalog.get("catalog")).size() == 22, "catalog has 22 items");
         check(mighty.coins() == 50, "day 1 login reward: " + mighty.coins());
         check(String.valueOf(mighty.last("notify").get("message")).contains("+50 PlebMc Coins"), "login popup");
         check(mighty.done("login") && "general".equals(mighty.quest("login").get("category")) && ((Number) mighty.quest("login").get("streak")).intValue() == 1,
@@ -339,6 +408,8 @@ public class ShopTest {
         check(back.coins() == keep + 75, "coins survive restart, day 2 reward: " + back.coins() + " vs " + keep);
         check(((List<?>) back.last("state").get("owned")).contains("crown") && back.progress("login_5") == 2, "progress survives restart");
         check(((Map<?, ?>) back.quest("login")).get("reward").equals(75.0), "streak day 2");
+
+        cloaks(dir, log);
 
         System.out.println(checks - failed + "/" + checks + " plugin checks passed");
         int q = QuestsTest.run();

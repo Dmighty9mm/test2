@@ -9,6 +9,9 @@ import java.util.Map;
 import net.plebmc.client.apollo.Apollo;
 import net.plebmc.client.mods.ClickCounter;
 import net.plebmc.client.mods.ClientView;
+import net.plebmc.client.mods.Gear;
+import net.plebmc.client.mods.Mate;
+import net.plebmc.client.mods.Storm;
 import net.plebmc.client.mods.HudBox;
 import net.plebmc.client.mods.Mod;
 import net.plebmc.client.mods.ModRegistry;
@@ -91,9 +94,42 @@ public class ClientModsTest {
                         return button == 0 ? 9 : 2;
                 }
 
+                List<Gear> armor = new ArrayList<>(Arrays.asList(null, null, null, null));
+                Gear held;
+                Storm storm;
+                List<Mate> squad = new ArrayList<>();
+                float health = 20f;
+                Map<String, Integer> supplies = new HashMap<>();
+
                 @Override
-                public List<String> armor() {
-                        return Collections.emptyList();
+                public List<Gear> armor() {
+                        return armor;
+                }
+
+                @Override
+                public Gear held() {
+                        return held;
+                }
+
+                @Override
+                public Storm storm() {
+                        return storm;
+                }
+
+                @Override
+                public List<Mate> squad() {
+                        return squad;
+                }
+
+                @Override
+                public float health() {
+                        return health;
+                }
+
+                @Override
+                public int supply(String g) {
+                        Integer n = supplies.get(g);
+                        return n == null ? 0 : n;
                 }
 
                 @Override
@@ -154,6 +190,84 @@ public class ClientModsTest {
                 check(keys.texts.get(4).text.equals("LMB 9") && keys.texts.get(4).argb == HudBox.TEXT_PRESSED, "LMB cell shows CPS");
                 check(reg.armor.layout(v, M) == null && reg.armor.preview(v, M) != null,
                                 "armor hides with no armor but previews in the editor");
+                check(reg.armor.preview(v, M).items.size() == 5 && reg.armor.preview(v, M).items.get(0).id.equals("diamond_helmet"),
+                                "armor preview draws item icons, held item included");
+                reg.armor.setEnabled(true);
+                v.armor.set(0, new Gear(null, "iron_helmet", "Iron Helmet", 1, 30, 165));
+                v.armor.set(3, new Gear(null, "diamond_boots", "Diamond Boots", 1, 429, 429));
+                HudBox ab = reg.armor.layout(v, M);
+                check(ab.items.size() == 2 && ab.items.get(0).id.equals("iron_helmet") && ab.items.get(1).id.equals("diamond_boots"),
+                                "armor shows worn pieces as icons, head first, empty slots skipped");
+                check(ab.texts.get(0).text.equals("30") && ab.texts.get(0).argb == 0xFFFFAA00
+                                && ab.texts.get(1).argb == 0xFF55FF55, "durability colored by wear");
+                reg.armor.setting("durability").set(1);
+                check(reg.armor.layout(v, M).texts.get(0).text.equals("18%"), "durability as percent");
+                reg.armor.setting("durability").set(2);
+                check(reg.armor.layout(v, M).texts.isEmpty(), "durability text hidden");
+                reg.armor.setting("layout").set(1);
+                HudBox row = reg.armor.layout(v, M);
+                check(row.items.get(1).x > row.items.get(0).x && row.items.get(1).y == row.items.get(0).y, "horizontal armor row");
+                v.held = new Gear(null, "arrow", "Arrow", 32, 0, 0);
+                check(reg.armor.layout(v, M).items.size() == 3, "held item added");
+                reg.armor.resetSettings();
+                check(reg.armor.layout(v, M).texts.get(2).text.equals("32"), "held stack shows its count");
+
+                // PlebNite mods
+                check(Mod.PLEBNITE.equals(reg.compass.category()) && Mod.PLEBNITE.equals(reg.squadPing.category())
+                                && Mod.PLEBNITE.equals(reg.storm.category()) && Mod.PLEBNITE.equals(reg.squad.category())
+                                && Mod.PLEBNITE.equals(reg.supplies.category()) && Mod.PLEBNITE.equals(reg.lowHealth.category()),
+                                "PlebNite category holds the PlebNite mods");
+                check(reg.storm.layout(v, M) == null && reg.storm.preview(v, M) != null, "storm hidden without a border");
+                v.storm = new Storm(0, 0, 200, 100, 65_000, 42.7);
+                HudBox sb = reg.storm.layout(v, M);
+                check(sb.texts.get(0).text.equals("Storm 42m away") && sb.texts.get(1).text.equals("Closing  1:05"),
+                                "storm distance and closing timer: " + sb.texts.get(0).text);
+                v.storm = new Storm(0, 0, 200, 200, 0, -7.2);
+                sb = reg.storm.layout(v, M);
+                check(sb.texts.get(0).text.startsWith("IN THE STORM  8m") && sb.texts.get(0).argb == 0xFFFF5555
+                                && sb.texts.get(1).text.equals("Holding"), "outside the storm warns in red");
+                v.storm = new Storm(0, 0, Storm.NO_STORM * 30, Storm.NO_STORM * 30, 0, 1e6);
+                check(reg.storm.layout(v, M) == null, "vanilla default border is not a storm");
+                // compass points to the safe zone center
+                v.storm = new Storm(-12.34, 900, 200, 200, 0, 20); // due north of the player, who faces north
+                HudBox cb = reg.compass.layout(v, M);
+                boolean centerSquare = false;
+                for (HudBox.Rect r : cb.rects) {
+                        centerSquare |= r.argb == 0xFFFFFFFF && r.w == 5 && r.h == 1 && Math.abs(r.x + 2 - Mods.Compass.WIDTH / 2) <= 1;
+                }
+                check(centerSquare, "compass safe-zone square straight ahead");
+                v.storm = null;
+
+                check(reg.squad.layout(v, M) == null && reg.squad.preview(v, M) != null, "squad hidden without a team");
+                v.squad.add(new Mate("Bob", 0xFF55FFFF, 12, 10f, 20f, 0f));
+                v.squad.add(new Mate("Alice", 0xFFFF5555, -1, -1f, 20f, Float.NaN));
+                HudBox sq = reg.squad.layout(v, M);
+                check(sq.texts.size() == 3 && sq.texts.get(0).text.equals("Bob") && sq.texts.get(1).text.equals("12m")
+                                && sq.texts.get(2).text.equals("Alice"), "squad names and distance");
+                boolean halfBar = false;
+                for (HudBox.Rect r : sq.rects) {
+                        halfBar |= r.w == 14 && r.argb == 0xFFFFFF55;
+                }
+                check(halfBar, "squad health bar at half health is yellow");
+
+                reg.supplies.setEnabled(true);
+                check(reg.supplies.layout(v, M) == null, "supplies hidden when you carry none");
+                v.supplies.put("blocks", 64);
+                v.supplies.put("pearls", 2);
+                HudBox su = reg.supplies.layout(v, M);
+                check(su.items.size() == 2 && su.items.get(0).id.equals("planks") && su.texts.get(0).text.equals("64")
+                                && su.items.get(1).id.equals("ender_pearl"), "supplies count blocks and pearls");
+                reg.supplies.setting("empty").set(1);
+                check(reg.supplies.layout(v, M).items.size() == Mods.Supplies.GROUPS.length, "show empty supplies");
+
+                check(reg.lowHealth.intensity(20f, 0) == 0f && reg.lowHealth.intensity(4f, 0) > 0f
+                                && reg.lowHealth.intensity(0f, 0) == 0f, "low health warning only when low (and alive)");
+                reg.lowHealth.setting("pulse").set(0);
+                check(reg.lowHealth.intensity(1f, 0) > reg.lowHealth.intensity(7f, 0), "stronger the lower you are");
+                reg.lowHealth.resetSettings();
+                reg.armor.setEnabled(false);
+                reg.supplies.setEnabled(false);
+                reg.supplies.resetSettings();
 
                 // persistence (HUD editor storage layer)
                 Map<String, String> mem = new HashMap<>();

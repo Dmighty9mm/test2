@@ -59,8 +59,21 @@ public final class BungeeShop extends Plugin implements Listener {
 					Files.copy(in, cfg.toPath());
 				}
 			}
+			// the sample cloak textures the default config uses (never overwrites yours)
+			for (String c : new String[] { "cloaks/plebmc.png", "cloaks/storm.png" }) {
+				File out = new File(getDataFolder(), c);
+				if (!out.exists()) {
+					out.getParentFile().mkdirs();
+					try (InputStream in = getResourceAsStream(c)) {
+						if (in != null) {
+							Files.copy(in, out.toPath());
+						}
+					}
+				}
+			}
 			core = new ShopCore(new BungeeNet(), new Store(new File(getDataFolder(), "players.yml"), getLogger()),
 					Cfg.load(cfg), getLogger());
+			core.folder(getDataFolder());
 		} catch (IOException e) {
 			getLogger().severe("Could not load config.yml: " + e);
 			return;

@@ -8,7 +8,7 @@ work on every server behind the proxy.
 - **Earning**: a daily login reward with a streak, coins for time online, and daily and
   weekly quests in **categories**: by default **General** (counts on every server) and
   **PlebNite** (counts only on PlebNite). The client shows All / General / PlebNite.
-- **Spending**: hats and trails. Everyone on the PlebMc client sees each other's (per server).
+- **Spending**: hats, trails and HD cloaks. Everyone on the PlebMc client sees each other's (per server).
 - **plebmc.top login**: players log in to the client with their website (NamelessMC)
   account and see their website name and rank (Right Shift > Account), and log out.
 
@@ -70,7 +70,8 @@ backend.
 **Upgrading from the Lobby/PlebNite version:** an existing `config.yml` is never
 overwritten, so replace its `quests:` section with the one from the new default config
 (and add `category: general` under `login-rewards`). Coins, items, PlebNite quest progress
-and login streaks are kept.
+and login streaks are kept. For cloaks, copy the three cloak lines from the default
+config's `items:` into yours (the sample images are put in `cloaks/` on the next start).
 
 ## Earning
 
@@ -107,13 +108,32 @@ Passwords never go through the game, and the API key never leaves the proxy.
 | `/plebshop balance <player>` / `info <player>` | Someone's coins (and what they own) |
 | `/plebshop progress <player> <type> [amount]` | Count quest progress on the server they're on |
 | `/plebshop give <player> <item>` / `remove` | Give or take an item for free |
-| `/plebshop equip <player> <hat\|trail> <item\|none>` | Put something on a player |
+| `/plebshop equip <player> <hat\|trail\|cloak> <item\|none>` | Put something on a player |
 
 ## Items
 
-Each item in `items:` has a `category` (`hat` or `trail`), a `render` (the look the
-client draws), a `price` (`-1` = not for sale, give it by command), and optionally a
-`color` (`'#RRGGBB'`, tints a hat), a `description` and a `permission` needed to buy it.
+Each item in `items:` has a `category` (`hat`, `trail` or `cloak`), a `render` (the look the
+client draws; leave it out for cloaks), a `price` (`-1` = not for sale, give it by command), and optionally a
+`color` (`'#RRGGBB'`, tints a hat or colors a plain cloak), a `description` and a `permission` needed to buy it.
+
+### HD cloaks
+
+Put a PNG in the plugin folder (for example `plugins/PlebMcShop/cloaks/mycloak.png`) and add:
+
+```yaml
+  my_cloak: {name: 'My Cloak', category: cloak, texture: 'cloaks/mycloak.png', price: 5000, description: 'HD cloak'}
+```
+
+then `/plebshop reload`. The image uses the normal Minecraft cape layout: 64x32, or any
+multiple of it for more detail (128x64, 256x128, **512x256**, 1024x512, up to 4096x2048,
+4 MB max). The art people see on your back is the 10x16 box at (1,1) of the 64x32 layout
+(at 512x256: the 80x128 box starting at (8,8)); the inside is the box at (12,1), the edges
+are the 1-pixel strips around them. Any cape template works. Players' clients download the
+image from the proxy once and keep it until the file changes. A file with the wrong size
+or outside the plugin folder is refused with a warning in the console, and the cloak shows
+as a plain one in its `color`. Two examples ship with the plugin (`cloaks/plebmc.png`,
+`cloaks/storm.png`, copied into the folder on first start) and are used by
+`plebmc_cloak` and `storm_cloak` in the default config.
 
 Hats: `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`.
 Trails: `flame`, `hearts`, `notes`, `rainbow`, `cloud`, `portal`, `emerald`, `snow`.

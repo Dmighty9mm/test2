@@ -114,12 +114,20 @@ messages:
   playtime-message: '+%coins% %currency%'
 
 # The shop. Each item:
-#   category: hat or trail
+#   category: hat, trail or cloak
 #   render:   the look the client draws
 #             hats:   tophat, crown, halo, partyhat, beanie, horns
 #             trails: flame, hearts, notes, rainbow, cloud, portal, emerald, snow
+#             cloaks: leave it out
 #   price:    coins (-1 = not for sale, give it with /plebshop give)
-#   color:    optional hat tint, like '#FFD700'
+#   color:    optional tint, like '#FFD700' (a cloak without a texture is this color)
+#   texture:  cloaks only: a PNG in this plugin's folder, like 'cloaks/mycloak.png'.
+#             Use the normal Minecraft cape layout (64x32) or any multiple of it for
+#             high resolution: 128x64, 256x128, 512x256 (8x), 1024x512, up to 4096x2048.
+#             The art for the back of the cloak goes in the 10x16 box at (1,1) of the
+#             64x32 layout (at 512x256 that's the 80x128 box at (8,8)). Players download
+#             it from the proxy once and keep it until it changes. /plebshop reload
+#             picks up new or edited files.
 #   permission: optional, needed to buy it
 # The id (the key) is what's saved, so don't rename ids players already own.
 items:
@@ -143,3 +151,7 @@ items:
   portal:  {name: 'Ender Trail', category: trail, render: portal, price: 3500, description: 'Ender portal sparkles'}
   emerald: {name: 'Emerald Trail', category: trail, render: emerald, price: 2000, description: 'Green sparkles'}
   snow:    {name: 'Snow Trail', category: trail, render: snow, price: 2000, description: 'Snowflakes'}
+
+  plebmc_cloak: {name: 'PlebMc Cloak', category: cloak, texture: 'cloaks/plebmc.png', price: 6000, description: 'HD cloak with the PlebMc mark'}
+  storm_cloak:  {name: 'Storm Cloak', category: cloak, texture: 'cloaks/storm.png', price: 9000, description: 'The storm, on your back (HD)'}
+  red_cloak:    {name: 'Red Cloak', category: cloak, color: '#B71C1C', price: 1500, description: 'A plain red cloak'}

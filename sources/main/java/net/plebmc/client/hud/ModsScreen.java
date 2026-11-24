@@ -15,7 +15,7 @@ import net.plebmc.client.mods.Mod;
  */
 public final class ModsScreen extends PlebScreen {
 
-	static final String[] CATEGORIES = { null, Mod.HUD, Mod.GAMEPLAY, Mod.SQUAD, Mod.PERFORMANCE };
+	static final String[] CATEGORIES = { null, Mod.PLEBNITE, Mod.HUD, Mod.GAMEPLAY, Mod.PERFORMANCE };
 	private static final String SECRET = "fpslarp";
 
 	private String category;
@@ -36,8 +36,8 @@ public final class ModsScreen extends PlebScreen {
 		if (Mod.GAMEPLAY.equals(category)) {
 			return "gameplay";
 		}
-		if (Mod.SQUAD.equals(category)) {
-			return "squad";
+		if (Mod.PLEBNITE.equals(category)) {
+			return "plebnite";
 		}
 		if (Mod.PERFORMANCE.equals(category)) {
 			return "performance";

@@ -53,6 +53,23 @@ public final class HudBox {
                 }
         }
 
+        /** One item icon (16x16): the game stack when there is one, else the item named by id. */
+        public static final class Item {
+                public final Object stack;
+                public final String id;
+                public final int x;
+                public final int y;
+
+                Item(Object stack, String id, int x, int y) {
+                        this.stack = stack;
+                        this.id = id;
+                        this.x = x;
+                        this.y = y;
+                }
+        }
+
+        public static final int ITEM = 16;
+
         /** Text measurement (EaglerGuiImpl.widthOf in the browser). */
         public interface Measure {
                 int width(String s);
@@ -60,6 +77,7 @@ public final class HudBox {
 
         public final List<Rect> rects = new ArrayList<>();
         public final List<Text> texts = new ArrayList<>();
+        public final List<Item> items = new ArrayList<>();
         public int width;
         public int height;
 
@@ -67,6 +85,20 @@ public final class HudBox {
                 rects.add(new Rect(x, y, w, h, argb));
                 width = Math.max(width, x + w);
                 height = Math.max(height, y + h);
+                return this;
+        }
+
+        public HudBox item(Object stack, String id, int x, int y) {
+                items.add(new Item(stack, id, x, y));
+                width = Math.max(width, x + ITEM);
+                height = Math.max(height, y + ITEM);
+                return this;
+        }
+
+        /** Grows the box to at least w x h (for text that reaches past the last rect). */
+        public HudBox size(int w, int h) {
+                width = Math.max(width, w);
+                height = Math.max(height, h);
                 return this;
         }
 

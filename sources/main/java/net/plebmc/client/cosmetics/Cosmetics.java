@@ -35,7 +35,8 @@ public final class Cosmetics {
 
 	public static final String HAT = "hat";
 	public static final String TRAIL = "trail";
-	public static final String[] CATEGORIES = { HAT, TRAIL };
+	public static final String CLOAK = "cloak";
+	public static final String[] CATEGORIES = { HAT, TRAIL, CLOAK };
 
 	/** One shop item. {@link #render} is the look the client draws (see {@link #RENDERS}). */
 	public static final class Item {
@@ -49,6 +50,9 @@ public final class Cosmetics {
 		public final int color;
 		/** False for items that are only given out (events, ranks), never sold. */
 		public boolean forSale = true;
+		/** Cloaks: the server's texture id (a content hash), or null for a plain colored cloak. */
+		public String texture;
+		public int textureWidth;
 
 		public Item(String id, String name, String category, String render, String description, int price,
 				int color) {
@@ -136,7 +140,7 @@ public final class Cosmetics {
 
 	/** Every look this client knows how to draw. A catalog item with another render id is hidden. */
 	public static final String[] RENDERS = { "tophat", "crown", "halo", "partyhat", "beanie", "horns", "flame",
-			"hearts", "notes", "rainbow", "cloud", "portal", "emerald", "snow" };
+			"hearts", "notes", "rainbow", "cloud", "portal", "emerald", "snow", "cloak" };
 
 	/** Shown until the server sends its own catalog (prices are the server's to set). */
 	static final List<Item> DEFAULT_CATALOG = Collections.unmodifiableList(java.util.Arrays.asList(
@@ -153,7 +157,8 @@ public final class Cosmetics {
 			new Item("cloud", "Cloud Trail", TRAIL, "cloud", "Puffs of cloud", 400, -1),
 			new Item("portal", "Ender Trail", TRAIL, "portal", "Ender portal sparkles", 900, -1),
 			new Item("emerald", "Emerald Trail", TRAIL, "emerald", "Green sparkles", 800, -1),
-			new Item("snow", "Snow Trail", TRAIL, "snow", "Snowflakes", 500, -1)));
+			new Item("snow", "Snow Trail", TRAIL, "snow", "Snowflakes", 500, -1),
+			new Item("red_cloak", "Red Cloak", CLOAK, "cloak", "A plain red cloak", 1500, 0xB71C1C)));
 
 	private static List<Item> catalog = DEFAULT_CATALOG;
 	private static boolean serverCatalog;
@@ -222,7 +227,69 @@ public final class Cosmetics {
 		equipped.clear();
 		others.clear();
 		message = null;
+		textureParts.clear();
+		requested.clear();
 		version++;
+	}
+
+	// ==================== cloak textures ====================
+
+	/** Downloaded cloak PNGs by texture id; kept across servers (the id is a content hash). */
+	private static final Map<String, byte[]> textures = new java.util.LinkedHashMap<>();
+	private static final Map<String, String[]> textureParts = new HashMap<>();
+	private static final Set<String> requested = new HashSet<>();
+	static final int MAX_PARTS = 256;
+	static final int MAX_TEXTURES = 48;
+
+	/** The PNG for a texture id once it has arrived; asks the server for it the first time. */
+	public static byte[] texture(String id) {
+		if (id == null) {
+			return null;
+		}
+		byte[] b = textures.get(id);
+		if (b == null && !requested.contains(id) && send(obj("type", "texture", "id", id))) {
+			requested.add(id);
+		}
+		return b;
+	}
+
+	private static void textureChunk(Map<?, ?> m) {
+		String id = str(m.get("id"), null);
+		int part = (int) num(m.get("part"), -1);
+		int parts = (int) num(m.get("parts"), -1);
+		String data = str(m.get("data"), null);
+		if (id == null || data == null || parts < 1 || parts > MAX_PARTS || part < 0 || part >= parts
+				|| textures.containsKey(id)) {
+			return;
+		}
+		String[] got = textureParts.get(id);
+		if (got == null || got.length != parts) {
+			if (textureParts.size() > 8) {
+				textureParts.clear();
+			}
+			got = new String[parts];
+			textureParts.put(id, got);
+		}
+		got[part] = data;
+		StringBuilder all = new StringBuilder();
+		for (String g : got) {
+			if (g == null) {
+				return; // more to come
+			}
+			all.append(g);
+		}
+		textureParts.remove(id);
+		byte[] png;
+		try {
+			png = net.plebmc.client.apollo.proto.Base64.decode(all.toString());
+		} catch (RuntimeException e) {
+			warn("bad cloak texture " + id);
+			return;
+		}
+		if (textures.size() >= MAX_TEXTURES) {
+			textures.remove(textures.keySet().iterator().next());
+		}
+		textures.put(id, png);
 	}
 
 	public static void setSelf(String uuid) {
@@ -330,6 +397,8 @@ public final class Cosmetics {
 					}
 				}
 			}
+		} else if ("texture".equals(type)) {
+			textureChunk(m);
 		} else if ("account".equals(type)) {
 			account.update(m);
 		} else if ("notify".equals(type)) {
@@ -370,7 +439,7 @@ public final class Cosmetics {
 		if (id == null || cat == null) {
 			return null;
 		}
-		String render = str(m.get("render"), id);
+		String render = str(m.get("render"), CLOAK.equals(cat) ? "cloak" : id);
 		if (!knownRender(render)) {
 			return null; // a look this client version can't draw
 		}
@@ -392,6 +461,11 @@ public final class Cosmetics {
 		Item it = new Item(id, str(m.get("name"), id), cat, render, str(m.get("description"), ""),
 				(int) Math.max(0, Math.min(Integer.MAX_VALUE, num(m.get("price"), 0))), color);
 		it.forSale = !Boolean.FALSE.equals(m.get("forSale"));
+		String tex = str(m.get("texture"), null);
+		if (CLOAK.equals(cat) && tex != null && tex.matches("[0-9a-f]{8,64}")) {
+			it.texture = tex;
+			it.textureWidth = (int) Math.max(0, num(m.get("textureWidth"), 0));
+		}
 		return it;
 	}
 

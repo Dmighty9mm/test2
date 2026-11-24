@@ -85,6 +85,8 @@ public final class ShopScreen extends PlebScreen {
 					category = c;
 					page = 0;
 					selectedId = null;
+					// cloaks are on your back: turn the preview around
+					yawTarget = Cosmetics.CLOAK.equals(c) ? FRONT + 180f : FRONT;
 					rebuild();
 				}
 			});
@@ -181,7 +183,7 @@ public final class ShopScreen extends PlebScreen {
 
 		ItemCard(Cosmetics.Item it) {
 			this.it = it;
-			this.tip = (it.description.isEmpty() ? it.name : it.description) + (Cosmetics.HAT.equals(it.category) || Cosmetics.TRAIL.equals(it.category) ? ". Click to try it on." : "");
+			this.tip = (it.description.isEmpty() ? it.name : it.description) + ". Click to try it on.";
 		}
 
 		@Override
@@ -196,7 +198,13 @@ public final class ShopScreen extends PlebScreen {
 			// swatch with the item's look
 			int tint = it.color >= 0 ? 0xFF000000 | it.color : acc;
 			Ui.gradient(x + 1, y + 1, w - 2, 22, Ui.alpha(tint, 0x50), Ui.alpha(tint, 0x10));
-			Ui.icon(Cosmetics.HAT.equals(it.category) ? "hat" : "trail", x + w / 2 - 9, y + 3, 2, tint);
+			if (Cosmetics.CLOAK.equals(it.category)) {
+				// the cloak's own art (HD once it has downloaded)
+				Ui.rect(x + w / 2 - 8, y + 2, 16, 20, 0xFF000000);
+				CloakLayer.thumb(it, x + w / 2 - 7, y + 3, 14, 18);
+			} else {
+				Ui.icon(Cosmetics.HAT.equals(it.category) ? "hat" : "trail", x + w / 2 - 9, y + 3, 2, tint);
+			}
 			if (trying) {
 				Ui.icon("eye", x + 4, y + 4, 1, acc);
 			}
@@ -223,6 +231,9 @@ public final class ShopScreen extends PlebScreen {
 				return;
 			}
 			selectedId = it.id;
+			if (Cosmetics.CLOAK.equals(it.category)) {
+				yawTarget = FRONT + 180f;
+			}
 			// try it on right away (not if it's what you already wear)
 			if (!it.id.equals(Cosmetics.equippedId(it.category))) {
 				Cosmetics.setPreview(it.category, it.id);

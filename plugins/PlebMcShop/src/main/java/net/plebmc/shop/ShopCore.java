@@ -71,6 +71,15 @@ final class ShopCore {
 	private final Map<UUID, Long> lastLinkTry = new HashMap<>();
 	private static final long LINK_COOLDOWN_MS = 4000;
 
+	/** The plugin folder (cloak textures are read from it); null in tests that don't need it. */
+	private java.io.File folder;
+
+	/** Sets the plugin folder and re-reads the catalog so cloak textures load. */
+	synchronized void folder(java.io.File f) {
+		folder = f;
+		load(config);
+	}
+
 	ShopCore(Net net, Store store, Cfg config, Logger log) {
 		this(net, store, config, log, Website.REAL);
 	}
@@ -85,7 +94,7 @@ final class ShopCore {
 
 	synchronized void load(Cfg cfg) {
 		this.config = cfg;
-		catalog = new Catalog(cfg.section("items"));
+		catalog = new Catalog(cfg.section("items"), folder);
 		quests = new Quests(cfg);
 		for (String w : catalog.warnings()) {
 			log.warning(w);
@@ -327,6 +336,9 @@ final class ShopCore {
 		case "logout":
 			logout(p);
 			break;
+		case "texture":
+			texture(p, str(m.get("id")));
+			break;
 		default:
 			break;
 		}
@@ -517,8 +529,46 @@ final class ShopCore {
 		}
 	}
 
+	/** Base64 characters per texture message (a plugin message stays far under 32 KB). */
+	static final int TEXTURE_CHUNK = 24_000;
+	private static final long TEXTURE_RESEND_MS = 15_000;
+	private final Map<String, Long> textureSent = new HashMap<>();
+
+	/**
+	 * Sends a cloak texture the client asked for, split into parts. Only
+	 * textures in the catalog, and each one at most every 15 seconds per
+	 * player, so a client can't make the proxy stream images in a loop.
+	 */
+	private void texture(UUID p, String hash) {
+		Catalog.Item it = catalog.byTexture(hash);
+		if (it == null || it.png == null) {
+			return;
+		}
+		long now = net.now();
+		String key = p + "/" + hash;
+		Long last = textureSent.get(key);
+		if (last != null && now - last < TEXTURE_RESEND_MS && now >= last) {
+			return;
+		}
+		if (textureSent.size() > 4096) {
+			textureSent.clear();
+		}
+		textureSent.put(key, now);
+		String b64 = java.util.Base64.getEncoder().encodeToString(it.png);
+		int parts = (b64.length() + TEXTURE_CHUNK - 1) / TEXTURE_CHUNK;
+		for (int i = 0; i < parts; i++) {
+			Map<String, Object> m = new LinkedHashMap<>();
+			m.put("type", "texture");
+			m.put("id", it.textureHash);
+			m.put("part", i);
+			m.put("parts", parts);
+			m.put("data", b64.substring(i * TEXTURE_CHUNK, Math.min(b64.length(), (i + 1) * TEXTURE_CHUNK)));
+			send(p, m);
+		}
+	}
+
 	private void equip(UUID p, String category, String id) {
-		if (!Catalog.HAT.equals(category) && !Catalog.TRAIL.equals(category)) {
+		if (!Catalog.isCategory(category)) {
 			return;
 		}
 		Store.Data d = data(p);
@@ -756,12 +806,12 @@ final class ShopCore {
 		}
 		case "equip": {
 			if (a.length < 4) {
-				s.reply(prefix + color("&cUsage: /" + label + " equip <player> <hat|trail> <item|none>"));
+				s.reply(prefix + color("&cUsage: /" + label + " equip <player> <hat|trail|cloak> <item|none>"));
 				return;
 			}
 			UUID id = resolve(a[1]);
 			String cat = a[2].toLowerCase(Locale.ROOT);
-			if (id == null || (!Catalog.HAT.equals(cat) && !Catalog.TRAIL.equals(cat))) {
+			if (id == null || !Catalog.isCategory(cat)) {
 				s.reply(prefix + color("&cUnknown player or category."));
 				return;
 			}
@@ -799,7 +849,8 @@ final class ShopCore {
 			if (sub.equals("info")) {
 				s.reply(color("&7Owned: &f" + (d.owned.isEmpty() ? "nothing" : String.join(", ", d.owned))));
 				s.reply(color("&7Hat: &f" + d.equipped.getOrDefault(Catalog.HAT, "none") + "  &7Trail: &f"
-						+ d.equipped.getOrDefault(Catalog.TRAIL, "none")));
+						+ d.equipped.getOrDefault(Catalog.TRAIL, "none") + "  &7Cloak: &f"
+						+ d.equipped.getOrDefault(Catalog.CLOAK, "none")));
 				s.reply(color("&7Quests done: &f" + (d.done.isEmpty() ? "none" : String.join(", ", d.done))));
 				Website.Account acc = accounts.get(id);
 				s.reply(color("&7Website: &f" + (acc == null ? "not logged in (or offline)" : acc.username + " " + acc.groups)));
@@ -872,7 +923,7 @@ final class ShopCore {
 			s.reply(prefix + color("&fPlebMc Coins, quests and cosmetics"));
 			for (String line : Arrays.asList("reload", "quests", "list", "coins <give|take|set> <player> <amount>",
 					"balance <player>", "info <player>", "progress <player> <type> [amount]", "give <player> <item>",
-					"remove <player> <item>", "equip <player> <hat|trail> <item|none>")) {
+					"remove <player> <item>", "equip <player> <hat|trail|cloak> <item|none>")) {
 				s.reply(color("&7/" + label + " " + line));
 			}
 		}
@@ -893,7 +944,7 @@ final class ShopCore {
 		} else if (a.length == 3 && a[0].equalsIgnoreCase("progress")) {
 			options = Arrays.asList("kill", "win", "match", "death", "play", "join", "chat");
 		} else if (a.length == 3 && a[0].equalsIgnoreCase("equip")) {
-			options = Arrays.asList("hat", "trail");
+			options = Catalog.CATEGORIES;
 		} else if ((a.length == 3 && (a[0].equalsIgnoreCase("give") || a[0].equalsIgnoreCase("remove")))
 				|| (a.length == 4 && a[0].equalsIgnoreCase("equip"))) {
 			options = new ArrayList<>();

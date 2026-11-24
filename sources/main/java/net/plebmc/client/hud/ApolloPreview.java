@@ -76,6 +76,28 @@ final class ApolloPreview {
 				+ "{\"id\":\"play_30\",\"category\":\"plebnite\",\"cycle\":\"demo\",\"name\":\"Play PlebNite for 30 minutes\",\"description\":\"Be on PlebNite\",\"period\":\"daily\",\"progress\":30,\"goal\":30,\"reward\":60,\"done\":true},"
 				+ "{\"id\":\"kills_40\",\"category\":\"plebnite\",\"cycle\":\"demo\",\"name\":\"Get 40 kills\",\"description\":\"Eliminate players this week\",\"period\":\"weekly\",\"progress\":17,\"goal\":40,\"reward\":600},"
 				+ "{\"id\":\"wins_5\",\"category\":\"plebnite\",\"cycle\":\"demo\",\"name\":\"Win 5 matches\",\"description\":\"Be the last one standing 5 times\",\"period\":\"weekly\",\"progress\":1,\"goal\":5,\"reward\":750}]}");
+		// a shop with an HD cloak in it (the client downloads the image like it would from the proxy)
+		StringBuilder cat = new StringBuilder("{\"type\":\"state\",\"catalog\":[");
+		for (net.plebmc.client.cosmetics.Cosmetics.Item it : net.plebmc.client.cosmetics.Cosmetics.catalog()) {
+			cat.append("{\"id\":\"").append(it.id).append("\",\"name\":\"").append(it.name).append("\",\"category\":\"")
+					.append(it.category).append("\",\"render\":\"").append(it.render).append("\",\"price\":").append(it.price)
+					.append(it.color >= 0 ? ",\"color\":" + it.color : "").append(",\"description\":\"").append(it.description).append("\"},");
+		}
+		cat.append("{\"id\":\"storm_cloak\",\"name\":\"Storm Cloak\",\"category\":\"cloak\",\"render\":\"cloak\",\"price\":9000,\"texture\":\"")
+				.append(PreviewCloak.ID).append("\",\"textureWidth\":512,\"description\":\"The storm, on your back (HD)\"}],")
+				.append("\"owned\":[\"tophat\",\"crown\",\"flame\",\"storm_cloak\"],")
+				.append("\"equipped\":{\"hat\":\"crown\",\"trail\":\"flame\",\"cloak\":\"storm_cloak\"}}");
+		net.plebmc.client.cosmetics.Cosmetics.handle(cat.toString());
+		net.plebmc.client.cosmetics.Cosmetics.handle("{\"type\":\"texture\",\"id\":\"" + PreviewCloak.ID
+				+ "\",\"part\":0,\"parts\":1,\"data\":\"" + PreviewCloak.PNG_BASE64 + "\"}");
+		// the storm: a shrinking world border nearby (client side only)
+		try {
+			net.minecraft.world.border.WorldBorder wb = mc.theWorld.getWorldBorder();
+			wb.setCenter(p.posX + 60, p.posZ - 40);
+			wb.setTransition(260, 140, 95_000L);
+		} catch (Throwable t) {
+			// no world border in this world
+		}
 		net.plebmc.client.cosmetics.Cosmetics.handle("{\"type\":\"account\",\"enabled\":true,\"linked\":true,\"username\":\"PreviewPleb\","
 				+ "\"displayName\":\"PreviewPleb\",\"groups\":[\"Owner\",\"Member\"],\"staff\":true,\"site\":\"https://plebmc.top\"}");
 		net.plebmc.client.cosmetics.Cosmetics.handle("{\"type\":\"notify\",\"title\":\"\u00a7aQuest complete!\",\"message\":\"Daily login: +125 PlebMc Coins\"}");
@@ -84,6 +106,15 @@ final class ApolloPreview {
 	/** Takes everything the preview put on screen away again. */
 	static void clear() {
 		net.plebmc.client.cosmetics.Cosmetics.reset();
+		try {
+			net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getMinecraft();
+			if (mc.theWorld != null) {
+				mc.theWorld.getWorldBorder().setCenter(0, 0);
+				mc.theWorld.getWorldBorder().setTransition(6.0E7D);
+			}
+		} catch (Throwable t) {
+			// nothing to undo
+		}
 		String[] resets = { "team.v1.ResetTeamMembersMessage", "glow.v1.ResetGlowEffectsMessage",
 				"nametag.v1.ResetNametagsMessage", "waypoint.v1.ResetWaypointsMessage",
 				"beam.v1.ResetBeaconBeamsMessage", "cooldown.v1.ResetCooldownsMessage",

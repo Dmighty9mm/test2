@@ -34,6 +34,10 @@ public final class ModRegistry {
         public final Mods.Fullbright fullbright = add(new Mods.Fullbright());
         public final Mods.Compass compass = add(new Mods.Compass());
         public final Mods.SquadPing squadPing = add(new Mods.SquadPing());
+        public final Mods.StormTracker storm = add(new Mods.StormTracker());
+        public final Mods.Squad squad = add(new Mods.Squad());
+        public final Mods.Supplies supplies = add(new Mods.Supplies());
+        public final Mods.LowHealth lowHealth = add(new Mods.LowHealth());
         public final Mods.FpsBoost fpsBoost = add(new Mods.FpsBoost());
 
         private <T extends Mod> T add(T m) {

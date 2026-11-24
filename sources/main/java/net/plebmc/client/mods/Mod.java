@@ -97,7 +97,7 @@ public abstract class Mod {
 
         public static final String HUD = "HUD";
         public static final String GAMEPLAY = "Gameplay";
-        public static final String SQUAD = "Squad";
+        public static final String PLEBNITE = "PlebNite";
         public static final String PERFORMANCE = "Performance";
 
         private String category = GAMEPLAY;

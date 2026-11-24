@@ -13,7 +13,7 @@ get org/yaml/snakeyaml/2.2 snakeyaml-2.2.jar
 CP=$(ls lib/bungeecord-*-$V.jar | tr '\n' ':')lib/gson-2.8.0.jar:lib/snakeyaml-2.2.jar
 rm -rf build/classes && mkdir -p build/classes
 javac --release 8 -Xlint:-options -cp "$CP" -d build/classes $(find src/main/java -name '*.java')
-cp src/main/resources/bungee.yml src/main/resources/config.yml build/classes/
+cp -r src/main/resources/bungee.yml src/main/resources/config.yml src/main/resources/cloaks build/classes/
 rm -f PlebMcShop.jar
 jar cf PlebMcShop.jar -C build/classes .
 echo "built $(pwd)/PlebMcShop.jar"
