@@ -148,6 +148,9 @@ public final class SettingsScreen extends PlebScreen {
 			add(toggle("Clean holograms", "Hide \"Armor Stand\" labels and armor stand bodies on server holograms", lx,
 					y, lw, h, () -> pr.cleanHolograms, saved(() -> pr.cleanHolograms = !pr.cleanHolograms)), clip);
 			y += step;
+			add(toggle("Custom item models", net.plebmc.client.itemrender.PlebItems.status(), lx, y, lw, h,
+					() -> pr.customItemModels, saved(() -> pr.customItemModels = !pr.customItemModels)), clip);
+			y += step;
 			break;
 		default: // Developer
 			add(toggle("Developer mode", "Adds Apollo debug to the home screen", lx, y, lw, h, () -> pr.developer,

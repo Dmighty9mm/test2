@@ -1,6 +1,6 @@
 
 # Eagler Context Redacted Diff
-# Copyright (c) 2024 lax1dude. All rights reserved.
+# Copyright (c) 2026 lax1dude. All rights reserved.
 
 # Version: 1.0
 # Author: lax1dude
@@ -90,7 +90,19 @@
 ~ 								+ Item.itemRegistry.getNameForObject(item) + "\'");
 ~ 						LOGGER.warn(exception);
 
-> INSERT  132 : 133  @  132
+> INSERT  5 : 14  @  5
+
++ 		for (Entry<String, ResourceLocation> plebModel : net.plebmc.client.itemrender.PlebItems.itemModelLocations()
++ 				.entrySet()) {
++ 			try {
++ 				this.models.put(plebModel.getValue(), this.loadModel(plebModel.getValue()));
++ 				this.itemLocations.put(plebModel.getKey(), plebModel.getValue());
++ 			} catch (Exception exception) {
++ 				LOGGER.warn("Unable to load custom item model: \'" + plebModel.getValue() + "\'");
++ 			}
++ 		}
+
+> INSERT  127 : 128  @  127
 
 + 		boolean deferred = Minecraft.getMinecraft().gameSettings.shaders;
 

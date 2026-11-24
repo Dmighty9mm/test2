@@ -57,6 +57,11 @@ Every hook calls `net.plebmc.client.hud.PlebClient` or `PlebEntities`:
 | `RenderPlayer` / `LayerArmorBase` | `applyLimbs`, `armorHidden` | hidden body parts and armor |
 | `RenderTNTPrimed` | `tntLabel` | TNT countdown |
 | `LayerSheepWool` | `rainbowSheep` | rainbow sheep |
+| `Minecraft.refreshResources` | `PlebItems.onReload` | wrap 1.13+ packs, read custom item rules, add the `plebitems` pack |
+| `ModelBakery.loadItemModels` | `PlebItems.itemModelLocations` | bake the converted custom models and new-item models |
+| `ItemModelMesher.getItemModel(ItemStack)` | `PlebItems.itemModel` | swap in a custom model (all render paths: hand, GUI, dropped, frames) |
+| `LayerArmorBase.renderLayer` | `PlebItems.armorTexture` | netherite armor texture on players |
+| `LayerCustomHead.doRenderLayer` | `PlebItems.customHat` | pack hats (QualityArmory hats on quartz) drawn on heads like 1.16 |
 
 ### Safety rules
 
@@ -375,3 +380,21 @@ To block zoom from your own plugin over JSON on `apollo:json`:
   facts used for interoperability.
 - **`lunar-apollo-protobuf`** (npm, GPLv3) is not vendored. It was only read to
   extract field numbers and used as an independent encoder for test fixtures.
+
+## Custom item models (QualityArmory and other CustomModelData packs)
+
+Setting: **Settings > Behavior > Custom item models** (on by default). Code: `items/` (pure Java, tested) and `itemrender/` (game side).
+
+- **Rules** come from resource packs in the 1.14+ format: `assets/minecraft/models/item/<item>.json` with `overrides` and a `custom_model_data` predicate. `damage` / `damaged` predicates also work. The last matching override wins, like vanilla.
+- **Matching:** base item + CustomModelData first. If Via swapped the base item, a CustomModelData value used by exactly one model still matches. Items with no CustomModelData can match by display name against a model's file name.
+- **Conversion:** every model an override points at is flattened (parents), checked and rewritten for 1.8 once on resource reload (`ModelConverter`): rotations snapped to 1.8's allowed angles, element bounds clamped, missing textures dropped, 1.9 display transforms converted to 1.8's rotation order (`ItemTransforms`). A model that fails is skipped and the item keeps its normal look.
+- **Textures** are served under the `plebitems` domain so they never replace vanilla textures.
+- **Speed:** stacks with no NBT on items that have no rules take a fast path; others are cached (2048 entries, cleared on reload).
+- **Newer packs:** server packs with `pack_format` 4+ are wrapped (`ModernPackFilter`) so their vanilla models/blockstates don't break 1.8 items. Server packs with no or a bad SHA-1 are still accepted (downloaded each time).
+- **Totems and netherite:** items Via substitutes ("1.16 Netherite Sword", or a Via original-id tag) get PlebClient's own textures, including worn netherite armor.
+- **Bundled PlebNite pack:** the QualityArmory pack (sounds removed) is at `sources/resources/plebclient/plebnite-pack.zip`. It is imported once and used only on `*.plebmc.top`, after the server's own pack.
+- **Debug:** Settings > Developer > Item NBT log shows the held item's NBT, including CustomModelData.
+
+## Cosmetic crown
+
+The Crown hat is the "goldcrown-king" Blockbench model: `cosmetics/CrownModel.java` (boxes and UVs, generated from the .bbmodel) and `assets/plebitems/textures/cosmetics/crown.png`, drawn by `CosmeticLayer`. The other hats are still plain colored boxes.

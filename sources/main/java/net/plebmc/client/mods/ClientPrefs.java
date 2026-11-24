@@ -42,6 +42,10 @@ public final class ClientPrefs {
 	// ---- HUD ----
 	public boolean hudShadow = true;
 
+	// ---- custom items ----
+	/** Server guns, ammo and medkits from the resource pack, plus totems and netherite. On by default. */
+	public boolean customItemModels = true;
+
 	// ---- behavior ----
 	public static final String[] OPENS = { "Home", "Mods", "Quests", "Shop" };
 	/** What Right Shift opens. */
@@ -93,6 +97,7 @@ public final class ClientPrefs {
 		cleanHolograms = d.cleanHolograms;
 		developer = d.developer;
 		itemNbtLog = d.itemNbtLog;
+		customItemModels = d.customItemModels;
 	}
 
 	public void load(SettingsStore store) {
@@ -122,6 +127,7 @@ public final class ClientPrefs {
 		cleanHolograms = ProtoValues.asBool(m.get("cleanHolograms"), cleanHolograms);
 		developer = ProtoValues.asBool(m.get("developer"), developer);
 		itemNbtLog = ProtoValues.asBool(m.get("itemNbtLog"), itemNbtLog);
+		customItemModels = ProtoValues.asBool(m.get("customItems"), customItemModels);
 	}
 
 	public String serialize() {
@@ -138,6 +144,7 @@ public final class ClientPrefs {
 		m.put("cleanHolograms", cleanHolograms);
 		m.put("developer", developer);
 		m.put("itemNbtLog", itemNbtLog);
+		m.put("customItems", customItemModels);
 		return Json.write(m);
 	}
 

@@ -2,17 +2,21 @@ package net.plebmc.client.hud;
 
 import net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager;
 import net.lax1dude.eaglercraft.v1_8.opengl.WorldRenderer;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.AbstractClientPlayer;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.entity.RenderPlayer;
 import net.minecraft.client.renderer.entity.layers.LayerRenderer;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.util.ResourceLocation;
 import net.plebmc.client.cosmetics.Cosmetics;
+import net.plebmc.client.cosmetics.CrownModel;
 
 /**
  * Draws a player's equipped hat on their head (a RenderPlayer layer, so it
  * follows the head, sneaking, the inventory preview and third person). The
- * hats are built from flat-shaded boxes, so they need no textures.
+ * hats are built from flat-shaded boxes; the crown is a textured model
+ * (CrownModel).
  */
 public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> {
 
@@ -62,6 +66,9 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 
 	/** Draws one hat in head space (pixels, y down, origin at the neck). */
 	static void draw(String render, int tint, float time) {
+		if ("crown".equals(render) && texturedCrown()) {
+			return;
+		}
 		GlStateManager.disableTexture2D();
 		GlStateManager.disableLighting();
 		GlStateManager.disableCull();
@@ -95,6 +102,66 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 		GlStateManager.enableCull();
 		GlStateManager.enableLighting();
 		GlStateManager.enableTexture2D();
+	}
+
+	private static final ResourceLocation CROWN = new ResourceLocation("plebitems", CrownModel.TEXTURE);
+	private static boolean crownMissing;
+
+	/** The textured crown (CrownModel); false when its texture can't load, for the plain one. */
+	private static boolean texturedCrown() {
+		if (crownMissing) {
+			return false;
+		}
+		try {
+			Minecraft.getMinecraft().getTextureManager().bindTexture(CROWN);
+		} catch (Throwable t) {
+			crownMissing = true;
+			return false;
+		}
+		GlStateManager.enableTexture2D();
+		GlStateManager.disableLighting();
+		GlStateManager.disableCull();
+		GlStateManager.enableAlpha();
+		GlStateManager.color(1f, 1f, 1f, 1f);
+		GlStateManager.pushMatrix();
+		GlStateManager.scale(1.0F, -1.0F, 1.0F); // the model is y-up
+		Tessellator t = Tessellator.getInstance();
+		wr = t.getWorldRenderer();
+		wr.begin(7, DefaultVertexFormats.POSITION_TEX_COLOR);
+		float k = 1f / CrownModel.TEXTURE_SIZE;
+		for (float[] b : CrownModel.BOXES) {
+			float x0 = b[0], y0 = b[1], z0 = b[2], x1 = b[3], y1 = b[4], z1 = b[5];
+			// north (-z): u runs from +x to -x
+			tface(b, 6, k, 0.8f, x1, y1, z0, x0, y1, z0, x0, y0, z0, x1, y0, z0);
+			// south (+z)
+			tface(b, 10, k, 0.8f, x0, y1, z1, x1, y1, z1, x1, y0, z1, x0, y0, z1);
+			// east (+x): u runs from +z to -z
+			tface(b, 14, k, 0.62f, x1, y1, z1, x1, y1, z0, x1, y0, z0, x1, y0, z1);
+			// west (-x)
+			tface(b, 18, k, 0.62f, x0, y1, z0, x0, y1, z1, x0, y0, z1, x0, y0, z0);
+			// up: u along x, v from -z to +z
+			tface(b, 22, k, 1.0f, x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1);
+			// down: u along x, v from +z to -z
+			tface(b, 26, k, 0.5f, x0, y0, z1, x1, y0, z1, x1, y0, z0, x0, y0, z0);
+		}
+		t.draw();
+		GlStateManager.popMatrix();
+		GlStateManager.enableCull();
+		GlStateManager.enableLighting();
+		return true;
+	}
+
+	/** One textured quad: corners in order top-left, top-right, bottom-right, bottom-left of the texture rectangle. */
+	private static void tface(float[] b, int i, float k, float shade, float ax, float ay, float az, float bx, float by,
+			float bz, float cx, float cy, float cz, float dx, float dy, float dz) {
+		if (b[i] < 0) {
+			return;
+		}
+		float u0 = b[i] * k, v0 = b[i + 1] * k, u1 = b[i + 2] * k, v1 = b[i + 3] * k;
+		wr.pos(ax, ay, az).tex(u0, v0).color(shade, shade, shade, 1f).endVertex();
+		wr.pos(bx, by, bz).tex(u1, v0).color(shade, shade, shade, 1f).endVertex();
+		wr.pos(cx, cy, cz).tex(u1, v1).color(shade, shade, shade, 1f).endVertex();
+		wr.pos(dx, dy, dz).tex(u0, v1).color(shade, shade, shade, 1f).endVertex();
 	}
 
 	private static void topHat(int c) {
