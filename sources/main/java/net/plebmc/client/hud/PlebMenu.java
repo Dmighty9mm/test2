@@ -21,7 +21,7 @@ public final class PlebMenu {
 	public static final String SERVER_ADDRESS = "wss://eagler.plebmc.top";
 	public static final String DISCORD = "https://discord.gg/bR89zXFH9h";
 
-	private static final int ID_JOIN = 0x504C01;
+	public static final int ID_JOIN = 0x504C01;
 	private static final int ID_DISCORD = 0x504C02;
 
 	private PlebMenu() {

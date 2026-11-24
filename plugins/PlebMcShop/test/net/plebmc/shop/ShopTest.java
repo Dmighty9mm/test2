@@ -161,6 +161,44 @@ public class ShopTest {
         check(Cosmetics.shown(c.id.toString(), Cosmetics.CLOAK) != null, "client shows the cloak");
         cmd("equip", "Caper", "cloak", "red_cloak");
         check("red_cloak".equals(((Map<?, ?>) c.last("state").get("equipped")).get("cloak")), "admin equip cloak");
+
+        // ---- model hats: a Blockbench file in the plugin folder, downloaded like a cloak ----
+        File hats = new File(dir, "hats");
+        hats.mkdirs();
+        try (java.io.InputStream in = ShopTest.class.getClassLoader().getResourceAsStream("hats/king_crown.bbmodel")) {
+            Files.write(new File(hats, "king_crown.bbmodel").toPath(), QuestsTest.readAll(in));
+        }
+        Files.write(new File(hats, "junk.bbmodel").toPath(), "{not a model".getBytes(StandardCharsets.UTF_8));
+        net = new FakeNet();
+        core = new ShopCore(net, new Store(new File(dir, "hat-players.yml"), log),
+                cfg("  # king_crown:", "  king_crown:", "  red_cloak:", "  junk_hat: {name: Junk, category: hat, model: 'hats/junk.bbmodel', price: 5}\n  big_hat: {name: Big, category: hat, model: 'hats/king_crown.bbmodel', scale: 2, offset: [0, 1, 0], price: 5}\n  red_cloak:"), log);
+        core.folder(dir);
+        Catalog.Item king = core.catalog.get("king_crown");
+        check(king != null && king.modelHash != null && king.textureHash != null && king.textureWidth == 256, "model hat loads from the plugin folder");
+        check(core.catalog.get("junk_hat") == null && core.catalog.warnings().toString().contains("junk"), "broken model left out: " + core.catalog.warnings());
+        check(!core.catalog.get("big_hat").modelHash.equals(king.modelHash), "scale/offset change the model");
+        P h = join("Hatter", "lobby", true);
+        Map<?, ?> kj = null;
+        for (Map<?, ?> m : h.got) if (m.containsKey("catalog")) for (Object o : (List<?>) m.get("catalog")) if ("king_crown".equals(((Map<?, ?>) o).get("id"))) kj = (Map<?, ?>) o;
+        check(kj != null && "model".equals(kj.get("render")) && king.modelHash.equals(kj.get("model")) && king.textureHash.equals(kj.get("texture")), "catalog lists the model hat: " + kj);
+        PluginChannels.reset();
+        PluginChannels.attach((channel, data) -> {
+            if (Cosmetics.CHANNEL.equals(channel)) core.fromClient(h.id, new String(data, StandardCharsets.UTF_8));
+            return true;
+        });
+        PluginChannels.onJoin();
+        for (String m : h.raw) Cosmetics.handle(m);
+        Cosmetics.Item hi = Cosmetics.item("king_crown");
+        check(hi != null && Cosmetics.MODEL.equals(hi.render) && king.modelHash.equals(hi.model), "client knows the model hat");
+        check(Cosmetics.model(hi.model) == null && Cosmetics.texture(hi.texture) == null, "model and texture requested");
+        for (String m : h.raw) Cosmetics.handle(m);
+        float[] quads = Cosmetics.model(hi.model);
+        check(quads != null && quads.length == 186 * 20, "client rebuilt the model: " + (quads == null ? 0 : quads.length / 20) + " faces");
+        check(java.util.Arrays.equals(Cosmetics.texture(hi.texture), king.png), "client rebuilt the texture");
+        // the crown sits on the head: centered, standing on top (head top = y 8)
+        float minY = 99, maxAbsX = 0;
+        for (int i = 0; i < quads.length; i += 5) { minY = Math.min(minY, quads[i + 1]); maxAbsX = Math.max(maxAbsX, Math.abs(quads[i])); }
+        check(Math.abs(minY - 7.6f) < 0.01f && maxAbsX < 6f, "auto placement: " + minY + " " + maxAbsX);
     }
 
     static List<String> admin = new ArrayList<>();
@@ -196,7 +234,7 @@ public class ShopTest {
                 "questCategories: " + cats);
         Map<?, ?> withCatalog = null;
         for (Map<?, ?> m : mighty.got) if (m.containsKey("catalog")) withCatalog = m;
-        check(withCatalog != null && ((List<?>) withCatalog.get("catalog")).size() == 22, "catalog has 22 items");
+        check(withCatalog != null && ((List<?>) withCatalog.get("catalog")).size() == 21, "catalog has 21 items");
         check(mighty.coins() == 50, "day 1 login reward: " + mighty.coins());
         check(String.valueOf(mighty.last("notify").get("message")).contains("+50 PlebMc Coins"), "login popup");
         check(mighty.done("login") && "general".equals(mighty.quest("login").get("category")) && ((Number) mighty.quest("login").get("streak")).intValue() == 1,
@@ -247,14 +285,14 @@ public class ShopTest {
         // ---- the shop ----
         cmd("coins", "set", "Mighty", "10000");
         mighty.got.clear();
-        core.fromClient(mighty.id, "{\"type\":\"buy\",\"id\":\"crown\"}");
-        check(Boolean.TRUE.equals(mighty.last("result").get("ok")) && mighty.coins() == 2000, "crown bought for 8000");
+        core.fromClient(mighty.id, "{\"type\":\"buy\",\"id\":\"horns\"}");
+        check(Boolean.TRUE.equals(mighty.last("result").get("ok")) && mighty.coins() == 6500, "horns bought for 3500");
         Map<?, ?> eq = (Map<?, ?>) mighty.last("state").get("equipped");
-        check("crown".equals(eq.get("hat")), "auto-equipped");
+        check("horns".equals(eq.get("hat")), "auto-equipped");
         String saved = new String(Files.readAllBytes(new File(dir, "players.yml").toPath()), StandardCharsets.UTF_8);
-        check(saved.contains("crown") && saved.contains("coins: 2000"), "saved right away");
+        check(saved.contains("horns") && saved.contains("coins: 6500"), "saved right away");
         core.fromClient(mighty.id, "{\"type\":\"buy\",\"id\":\"halo\"}");
-        check(mighty.coins() == 2000, "cooldown blocks a second action");
+        check(mighty.coins() == 6500, "cooldown blocks a second action");
         sleepCooldown();
         core.fromClient(mighty.id, "{\"type\":\"buy\",\"id\":\"rainbow\"}");
         check(Boolean.FALSE.equals(mighty.last("result").get("ok")), "not enough coins");
@@ -268,7 +306,7 @@ public class ShopTest {
         Map<?, ?> snap = null;
         for (Map<?, ?> m : poor.got) if (Boolean.TRUE.equals(m.get("clear"))) snap = m;
         Map<?, ?> ms = (Map<?, ?>) ((Map<?, ?>) snap.get("players")).get(mighty.id.toString());
-        check(ms != null && "crown".equals(ms.get("hat")), "lobby player sees Mighty's crown");
+        check(ms != null && "horns".equals(ms.get("hat")), "lobby player sees Mighty's horns");
         Map<?, ?> farSnap = null;
         for (Map<?, ?> m : far.got) if (Boolean.TRUE.equals(m.get("clear"))) farSnap = m;
         check(!((Map<?, ?>) farSnap.get("players")).containsKey(mighty.id.toString()), "plebnite player doesn't get lobby players");
@@ -277,7 +315,7 @@ public class ShopTest {
         Map<?, ?> pm = (Map<?, ?>) poor.last("players").get("players");
         check(pm.containsKey(mighty.id.toString()) && pm.get(mighty.id.toString()) == null, "take off sends null");
         sleepCooldown();
-        core.fromClient(poor.id, "{\"type\":\"equip\",\"category\":\"hat\",\"id\":\"crown\"}");
+        core.fromClient(poor.id, "{\"type\":\"equip\",\"category\":\"hat\",\"id\":\"horns\"}");
         check(Boolean.FALSE.equals(poor.last("result").get("ok")), "can't equip what you don't own");
         for (String junk : new String[] { "not json", "[1,2]", "{\"type\":\"buy\",\"id\":5}", "{\"type\":\"equip\",\"category\":\"x\"}", "null" })
             core.fromClient(poor.id, junk);
@@ -328,6 +366,32 @@ public class ShopTest {
         core.fromClient(web.id, "{\"type\":\"link\",\"code\":\"/verify ABC123\"}");
         acc = web.last("account");
         check(Boolean.TRUE.equals(acc.get("linked")) && "Master".equals(acc.get("username")) && "MasterPleb".equals(acc.get("displayName")), "linked: " + acc);
+
+        // ---- admin menu: website Owners only, checked on every action ----
+        check(Boolean.TRUE.equals(acc.get("admin")), "Owner gets the admin flag");
+        P nobody = join("Nobody", "lobby", true);
+        check(Boolean.FALSE.equals(nobody.last("account") == null ? Boolean.FALSE : nobody.last("account").get("admin")), "others don't");
+        core.fromClient(nobody.id, "{\"type\":\"admin\",\"action\":\"coins\",\"op\":\"set\",\"amount\":999999,\"player\":\"" + nobody.id + "\"}");
+        check(Boolean.FALSE.equals(nobody.last("admin").get("allowed")) && nobody.coins() != 999999, "non-admin refused");
+        core.fromClient(web.id, "{\"type\":\"admin\",\"action\":\"open\"}");
+        Map<?, ?> ad = web.last("admin");
+        check(Boolean.TRUE.equals(ad.get("allowed")) && ((List<?>) ad.get("players")).size() == net.online.size()
+                && !((List<?>) ad.get("items")).isEmpty(), "admin data: " + ad.keySet());
+        sleepCooldown();
+        core.fromClient(web.id, "{\"type\":\"admin\",\"action\":\"coins\",\"op\":\"give\",\"amount\":250,\"player\":\"" + nobody.id + "\"}");
+        check(Boolean.TRUE.equals(web.last("admin").get("ok")) && nobody.coins() >= 250, "admin gives coins: " + web.last("admin").get("message"));
+        sleepCooldown();
+        core.fromClient(web.id, "{\"type\":\"admin\",\"action\":\"item\",\"op\":\"give\",\"id\":\"halo\",\"player\":\"Nobody\"}");
+        check(((List<?>) nobody.last("state").get("owned")).contains("halo"), "admin gives an item (by name too)");
+        sleepCooldown();
+        core.fromClient(web.id, "{\"type\":\"admin\",\"action\":\"broadcast\",\"message\":\"Hello all\"}");
+        check(nobody.last("notify") != null && String.valueOf(nobody.last("notify").get("message")).contains("Hello all"), "broadcast popup");
+        sleepCooldown();
+        core.fromClient(web.id, "{\"type\":\"admin\",\"action\":\"kick\",\"player\":\"" + web.id + "\"}");
+        check(Boolean.FALSE.equals(web.last("admin").get("ok")), "can't kick yourself");
+        sleepCooldown();
+        core.fromClient(web.id, "{\"type\":\"admin\",\"action\":\"reload\"}");
+        check(web.last("admin").get("message").toString().startsWith("Reloaded"), "admin reload");
         check(acc.get("groups").toString().equals("[Owner, Member]") && Boolean.TRUE.equals(acc.get("staff")), "groups by rank: " + acc.get("groups"));
         check(site.lastBody.contains("\"code\":\"ABC123\"") && site.lastBody.contains("\"username\":\"Webby\"") && site.lastBody.contains(Website.identifier(web.id)), "verify body: " + site.lastBody);
         // next join: logged in straight away, with a popup
@@ -406,7 +470,7 @@ public class ShopTest {
         core = new ShopCore(net, new Store(new File(dir, "players.yml"), log), cfg("daily-count: 3", "daily-count: 99", "weekly-count: 2", "weekly-count: 99"), log);
         P back = join("Mighty", "plebnite", true);
         check(back.coins() == keep + 75, "coins survive restart, day 2 reward: " + back.coins() + " vs " + keep);
-        check(((List<?>) back.last("state").get("owned")).contains("crown") && back.progress("login_5") == 2, "progress survives restart");
+        check(((List<?>) back.last("state").get("owned")).contains("horns") && back.progress("login_5") == 2, "progress survives restart");
         check(((Map<?, ?>) back.quest("login")).get("reward").equals(75.0), "streak day 2");
 
         cloaks(dir, log);

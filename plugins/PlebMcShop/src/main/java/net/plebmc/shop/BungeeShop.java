@@ -78,8 +78,8 @@ public final class BungeeShop extends Plugin implements Listener {
 					Files.copy(in, cfg.toPath());
 				}
 			}
-			// the sample cloak textures the default config uses (never overwrites yours)
-			for (String c : new String[] { "cloaks/plebmc.png", "cloaks/storm.png" }) {
+			// the sample cloak textures and hat model (never overwrites yours)
+			for (String c : new String[] { "cloaks/plebmc.png", "cloaks/storm.png", "hats/king_crown.bbmodel" }) {
 				File out = new File(getDataFolder(), c);
 				if (!out.exists()) {
 					out.getParentFile().mkdirs();
@@ -93,6 +93,7 @@ public final class BungeeShop extends Plugin implements Listener {
 			core = new ShopCore(new BungeeNet(), new Store(new File(getDataFolder(), "players.yml"), getLogger()),
 					Cfg.load(cfg), getLogger());
 			core.folder(getDataFolder());
+			core.reloader = this::reload;
 		} catch (IOException e) {
 			getLogger().severe("Could not load config.yml: " + e);
 			return;
@@ -256,6 +257,33 @@ public final class BungeeShop extends Plugin implements Listener {
 		@Override
 		public void async(Runnable r) {
 			ProxyServer.getInstance().getScheduler().runAsync(BungeeShop.this, r);
+		}
+
+		@Override
+		public List<String> servers() {
+			return new ArrayList<>(ProxyServer.getInstance().getServers().keySet());
+		}
+
+		@Override
+		public boolean connect(UUID player, String server) {
+			ProxiedPlayer p = ProxyServer.getInstance().getPlayer(player);
+			net.md_5.bungee.api.config.ServerInfo info = ProxyServer.getInstance().getServerInfo(server);
+			if (p == null || info == null) {
+				return false;
+			}
+			p.connect(info);
+			return true;
+		}
+
+		@Override
+		@SuppressWarnings("deprecation")
+		public boolean kick(UUID player, String reason) {
+			ProxiedPlayer p = ProxyServer.getInstance().getPlayer(player);
+			if (p == null) {
+				return false;
+			}
+			p.disconnect(TextComponent.fromLegacyText(reason));
+			return true;
 		}
 	}
 

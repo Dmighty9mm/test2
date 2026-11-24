@@ -30,7 +30,35 @@
 
 ~ 		return (this.getSize() + 1) * this.slotHeight + this.headerPadding;
 
-> CHANGE  109 : 110  @  109 : 110
+> INSERT  82 : 84  @  82
+
++ 			boolean plebList = net.plebmc.client.hud.PlebTheme.slotBackground(this.left, this.top, this.right,
++ 					this.bottom);
+
+> CHANGE  3 : 23  @  3 : 21
+
+~ 			if (!plebList) {
+~ 				worldrenderer.begin(7, DefaultVertexFormats.POSITION_TEX_COLOR);
+~ 				worldrenderer.pos((double) this.left, (double) this.bottom, 0.0D)
+~ 						.tex((double) ((float) this.left / f),
+~ 								(double) ((float) (this.bottom + (int) this.amountScrolled) / f))
+~ 						.color(32, 32, 32, 255).endVertex();
+~ 				worldrenderer.pos((double) this.right, (double) this.bottom, 0.0D)
+~ 						.tex((double) ((float) this.right / f),
+~ 								(double) ((float) (this.bottom + (int) this.amountScrolled) / f))
+~ 						.color(32, 32, 32, 255).endVertex();
+~ 				worldrenderer.pos((double) this.right, (double) this.top, 0.0D)
+~ 						.tex((double) ((float) this.right / f),
+~ 								(double) ((float) (this.top + (int) this.amountScrolled) / f))
+~ 						.color(32, 32, 32, 255).endVertex();
+~ 				worldrenderer.pos((double) this.left, (double) this.top, 0.0D)
+~ 						.tex((double) ((float) this.left / f),
+~ 								(double) ((float) (this.top + (int) this.amountScrolled) / f))
+~ 						.color(32, 32, 32, 255).endVertex();
+~ 				tessellator.draw();
+~ 			}
+
+> CHANGE  6 : 7  @  6 : 7
 
 ~ 			this.drawSelectionBox(k, l, mouseXIn, mouseYIn, this.getSize());
 
@@ -59,5 +87,11 @@
 ~ 						"Exception caught rendering a slot of a list on the screen! Game will continue running due to the suspicion that this could be an intentional crash attempt, and therefore it would be inconvenient if the user were to be locked out of this gui due to repeatedly triggering a full crash report");
 ~ 				excLogger.error(t);
 ~ 			}
+
+> INSERT  9 : 12  @  9
+
++ 		if (net.plebmc.client.hud.PlebTheme.slotOverlay(this.left, this.width, startY, endY, this.height)) {
++ 			return;
++ 		}
 
 > EOF

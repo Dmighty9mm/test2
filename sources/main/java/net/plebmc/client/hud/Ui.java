@@ -88,9 +88,16 @@ public final class Ui {
 
 	/** The main window of a screen, with a thin accent line on top. */
 	public static void window(int x, int y, int w, int h) {
-		round(x - 1, y - 1, w + 2, h + 2, 0x60000000);
-		card(x, y, w, h, BASE, BORDER);
-		rect(x + 1, y, w - 2, 1, alpha(accent(), 0xC0));
+		int acc = accent();
+		// soft shadow, then a glassy body that darkens toward the bottom
+		round(x - 3, y - 2, w + 6, h + 6, 0x22000000);
+		round(x - 1, y - 1, w + 2, h + 3, 0x50000000);
+		PlebTheme.gradientRound(x, y, w, h, 0xF4121A23, 0xF60A0F15);
+		outline(x, y, w, h, BORDER);
+		// an accent line on top with a faint glow under it
+		PlebTheme.gradient(x + 1, y + 1, w - 2, 16, alpha(acc, 0x1C), alpha(acc, 0x00));
+		rect(x + 1, y, w - 2, 1, alpha(acc, 0xD0));
+		rect(x + w / 4, y, w / 2, 1, mix(acc, 0xFFFFFFFF, 0.35f));
 	}
 
 	/** Vertical gradient in a few bands (no extra GL state). */
@@ -285,6 +292,8 @@ public final class Ui {
 				".........", ".........");
 		icon("gift", "..#...#..", "...#.#...", "#########", "#...#...#", "#########", ".#..#..#.", ".#..#..#.",
 				".#..#..#.", ".#######.");
+		icon("shield", "#########", "#########", "##.....##", "##..#..##", "##.###.##", "##..#..##", ".##...##.",
+				"..##.##..", "...###...");
 		icon("drag", "...#.....", "..###....", "...#.....", "#.###.#..", "#######..", "#.###.#..", "...#.....",
 				"..###....", "...#.....");
 	}

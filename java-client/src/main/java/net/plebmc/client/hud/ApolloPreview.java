@@ -61,7 +61,7 @@ final class ApolloPreview {
 		note("&e&lMode: Arsenal", "Modifier: Low Gravity", "7s");
 		// cosmetics: what the PlebMc shop plugin would send
 		net.plebmc.client.cosmetics.Cosmetics.handle("{\"type\":\"state\",\"coins\":3200,"
-				+ "\"owned\":[\"tophat\",\"crown\",\"flame\"],\"equipped\":{\"hat\":\"crown\",\"trail\":\"flame\"},"
+				+ "\"owned\":[\"tophat\",\"dropzone_crown\",\"flame\"],\"equipped\":{\"hat\":\"dropzone_crown\",\"trail\":\"flame\"},"
 				+ "\"dailyResetIn\":18720,\"weeklyResetIn\":297000,\"loginStreak\":4,"
 				+ "\"questCategories\":[{\"id\":\"general\",\"name\":\"General\",\"icon\":\"general\",\"color\":\"#3FD8E6\"},"
 				+ "{\"id\":\"plebnite\",\"name\":\"PlebNite\",\"icon\":\"plebnite\",\"color\":\"#FF9A3C\"}],\"quests\":["
@@ -83,10 +83,11 @@ final class ApolloPreview {
 					.append(it.category).append("\",\"render\":\"").append(it.render).append("\",\"price\":").append(it.price)
 					.append(it.color >= 0 ? ",\"color\":" + it.color : "").append(",\"description\":\"").append(it.description).append("\"},");
 		}
+		cat.append("{\"id\":\"dropzone_crown\",\"name\":\"Drop Zone Crown\",\"category\":\"hat\",\"render\":\"crown\",\"price\":999999999,\"forSale\":false,\"description\":\"Season 1 Battle Pass reward\"},");
 		cat.append("{\"id\":\"storm_cloak\",\"name\":\"Storm Cloak\",\"category\":\"cloak\",\"render\":\"cloak\",\"price\":9000,\"texture\":\"")
 				.append(PreviewCloak.ID).append("\",\"textureWidth\":512,\"description\":\"The storm, on your back (HD)\"}],")
-				.append("\"owned\":[\"tophat\",\"crown\",\"flame\",\"storm_cloak\"],")
-				.append("\"equipped\":{\"hat\":\"crown\",\"trail\":\"flame\",\"cloak\":\"storm_cloak\"}}");
+				.append("\"owned\":[\"tophat\",\"dropzone_crown\",\"flame\",\"storm_cloak\"],")
+				.append("\"equipped\":{\"hat\":\"dropzone_crown\",\"trail\":\"flame\",\"cloak\":\"storm_cloak\"}}");
 		net.plebmc.client.cosmetics.Cosmetics.handle(cat.toString());
 		net.plebmc.client.cosmetics.Cosmetics.handle("{\"type\":\"texture\",\"id\":\"" + PreviewCloak.ID
 				+ "\",\"part\":0,\"parts\":1,\"data\":\"" + PreviewCloak.PNG_BASE64 + "\"}");
@@ -99,7 +100,14 @@ final class ApolloPreview {
 			// no world border in this world
 		}
 		net.plebmc.client.cosmetics.Cosmetics.handle("{\"type\":\"account\",\"enabled\":true,\"linked\":true,\"username\":\"PreviewPleb\","
-				+ "\"displayName\":\"PreviewPleb\",\"groups\":[\"Owner\",\"Member\"],\"staff\":true,\"site\":\"https://plebmc.top\"}");
+				+ "\"displayName\":\"PreviewPleb\",\"groups\":[\"Owner\",\"Member\"],\"staff\":true,\"admin\":true,\"site\":\"https://plebmc.top\"}");
+		// the admin menu (website Owners): what the proxy would send
+		net.plebmc.client.cosmetics.Cosmetics.handle("{\"type\":\"admin\",\"allowed\":true,\"currency\":\"PlebMc Coins\",\"registered\":1287,"
+				+ "\"servers\":[\"lobby\",\"plebnite\",\"survival\"],"
+				+ "\"items\":[{\"id\":\"tophat\",\"name\":\"Top Hat\",\"category\":\"hat\"},{\"id\":\"dropzone_crown\",\"name\":\"Drop Zone Crown\",\"category\":\"hat\"},{\"id\":\"storm_cloak\",\"name\":\"Storm Cloak\",\"category\":\"cloak\"}],"
+				+ "\"players\":[{\"uuid\":\"" + p.getUniqueID() + "\",\"name\":\"" + p.getName() + "\",\"server\":\"lobby\",\"coins\":3200,\"client\":true,\"account\":\"PreviewPleb\",\"groups\":[\"Owner\"],\"owned\":[\"tophat\",\"dropzone_crown\"],\"equipped\":{\"hat\":\"dropzone_crown\"}},"
+				+ "{\"uuid\":\"00000000-0000-0000-0000-000000000002\",\"name\":\"Teammate1\",\"server\":\"plebnite\",\"coins\":12450,\"client\":true,\"account\":\"Mate\",\"groups\":[\"VIP\"],\"owned\":[\"storm_cloak\"],\"equipped\":{\"cloak\":\"storm_cloak\"}},"
+				+ "{\"uuid\":\"00000000-0000-0000-0000-000000000003\",\"name\":\"Teammate2\",\"server\":\"plebnite\",\"coins\":880,\"client\":false,\"owned\":[]}]}");
 		net.plebmc.client.cosmetics.Cosmetics.handle("{\"type\":\"notify\",\"title\":\"\u00a7aQuest complete!\",\"message\":\"Daily login: +125 PlebMc Coins\"}");
 	}
 

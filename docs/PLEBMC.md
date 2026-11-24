@@ -62,6 +62,9 @@ Every hook calls `net.plebmc.client.hud.PlebClient` or `PlebEntities`:
 | `ItemModelMesher.getItemModel(ItemStack)` | `PlebItems.itemModel` | swap in a custom model (all render paths: hand, GUI, dropped, frames) |
 | `LayerArmorBase.renderLayer` | `PlebItems.armorTexture` | netherite armor texture on players |
 | `LayerCustomHead.doRenderLayer` | `PlebItems.customHat` | pack hats (QualityArmory hats on quartz) drawn on heads like 1.16 |
+| `GuiButton.drawButton`, `GuiOptionSlider` / `GuiSlider` / `GuiScreenOptionsSounds` | `PlebTheme.drawButton`, `sliderKnob` | PlebClient menu theme (dark glass buttons, accent Join button) |
+| `GuiScreen.drawWorldBackground` / `drawBackground`, `GuiSlot` | `PlebTheme.background`, `slotBackground`, `slotOverlay` | themed backgrounds and lists |
+| `GuiMainMenu.drawScreen` | `PlebTheme.mainMenuTitle`, `splashTranslate` | PLEBCLIENT wordmark instead of the logo |
 
 ### Safety rules
 
@@ -135,7 +138,7 @@ open Mods, Quests or the Shop directly instead. Every screen closes with Esc or 
 | Fullbright | `lighting` | off | server option `full-bright=false` blocks it; a server brightness rule wins |
 | Compass | `compass` | on | PlebNite: heading strip (top center) with a pip for every teammate and waypoint, and a square pointing at the middle of the storm (red while you're outside it) |
 | Squad Ping | `squad-ping` | on | PlebNite: **Sneak + F** sends the swap-hands action modern servers use for pings (Apollo servers only) |
-| Storm Tracker | `storm` | on | PlebNite: blocks to the storm edge (red "IN THE STORM" with the way back when you're outside), closing/opening timer, optional safe-zone size. Read from the vanilla world border packets, hidden when the world has no border |
+| Storm Tracker | `storm` | off | PlebNite: blocks to the storm edge (red "IN THE STORM" with the way back when you're outside), closing/opening timer, optional safe-zone size. Read from the vanilla world border packets, hidden when the world has no border |
 | Squad | `squad-hud` | on | PlebNite: each teammate (Apollo teams) with their color, a health bar (when they're loaded near you; gray when too far to know) and distance |
 | Supplies | `supplies` | off | PlebNite: building blocks, arrows, golden apples, ender pearls, potions and TNT in your inventory as item icons with counts |
 | Low Health Warning | `low-health` | on | PlebNite: red screen edges at 2 to 5 hearts, pulsing faster the lower you are |
@@ -221,11 +224,13 @@ Cosmetics (hats, trails and cloaks) are bought with the server's coins (on PlebM
 
 `state` can also carry the quests: `"currency":"PlebMc Coins"`, `"dailyResetIn":18720` and `"weeklyResetIn":...` (seconds), `"loginStreak":4`, `"questCategories":[{"id":"general","name":"General","icon":"general","color":"#3FD8E6"},{"id":"plebnite","name":"PlebNite","icon":"plebnite","color":"#FF9A3C"}]` (one entry each on the Quests screen, after "All"; `icon` and `color` are optional), and `"quests":[{"id":"kills_3","category":"plebnite","cycle":"2026-11-24","name":"Get 3 kills","description":"...","period":"daily","progress":1,"goal":3,"reward":75,"done":false}]` (`period` is `daily`, `weekly` or `login`; `cycle` names the day or week the quest belongs to, so the client can tag it NEW again when it comes back; the login row also has `"streak"` and `"streakLength"`; a quest without `category` shows in every category). Rewards are paid by the server the moment a quest is done, once; the client shows done quests as claimed.
 
+**Admin menu.** The `account` message carries `"admin":true` for website groups listed in the proxy's `admin-menu.groups` (default Owner); the home screen then shows an Admin door. `{"type":"admin"}` asks for the admin data, answered with `{"type":"admin","allowed":true,"players":[{"uuid","name","server","coins","client","account","groups","owned","equipped"}],"servers":[...],"items":[...],"registered":1287}`; actions are `{"type":"admin","action":"coins|item|send|kick|broadcast|reload","player":"<uuid>",...}` and are checked again on the proxy.
+
 **Website login (plebmc.top).** `{"type":"account"}` asks for the player's website login; `{"type":"link","code":"ABC123"}` links the Minecraft account with a code from the website's Connections page. The server answers `{"type":"account","enabled":true,"linked":true,"username":"Master","displayName":"Master","groups":["Owner","Member"],"staff":true,"site":"https://plebmc.top","linkUrl":"https://plebmc.top/index.php?route=/user/connections","message":"Logged in as Master!","ok":true}` (`message`/`ok` only after a link attempt or an error). It also sends this on join once it has checked the website. `{"type":"logout"}` logs out: the server unlinks the Minecraft account on the website (`users/integration_id:minecraft:<uuid>/integrations/unlink`) and answers with `"linked":false`.
 
 Catalog items that are never sold (given by staff or events) carry `"forSale":false` (and, for older clients, a price nobody can reach); the shop shows them as Exclusive.
 
-Catalog item: `{"id":"gold_tophat","name":"Gold Top Hat","category":"hat","render":"tophat","price":900,"color":"#FFD700","description":"..."}`. `category` is `hat`, `trail` or `cloak`. A cloak has `"render":"cloak"` and either a `"texture"` id (plus `"textureWidth"`) for an image the client downloads with `texture`, or just a `color` for a plain cloak. Cloak images use the vanilla cape layout (64x32) at any multiple up to 4096x2048; the model's UVs are fractions of the image, so a 512x256 cloak draws at 8x detail. `render` is the look the client draws: hats `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`; trails `flame`, `hearts`, `notes`, `rainbow`, `cloud`, `portal`, `emerald`, `snow`. `color` tints a hat (optional). Items with a `render` this client doesn't know are hidden, so newer items don't break older clients. Without a catalog the client shows the built-in one (ids equal to the render names, prices 250 to 2,500).
+Catalog item: `{"id":"gold_tophat","name":"Gold Top Hat","category":"hat","render":"tophat","price":900,"color":"#FFD700","description":"..."}`. `category` is `hat`, `trail` or `cloak`. A cloak has `"render":"cloak"` and either a `"texture"` id (plus `"textureWidth"`) for an image the client downloads with `texture`, or just a `color` for a plain cloak. Cloak images use the vanilla cape layout (64x32) at any multiple up to 4096x2048; the model's UVs are fractions of the image, so a 512x256 cloak draws at 8x detail. `render` is the look the client draws: hats `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`; trails `flame`, `hearts`, `notes`, `rainbow`, `cloud`, `portal`, `emerald`, `snow`. `color` tints a hat (optional). A 3D model hat has `"render":"model"`, a `"model"` id and a `"texture"` id (plus `"textureWidth"`/`"textureHeight"`); the client downloads both with `texture` (the model as `{"v":1,"quads":[x,y,z,u,v ×4, ...]}` in head pixels, y up, top of the head at y 8) and draws it on the head. Items with a `render` this client doesn't know are hidden, so newer items don't break older clients. Without a catalog the client shows the built-in one (ids equal to the render names, prices 250 to 2,500).
 
 ### Server plugins
 
@@ -398,3 +403,11 @@ Setting: **Settings > Behavior > Custom item models** (on by default). Code: `it
 ## Cosmetic crown
 
 The Crown hat is the "goldcrown-king" Blockbench model: `cosmetics/CrownModel.java` (boxes and UVs, generated from the .bbmodel) and `assets/plebitems/textures/cosmetics/crown.png`, drawn by `CosmeticLayer`. The other hats are still plain colored boxes.
+
+## Menu theme
+
+`hud/PlebTheme.java` restyles every vanilla menu (buttons, sliders, backgrounds, lists, the title screen wordmark) in the PlebClient look. **Settings > PlebClient menus** turns it off (on by default; `ClientPrefs.modernMenus`). The Forge port does the same with mixins (`MixinGuiButton`, `MixinGuiScreen`, `MixinGuiSlot`, `MixinGuiMainMenu`, the slider mixins).
+
+## Admin menu
+
+`hud/AdminScreen.java`, opened from the Admin door on the home screen. The door only shows when the proxy's `account` message says `"admin":true` (website group in `admin-menu.groups`, default Owner). See the protocol above.

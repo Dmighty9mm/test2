@@ -18,6 +18,8 @@ public final class Account {
 	/** Website groups, highest rank first. */
 	public List<String> groups = Collections.emptyList();
 	public boolean staff;
+	/** The server lets this player use the admin menu (website Owner). The server checks every action again. */
+	public boolean admin;
 	public static final String DEFAULT_SITE = "https://plebmc.top";
 	public static final String DEFAULT_LINK = DEFAULT_SITE + "/index.php?route=/user/connections";
 
@@ -32,7 +34,7 @@ public final class Account {
 	public int version;
 
 	void clear() {
-		known = enabled = linked = staff = pending = false;
+		known = enabled = linked = staff = pending = admin = false;
 		username = displayName = "";
 		site = DEFAULT_SITE;
 		linkUrl = DEFAULT_LINK;
@@ -61,6 +63,7 @@ public final class Account {
 		}
 		groups = Collections.unmodifiableList(g);
 		staff = linked && Boolean.TRUE.equals(m.get("staff"));
+		admin = linked && Boolean.TRUE.equals(m.get("admin"));
 		if (m.get("site") instanceof String) {
 			site = (String) m.get("site");
 		}

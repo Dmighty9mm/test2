@@ -27,6 +27,8 @@ public final class ClientPrefs {
 	public int accent;
 	/** Menus slide and fade in, hover states ease. */
 	public boolean animations = true;
+	/** The PlebClient look on every menu: title screen, buttons, backgrounds and lists. */
+	public boolean modernMenus = true;
 	/** Click sounds in PlebClient menus. */
 	public boolean uiSounds = true;
 	public static final String[] BACKDROPS = { "Dim", "Dark", "Light" };
@@ -87,6 +89,7 @@ public final class ClientPrefs {
 		ClientPrefs d = new ClientPrefs();
 		accent = d.accent;
 		animations = d.animations;
+		modernMenus = d.modernMenus;
 		uiSounds = d.uiSounds;
 		backdrop = d.backdrop;
 		toasts = d.toasts;
@@ -117,6 +120,7 @@ public final class ClientPrefs {
 		Map<?, ?> m = (Map<?, ?>) root;
 		accent = idx(m.get("accent"), accent, ACCENTS.length);
 		animations = ProtoValues.asBool(m.get("animations"), animations);
+		modernMenus = ProtoValues.asBool(m.get("modernMenus"), modernMenus);
 		uiSounds = ProtoValues.asBool(m.get("sounds"), uiSounds);
 		backdrop = idx(m.get("backdrop"), backdrop, BACKDROPS.length);
 		toasts = ProtoValues.asBool(m.get("toasts"), toasts);
@@ -134,6 +138,7 @@ public final class ClientPrefs {
 		Map<String, Object> m = new LinkedHashMap<>();
 		m.put("accent", (double) accent);
 		m.put("animations", animations);
+		m.put("modernMenus", modernMenus);
 		m.put("sounds", uiSounds);
 		m.put("backdrop", (double) backdrop);
 		m.put("toasts", toasts);

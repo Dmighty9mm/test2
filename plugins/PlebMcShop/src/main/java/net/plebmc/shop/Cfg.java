@@ -92,6 +92,21 @@ final class Cfg {
 		return def;
 	}
 
+	double dbl(String path, double def) {
+		Object o = raw(path);
+		if (o instanceof Number) {
+			return ((Number) o).doubleValue();
+		}
+		if (o instanceof String) {
+			try {
+				return Double.parseDouble(((String) o).trim());
+			} catch (NumberFormatException e) {
+				return def;
+			}
+		}
+		return def;
+	}
+
 	int integer(String path, int def) {
 		return (int) num(path, def);
 	}

@@ -668,7 +668,7 @@ public final class Mods {
          */
         public static final class StormTracker extends Mod {
                 public StormTracker() {
-                        super("storm", "Storm Tracker", "Distance to the storm and when it closes", true, 0.5f, 0.25f);
+                        super("storm", "Storm Tracker", "Distance to the storm and when it closes", false, 0.5f, 0.25f);
                         hudLook(false);
                         category(PLEBNITE);
                         timer = setting("timer", "Closing timer", "Show when the storm stops moving", OFF_ON, 1);

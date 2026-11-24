@@ -97,6 +97,9 @@ public final class SettingsScreen extends PlebScreen {
 			add(toggle("Animations", "Menus slide in and hovers fade. Turn off to reduce motion.", lx, y, lw, h,
 					() -> pr.animations, saved(() -> pr.animations = !pr.animations)), clip);
 			y += step;
+			add(toggle("PlebClient menus", "The PlebClient look on the title screen and every Minecraft menu", lx, y, lw, h,
+					() -> pr.modernMenus, saved(() -> pr.modernMenus = !pr.modernMenus)), clip);
+			y += step;
 			add(toggle("Click sounds", "Play a click in PlebClient menus", lx, y, lw, h, () -> pr.uiSounds,
 					saved(() -> pr.uiSounds = !pr.uiSounds)), clip);
 			y += step;

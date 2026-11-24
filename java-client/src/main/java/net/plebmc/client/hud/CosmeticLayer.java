@@ -49,7 +49,11 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 				GlStateManager.translate(0.0F, -1.0F, 0.0F);
 				GlStateManager.scale(1.12F, 1.12F, 1.12F);
 			}
-			draw(hat.render, hat.color, ageInTicks + partialTicks);
+			if (Cosmetics.MODEL.equals(hat.render)) {
+				model(hat);
+			} else {
+				draw(hat.render, hat.color, ageInTicks + partialTicks);
+			}
 		} finally {
 			GlStateManager.popMatrix();
 		}
@@ -102,6 +106,96 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 		GlStateManager.enableCull();
 		GlStateManager.enableLighting();
 		GlStateManager.enableTexture2D();
+	}
+
+	// ==================== model hats (from the shop plugin's folder) ====================
+
+	private static final java.util.Map<String, ResourceLocation> modelTextures = new java.util.HashMap<>();
+	private static final java.util.Set<String> badTextures = new java.util.HashSet<>();
+
+	/** The model hat's texture once downloaded, or null. */
+	private static ResourceLocation modelTexture(Cosmetics.Item it) {
+		ResourceLocation rl = modelTextures.get(it.texture);
+		if (rl != null || badTextures.contains(it.texture)) {
+			return rl;
+		}
+		byte[] png = Cosmetics.texture(it.texture);
+		if (png == null) {
+			return null;
+		}
+		try {
+			net.plebmc.forge.compat.ImageData img = net.plebmc.forge.compat.ImageData
+					.loadImageFile(png);
+			if (img != null && img.width > 0 && img.height > 0) {
+				rl = Minecraft.getMinecraft().getTextureManager().getDynamicTextureLocation("plebhat_" + it.texture,
+						new net.minecraft.client.renderer.texture.DynamicTexture(img.toBufferedImage()));
+				modelTextures.put(it.texture, rl);
+				return rl;
+			}
+		} catch (Throwable t) {
+			// broken image: never try again
+		}
+		badTextures.add(it.texture);
+		return null;
+	}
+
+	/**
+	 * Draws a model hat: the quads the server converted from a Blockbench
+	 * model, in head pixels (y up from the neck). Nothing until the model and
+	 * its texture have downloaded.
+	 */
+	static boolean model(Cosmetics.Item it) {
+		float[] q = Cosmetics.model(it.model);
+		ResourceLocation tex = q == null ? null : modelTexture(it);
+		if (tex == null) {
+			return false;
+		}
+		Minecraft.getMinecraft().getTextureManager().bindTexture(tex);
+		GlStateManager.enableTexture2D();
+		GlStateManager.disableLighting();
+		GlStateManager.disableCull();
+		GlStateManager.enableAlpha();
+		GlStateManager.enableBlend();
+		GlStateManager.blendFunc(770, 771);
+		GlStateManager.color(1f, 1f, 1f, 1f);
+		GlStateManager.pushMatrix();
+		GlStateManager.scale(1.0F, -1.0F, 1.0F); // the model is y-up
+		Tessellator t = Tessellator.getInstance();
+		wr = t.getWorldRenderer();
+		wr.begin(7, DefaultVertexFormats.POSITION_TEX_COLOR);
+		for (int i = 0; i + 20 <= q.length; i += 20) {
+			float shade = shade(q, i);
+			for (int c = 0; c < 4; c++) {
+				int k = i + c * 5;
+				wr.pos(q[k], q[k + 1], q[k + 2]).tex(q[k + 3], q[k + 4]).color(shade, shade, shade, 1f).endVertex();
+			}
+		}
+		t.draw();
+		GlStateManager.popMatrix();
+		GlStateManager.disableBlend();
+		GlStateManager.enableCull();
+		GlStateManager.enableLighting();
+		return true;
+	}
+
+	/** Minecraft-style face shading from the quad's normal: top 1.0, sides 0.8/0.62, bottom 0.5. */
+	private static float shade(float[] q, int i) {
+		float ax = q[i + 5] - q[i], ay = q[i + 6] - q[i + 1], az = q[i + 7] - q[i + 2];
+		float bx = q[i + 15] - q[i], by = q[i + 16] - q[i + 1], bz = q[i + 17] - q[i + 2];
+		float nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+		float len = (float) Math.sqrt(nx * nx + ny * ny + nz * nz);
+		if (len < 1e-6f) {
+			return 0.8f;
+		}
+		nx /= len;
+		ny /= len;
+		nz /= len;
+		// the corners go clockwise seen from outside, so the cross product points inward
+		ny = -ny;
+		nx = -nx;
+		nz = -nz;
+		float up = Math.max(0f, ny), down = Math.max(0f, -ny);
+		return up * 1.0f + down * 0.5f + Math.abs(nx) * 0.62f + Math.abs(nz) * 0.8f;
 	}
 
 	private static final ResourceLocation CROWN = new ResourceLocation("plebitems", CrownModel.TEXTURE);

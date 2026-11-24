@@ -13,7 +13,7 @@ get org/yaml/snakeyaml/2.2 snakeyaml-2.2.jar
 CP=$(ls lib/bungeecord-*-$V.jar | tr '\n' ':')lib/gson-2.8.0.jar:lib/snakeyaml-2.2.jar
 rm -rf build/classes && mkdir -p build/classes
 javac --release 8 -Xlint:-options -cp "$CP" -d build/classes $(find src/main/java -name '*.java')
-cp -r src/main/resources/bungee.yml src/main/resources/config.yml src/main/resources/cloaks build/classes/
+cp -r src/main/resources/bungee.yml src/main/resources/config.yml src/main/resources/cloaks src/main/resources/hats build/classes/
 rm -f PlebioAPI.jar
 jar cf PlebioAPI.jar -C build/classes .
 echo "built $(pwd)/PlebioAPI.jar"
