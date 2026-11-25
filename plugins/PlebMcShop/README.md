@@ -175,8 +175,8 @@ frame, default 100, 20 to 10000):
 ```
 
 The frame count is the image height divided by half its width. Limits: 64 frames,
-8,388,608 pixels in total (for example 512x256 x 64 frames) and 8 MB per file. `aurora_cloak`
-(`cloaks/aurora.png`, 16 frames) ships as an example.
+8,388,608 pixels in total (for example 512x256 x 64 frames) and 8 MB per file. `aurora_cloak`, `inferno_cloak`,
+`galaxy_cloak` and `rainbow_wave_cloak` (16 frames each, in `cloaks/`) ship as examples.
 
 The easiest way to make one is the **Cloak Maker** (`tools/cloak-maker/index.html` in the repo;
 open it in a browser or put it on GitHub Pages). Drop in a GIF, a set of frame images or one

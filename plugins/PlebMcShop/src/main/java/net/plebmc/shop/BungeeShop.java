@@ -79,7 +79,7 @@ public final class BungeeShop extends Plugin implements Listener {
 				}
 			}
 			// the sample cloak textures and hat model (never overwrites yours)
-			for (String c : new String[] { "cloaks/plebmc.png", "cloaks/storm.png", "cloaks/aurora.png", "hats/king_crown.bbmodel" }) {
+			for (String c : new String[] { "cloaks/plebmc.png", "cloaks/storm.png", "cloaks/aurora.png", "cloaks/inferno.png", "cloaks/galaxy.png", "cloaks/rainbow_wave.png", "hats/king_crown.bbmodel" }) {
 				File out = new File(getDataFolder(), c);
 				if (!out.exists()) {
 					out.getParentFile().mkdirs();

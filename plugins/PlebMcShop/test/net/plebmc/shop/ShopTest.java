@@ -98,7 +98,7 @@ public class ShopTest {
     static void cloaks(File dir, Logger log) throws Exception {
         File cl = new File(dir, "cloaks");
         cl.mkdirs();
-        for (String name : new String[] { "plebmc.png", "aurora.png" }) {
+        for (String name : new String[] { "plebmc.png", "aurora.png", "inferno.png", "galaxy.png", "rainbow_wave.png" }) {
             try (java.io.InputStream in = ShopTest.class.getClassLoader().getResourceAsStream("cloaks/" + name)) {
                 Files.write(new File(cl, name).toPath(), QuestsTest.readAll(in));
             }
@@ -236,7 +236,7 @@ public class ShopTest {
         Cosmetics.Item ci = Cosmetics.item("p_cloak");
         check(ci != null && "partners".equals(ci.collection) && "Streamer".equals(ci.creator)
                 && Cosmetics.catalog(Cosmetics.CLOAK, "partners").size() == 1
-                && Cosmetics.catalog(Cosmetics.CLOAK, "plebmc").size() == 7, "client splits the shop by collection");
+                && Cosmetics.catalog(Cosmetics.CLOAK, "plebmc").size() == 10, "client splits the shop by collection");
         // the equipped cloak survives a restart (it used to be dropped on load)
         cmd("give", "Partnered", "red_cloak");
         cmd("equip", "Partnered", "cloak", "red_cloak");
@@ -278,7 +278,7 @@ public class ShopTest {
                 "questCategories: " + cats);
         Map<?, ?> withCatalog = null;
         for (Map<?, ?> m : mighty.got) if (m.containsKey("catalog")) withCatalog = m;
-        check(withCatalog != null && ((List<?>) withCatalog.get("catalog")).size() == 25, "catalog has 25 items");
+        check(withCatalog != null && ((List<?>) withCatalog.get("catalog")).size() == 28, "catalog has 28 items");
         List<?> cols = (List<?>) withCatalog.get("collections");
         check(cols != null && cols.size() == 2 && "plebmc".equals(((Map<?, ?>) cols.get(0)).get("id"))
                 && "Partners".equals(((Map<?, ?>) cols.get(1)).get("name")), "collections sent: " + cols);

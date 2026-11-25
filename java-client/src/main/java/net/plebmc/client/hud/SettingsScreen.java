@@ -132,6 +132,11 @@ public final class SettingsScreen extends PlebScreen {
 			add(toggle("Mini mascot", "The little mascot in the corner (click him)", lx, y, lw, h, () -> pr.titleBuddy,
 					saved(() -> pr.titleBuddy = !pr.titleBuddy)), clip);
 			y += step;
+			add(choice("Particles", "Snow, embers or fireflies drifting over the title screen", lx, y, lw, h,
+					() -> ClientPrefs.PARTICLES[pr.titleParticles],
+					saved(() -> pr.titleParticles = wrap(pr.titleParticles + 1, ClientPrefs.PARTICLES.length)),
+					saved(() -> pr.titleParticles = wrap(pr.titleParticles - 1, ClientPrefs.PARTICLES.length))), clip);
+			y += step;
 			add(toggle("Mascot", "The PlebMc mascot at the top of the sidebar", lx, y, lw, h, () -> pr.titleMascot,
 					saved(() -> pr.titleMascot = !pr.titleMascot)), clip);
 			y += step;

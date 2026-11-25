@@ -190,6 +190,9 @@ items:
   plebmc_cloak: {name: 'PlebMc Cloak', category: cloak, texture: 'cloaks/plebmc.png', price: 6000, description: 'HD cloak with the PlebMc mark'}
   storm_cloak:  {name: 'Storm Cloak', category: cloak, texture: 'cloaks/storm.png', price: 9000, description: 'The storm, on your back (HD)'}
   aurora_cloak: {name: 'Aurora Cloak', category: cloak, texture: 'cloaks/aurora.png', frametime: 90, price: 12000, description: 'Animated northern lights'}
+  inferno_cloak: {name: 'Inferno Cloak', category: cloak, texture: 'cloaks/inferno.png', frametime: 70, price: 15000, description: 'Animated flames'}
+  galaxy_cloak: {name: 'Galaxy Cloak', category: cloak, texture: 'cloaks/galaxy.png', frametime: 110, price: 15000, description: 'Swirling stars'}
+  rainbow_wave_cloak: {name: 'Rainbow Wave Cloak', category: cloak, texture: 'cloaks/rainbow_wave.png', frametime: 80, price: 10000, description: 'Colors that never stop'}
   red_cloak:    {name: 'Red Cloak', category: cloak, color: '#B71C1C', price: 1500, description: 'A plain red cloak'}
   midnight_cloak: {name: 'Midnight Cloak', category: cloak, color: '#1A1F3A', price: 1500, description: 'A plain dark blue cloak'}
   mint_cloak:   {name: 'Mint Cloak', category: cloak, color: '#3FD8B0', price: 1500, description: 'A plain mint cloak'}

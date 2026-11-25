@@ -373,6 +373,9 @@ public final class Ui {
 			mascot(x - px, y - px, 11 * px, ((color >>> 24) & 0xFF) / 255f);
 			return;
 		}
+		if (texturedIcon(name, x, y, px, color)) {
+			return;
+		}
 		int[][] runs = RUNS.get(name);
 		if (runs == null) {
 			return;
@@ -380,6 +383,53 @@ public final class Ui {
 		for (int[] r : runs) {
 			rect(x + r[0] * px, y + r[1] * px, r[2] * px, px, color);
 		}
+	}
+
+	private static final ResourceLocation DISCORD = new ResourceLocation("plebitems", "textures/gui/discord.png");
+
+	/**
+	 * Icons drawn from a smooth texture instead of pixel runs (the Discord
+	 * chat bubble, 4:3, centered in the icon box). False for other icons.
+	 */
+	public static boolean texturedIcon(String name, float x, float y, float px, int color) {
+		if (!"nav_discord".equals(name) && !"discord".equals(name)) {
+			return false;
+		}
+		float box = ("discord".equals(name) ? 9 : 11) * px;
+		float w = box * 1.06f, h = w * 0.75f;
+		return tinted(DISCORD, x + (box - w) / 2f, y + (box - h) / 2f, w, h, color);
+	}
+
+	/** A white-on-transparent texture drawn in {@code color} (ARGB), smoothly scaled. False if it can't be bound. */
+	public static boolean tinted(ResourceLocation loc, float x, float y, float w, float h, int color) {
+		Minecraft mc = Minecraft.getMinecraft();
+		try {
+			mc.getTextureManager().bindTexture(loc);
+			ITextureObject tex = mc.getTextureManager().getTexture(loc);
+			if (tex == null) {
+				return false;
+			}
+			tex.setBlurMipmap(true, false);
+		} catch (Throwable t) {
+			return false;
+		}
+		GlStateManager.enableTexture2D();
+		GlStateManager.enableBlend();
+		GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+		GlStateManager.enableAlpha();
+		GlStateManager.alphaFunc(516, 0.01f);
+		GlStateManager.color((color >> 16 & 0xFF) / 255f, (color >> 8 & 0xFF) / 255f, (color & 0xFF) / 255f,
+				(color >>> 24) / 255f);
+		WorldRenderer wr = Tessellator.getInstance().getWorldRenderer();
+		wr.begin(7, DefaultVertexFormats.POSITION_TEX);
+		wr.pos(x, y + h, 0).tex(0, 1).endVertex();
+		wr.pos(x + w, y + h, 0).tex(1, 1).endVertex();
+		wr.pos(x + w, y, 0).tex(1, 0).endVertex();
+		wr.pos(x, y, 0).tex(0, 0).endVertex();
+		Tessellator.getInstance().draw();
+		GlStateManager.alphaFunc(516, 0.1f);
+		GlStateManager.color(1f, 1f, 1f, 1f);
+		return true;
 	}
 
 	private static final ResourceLocation MASCOT = new ResourceLocation("plebitems", "textures/gui/mascot.png");

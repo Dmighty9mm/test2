@@ -299,7 +299,7 @@ final class GameView implements ClientView {
 		if (p == null) {
 			return Collections.emptyList();
 		}
-		Collection<PotionEffect> active = p.getActivePotionEffects();
+		Collection<PotionEffect> active = p.getActivePotionEffectsList();
 		List<String> out = new ArrayList<>(active.size());
 		for (PotionEffect e : active) {
 			Potion potion = Potion.potionTypes[e.getPotionID()];

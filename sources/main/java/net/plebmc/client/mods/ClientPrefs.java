@@ -49,6 +49,9 @@ public final class ClientPrefs {
 	public int titleBackground;
 	/** The little animated mascot in the corner of the title screen. */
 	public boolean titleBuddy = true;
+	public static final String[] PARTICLES = { "None", "Snow", "Embers", "Fireflies" };
+	/** Particles drifting over the title screen. */
+	public int titleParticles = 1;
 	/** The mascot head at the top of the sidebar. */
 	public boolean titleMascot = true;
 	/** A clock in the corner of the title screen. */
@@ -117,6 +120,7 @@ public final class ClientPrefs {
 		titlePanorama = d.titlePanorama;
 		titleBackground = d.titleBackground;
 		titleBuddy = d.titleBuddy;
+		titleParticles = d.titleParticles;
 		titleMascot = d.titleMascot;
 		titleClock = d.titleClock;
 		titleSplash = d.titleSplash;
@@ -155,6 +159,7 @@ public final class ClientPrefs {
 		titlePanorama = idx(m.get("titlePanorama"), titlePanorama, PANORAMA_DIMS.length);
 		titleBackground = idx(m.get("titleBackground"), titleBackground, BACKGROUNDS.length);
 		titleBuddy = ProtoValues.asBool(m.get("titleBuddy"), titleBuddy);
+		titleParticles = idx(m.get("titleParticles"), titleParticles, PARTICLES.length);
 		titleMascot = ProtoValues.asBool(m.get("titleMascot"), titleMascot);
 		titleClock = ProtoValues.asBool(m.get("titleClock"), titleClock);
 		titleSplash = ProtoValues.asBool(m.get("titleSplash"), titleSplash);
@@ -180,6 +185,7 @@ public final class ClientPrefs {
 		m.put("titlePanorama", (double) titlePanorama);
 		m.put("titleBackground", (double) titleBackground);
 		m.put("titleBuddy", titleBuddy);
+		m.put("titleParticles", titleParticles);
 		m.put("titleMascot", titleMascot);
 		m.put("titleClock", titleClock);
 		m.put("titleSplash", titleSplash);

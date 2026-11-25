@@ -70,4 +70,9 @@ final class ModernPackFilter implements IResourcePack {
 	public String getPackName() {
 		return pack.getPackName();
 	}
+
+	@Override
+	public net.lax1dude.eaglercraft.v1_8.minecraft.ResourceIndex getEaglerFileIndex() {
+		return pack.getEaglerFileIndex();
+	}
 }

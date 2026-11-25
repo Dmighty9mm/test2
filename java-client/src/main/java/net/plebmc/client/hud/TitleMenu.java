@@ -198,6 +198,9 @@ public final class TitleMenu {
 
 		// ---- content ----
 		int x0 = contentLeft(w);
+		if (pr.titleParticles > 0 && animations()) {
+			particles(w, h, now, pr.titleParticles, slideIn);
+		}
 		showcase(x0, w, h, mx, my, t, acc, slideIn);
 		coinsChip(w, mx, my, acc, slideIn);
 		footer(x0, w, h, mx, my, splash, acc, slideIn, pr);
@@ -551,6 +554,94 @@ public final class TitleMenu {
 		r.pos(x, y, 0).tex(u0, v0).endVertex();
 		Tessellator.getInstance().draw();
 		GlStateManager.color(1f, 1f, 1f, 1f);
+		bubble(now, in);
+	}
+
+	/**
+	 * Snow, embers or fireflies over the background. Each particle is a pure
+	 * function of its index and the time, so there is nothing to keep or update.
+	 */
+	private static void particles(int w, int h, long now, int kind, float in) {
+		int count = kind == 3 ? 26 : 60;
+		double sec = now / 1000.0;
+		for (int i = 0; i < count; i++) {
+			double r1 = hash(i * 3 + 1), r2 = hash(i * 7 + 2), r3 = hash(i * 13 + 5);
+			float size, x, y;
+			int color;
+			float alpha;
+			if (kind == 1) { // snow: falls, sways
+				double speed = 10 + r2 * 18, life = (h + 20) / speed;
+				double k = ((sec + r3 * life) % life) / life;
+				y = (float) (-10 + k * (h + 20));
+				x = (float) (r1 * w + Math.sin(sec * (0.6 + r2) + i) * 8);
+				size = r2 > 0.7 ? 2f : 1f;
+				color = 0xFFFFFF;
+				alpha = 0.45f + 0.4f * (float) r3;
+			} else if (kind == 2) { // embers: rise and fade
+				double speed = 14 + r2 * 22, life = (h * 0.8) / speed;
+				double k = ((sec + r3 * life) % life) / life;
+				y = (float) (h + 4 - k * h * 0.8);
+				x = (float) (r1 * w + Math.sin(sec * 1.7 + i * 1.3) * 5);
+				size = r2 > 0.6 ? 2f : 1f;
+				color = k < 0.5 ? 0xFFD27A : 0xFF6A2A;
+				alpha = (float) (1 - k) * 0.9f;
+			} else { // fireflies: wander and blink
+				x = (float) ((r1 + Math.sin(sec * 0.13 + i) * 0.06) * w);
+				y = (float) ((0.35 + r2 * 0.6 + Math.cos(sec * 0.17 + i * 2) * 0.05) * h);
+				size = 2f;
+				color = 0xD8FF7A;
+				alpha = (float) Math.max(0, Math.sin(sec * (0.8 + r3) + i * 5)) * 0.9f;
+			}
+			int a = (int) (alpha * in * 255);
+			if (a > 4) {
+				Ui.rect((int) x, (int) y, (int) size, (int) size, a << 24 | color);
+				if (kind != 1 && size > 1) { // a soft glow around embers and fireflies
+					Ui.rect((int) x - 1, (int) y - 1, (int) size + 2, (int) size + 2, (a / 5) << 24 | color);
+				}
+			}
+		}
+	}
+
+	private static double hash(int n) {
+		n = (n << 13) ^ n;
+		return ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) / (double) 0x7fffffff;
+	}
+
+	/** What the mini mascot says when you point at him (a new line each time). */
+	private static final String[] BUDDY_LINES = { "Click me. I dare you.", "Pleb Coins come from quests!",
+			"Daily login = free coins", "New cloaks in the shop!", "Right Shift opens the mods", "Ssss... just kidding",
+			"Try the Cloak Maker!", "Join PlebMc, it's lit", "Did you do your quests?", "I like TNT. A lot." };
+	private static int buddyLine = -1;
+	private static long buddyLineAt;
+	private static float buddyBubble;
+
+	private static void bubble(long now, float in) {
+		boolean show = buddyHover > 0.5f && buddyStart == 0;
+		if (show && buddyLine < 0) {
+			buddyLine = (int) ((now / 7) % BUDDY_LINES.length);
+			buddyLineAt = now;
+		}
+		if (!show && buddyHover < 0.05f) {
+			buddyLine = -1;
+		}
+		buddyBubble = approach(buddyBubble, show ? 1f : 0f, 10f);
+		if (buddyBubble < 0.02f || buddyLine < 0) {
+			return;
+		}
+		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
+		String line = BUDDY_LINES[buddyLine];
+		// type the line out letter by letter
+		int n = animations() ? (int) Math.min(line.length(), (now - buddyLineAt) / 28) : line.length();
+		float sc = 0.75f;
+		int tw = (int) Math.ceil(font.getStringWidth(line) * sc);
+		int bw = tw + 10, bh = 13;
+		int bx = budX - bw + 4, by = budY - bh - 2;
+		int a = (int) (0xE0 * buddyBubble * in);
+		Ui.round(bx, by, bw, bh, a << 24 | 0x0B1016);
+		Ui.rect(bx + bw - 12, by + bh, 4, 2, a << 24 | 0x0B1016);
+		Ui.rect(bx + bw - 11, by + bh + 2, 2, 1, a << 24 | 0x0B1016);
+		Ui.rect(bx + 1, by + bh - 1, bw - 2, 1, ((int) (0xC0 * buddyBubble * in)) << 24 | (Ui.accent() & 0xFFFFFF));
+		text(font, line.substring(0, Math.max(0, n)), bx + 5, by + 3.5f, sc, ((int) (0xFF * buddyBubble * in)) << 24 | 0xFFFFFF);
 	}
 
 	// ---- bottom line ----
@@ -904,6 +995,9 @@ public final class TitleMenu {
 
 	/** An icon at fractional coordinates. */
 	private static void iconF(String name, float x, float y, float px, int color) {
+		if (Ui.texturedIcon(name, x, y, px, color)) {
+			return;
+		}
 		int[][] runs = Ui.runs(name);
 		if (runs == null) {
 			return;
