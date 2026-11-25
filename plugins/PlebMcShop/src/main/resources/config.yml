@@ -125,11 +125,11 @@ messages:
   playtime-message: '+%coins% %currency%'
 
 # Shop collections: the tabs across the top of the client's shop. Every item is in one
-# (collection: partners), Regular when it doesn't say. Add as many as you like.
-#   icon:  a client icon name (shop, partner, star, gift, ...)
+# (collection: partners), PlebMc when it doesn't say. Add as many as you like.
+#   icon:  a client icon name (mascot, shop, partner, star, gift, ...)
 #   color: the collection's accent in the client
 collections:
-  regular:  {name: 'Regular', icon: shop, description: 'Cosmetics from the PlebMc team'}
+  plebmc:   {name: 'PlebMc', icon: mascot, description: 'Cosmetics from the PlebMc team'}
   partners: {name: 'Partners', icon: partner, color: '#FF7AC6', description: 'Cosmetics made with PlebMc partners'}
 
 # The shop. Each item:
@@ -138,7 +138,7 @@ collections:
 #             hats:   tophat, crown, halo, partyhat, beanie, horns, cap, headphones, bunny,
 #                     wizard, viking, cowboy, propeller, chef (or use model, below)
 #             cloaks: leave it out
-#   collection: optional, which shop tab it's in (a key from 'collections', default regular)
+#   collection: optional, which shop tab it's in (a key from 'collections', default plebmc)
 #   creator:  optional, who made it ("by ..." in the shop), for partner cosmetics
 #   price:    coins (-1 = not for sale, give it with /plebshop give)
 #   color:    optional tint, like '#FFD700' (a cloak without a texture is this color)

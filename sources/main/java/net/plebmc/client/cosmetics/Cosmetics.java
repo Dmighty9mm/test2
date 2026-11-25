@@ -39,7 +39,7 @@ public final class Cosmetics {
 	public static final String CLOAK = "cloak";
 	public static final String[] CATEGORIES = { HAT, CLOAK };
 	/** The collection an item is in when the server doesn't say. */
-	public static final String REGULAR = "regular";
+	public static final String MAIN = "plebmc";
 
 	/** One shop item. {@link #render} is the look the client draws (see {@link #RENDERS}). */
 	public static final class Item {
@@ -58,8 +58,8 @@ public final class Cosmetics {
 		public int textureWidth;
 		/** Model hats ("render":"model"): the server's model id (a content hash); the texture is {@link #texture}. */
 		public String model;
-		/** The shop collection (tab) it's listed in: regular, partners, ... */
-		public String collection = REGULAR;
+		/** The shop collection (tab) it's listed in: plebmc, partners, ... */
+		public String collection = MAIN;
 		/** Partner items: who made it, or null. */
 		public String creator;
 
@@ -142,7 +142,7 @@ public final class Cosmetics {
 		}
 	}
 
-	/** A shop collection: a tab across the top of the shop (Regular, Partners). */
+	/** A shop collection: a tab across the top of the shop (PlebMc, Partners). */
 	public static final class Collection {
 		public final String id;
 		public final String name;
@@ -163,7 +163,7 @@ public final class Cosmetics {
 
 	/** Until the server sends its own. */
 	static final List<Collection> DEFAULT_COLLECTIONS = Collections.unmodifiableList(java.util.Arrays.asList(
-			new Collection(REGULAR, "Regular", "shop", 0, "Cosmetics from the PlebMc team"),
+			new Collection(MAIN, "PlebMc", "mascot", 0, "Cosmetics from the PlebMc team"),
 			new Collection("partners", "Partners", "partner", 0xFFFF7AC6, "Cosmetics made with PlebMc partners")));
 
 	/** Receives coin/quest popups (set by the HUD; null in tests). */
@@ -573,7 +573,7 @@ public final class Cosmetics {
 		Item it = new Item(id, str(m.get("name"), id), cat, render, str(m.get("description"), ""),
 				(int) Math.max(0, Math.min(Integer.MAX_VALUE, num(m.get("price"), 0))), color);
 		it.forSale = !Boolean.FALSE.equals(m.get("forSale"));
-		it.collection = str(m.get("collection"), REGULAR).toLowerCase();
+		it.collection = str(m.get("collection"), MAIN).toLowerCase();
 		String creator = str(m.get("creator"), null);
 		it.creator = creator == null || creator.trim().isEmpty() ? null : creator.trim();
 		String tex = str(m.get("texture"), null);
@@ -842,7 +842,7 @@ public final class Cosmetics {
 
 	/** The items of a category in one collection (anything with an unknown collection shows under the first). */
 	public static List<Item> catalog(String category, String collection) {
-		String first = collections.isEmpty() ? REGULAR : collections.get(0).id;
+		String first = collections.isEmpty() ? MAIN : collections.get(0).id;
 		List<Item> out = new ArrayList<>();
 		for (Item it : catalog) {
 			if (!it.category.equals(category)) {

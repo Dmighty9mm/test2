@@ -16,8 +16,8 @@ final class Catalog {
 	static final String CLOAK = "cloak";
 	static final List<String> CATEGORIES = Collections.unmodifiableList(java.util.Arrays.asList(HAT, CLOAK));
 
-	/** Shop collections (tabs in the client's shop): Regular by default, Partners for partner-made cosmetics. */
-	static final String REGULAR = "regular";
+	/** Shop collections (tabs in the client's shop): PlebMc by default, Partners for partner-made cosmetics. */
+	static final String MAIN = "plebmc";
 
 	static final class Collection {
 		final String id;
@@ -78,8 +78,8 @@ final class Catalog {
 		/** Model hats: the quads the client draws, and their content hash. */
 		byte[] modelBlob;
 		String modelHash;
-		/** The shop collection it's listed in (regular, partners, ...). */
-		String collection = REGULAR;
+		/** The shop collection it's listed in (plebmc, partners, ...). */
+		String collection = MAIN;
 		/** Partner items: who made it (shown in the shop), or null. */
 		String creator;
 
@@ -146,7 +146,7 @@ final class Catalog {
 
 	/**
 	 * {@code folder}: where cloak texture paths are read from (the plugin's folder);
-	 * {@code cols}: the "collections" section (null = Regular and Partners).
+	 * {@code cols}: the "collections" section (null = PlebMc and Partners).
 	 */
 	Catalog(Cfg sec, java.io.File folder, Cfg cols) {
 		readCollections(cols);
@@ -190,11 +190,14 @@ final class Catalog {
 			}
 			Item it = new Item(id, s.str("name", id), category, render, s.num("price", 0), color,
 					s.str("description", ""), s.str("permission", null));
-			String col = s.str("collection", REGULAR).toLowerCase();
+			String col = s.str("collection", MAIN).toLowerCase();
+			if ("regular".equals(col) && !collections.containsKey(col)) {
+				col = MAIN; // the old name of the main collection
+			}
 			if (!collections.containsKey(col)) {
 				warnings.add("item " + id + ": collection '" + col + "' is not in 'collections' " + collections.keySet()
-						+ ", listing it under " + REGULAR);
-				col = collections.containsKey(REGULAR) ? REGULAR : collections.keySet().iterator().next();
+						+ ", listing it under " + MAIN);
+				col = collections.containsKey(MAIN) ? MAIN : collections.keySet().iterator().next();
 			}
 			it.collection = col;
 			String creator = s.str("creator", null);
@@ -241,7 +244,7 @@ final class Catalog {
 			}
 		}
 		if (collections.isEmpty()) {
-			collections.put(REGULAR, new Collection(REGULAR, "Regular", "shop", null, "Cosmetics from the PlebMc team"));
+			collections.put(MAIN, new Collection(MAIN, "PlebMc", "mascot", null, "Cosmetics from the PlebMc team"));
 			collections.put("partners", new Collection("partners", "Partners", "partner", "#FF7AC6",
 					"Cosmetics made with PlebMc partners"));
 		}

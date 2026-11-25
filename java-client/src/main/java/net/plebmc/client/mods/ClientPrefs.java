@@ -22,8 +22,10 @@ public final class ClientPrefs {
 	}
 
 	// ---- interface ----
-	public static final int[] ACCENTS = { 0xFF3FD8E6, 0xFF4C9BFF, 0xFF4FE39A, 0xFFB085FF, 0xFFF5B942, 0xFFFF6FAE };
-	public static final String[] ACCENT_NAMES = { "PlebMc Cyan", "Blue", "Mint", "Violet", "Amber", "Rose" };
+	public static final int[] ACCENTS = { 0xFF3FD8E6, 0xFF4C9BFF, 0xFF4FE39A, 0xFFB085FF, 0xFFF5B942, 0xFFFF6FAE,
+			0xFFFF5A5A, 0xFFFF9A3C, 0xFFA6E34F, 0xFF2EC4B6, 0xFFFF7AC6, 0xFFE8EEF2 };
+	public static final String[] ACCENT_NAMES = { "PlebMc Cyan", "Blue", "Mint", "Violet", "Amber", "Rose", "Crimson",
+			"Orange", "Lime", "Teal", "Pink", "Snow" };
 	public int accent;
 	/** Menus slide and fade in, hover states ease. */
 	public boolean animations = true;
@@ -34,6 +36,22 @@ public final class ClientPrefs {
 	public static final String[] BACKDROPS = { "Dim", "Dark", "Light" };
 	/** How much of the game shows behind menus. */
 	public int backdrop;
+
+	// ---- title screen ----
+	public static final String[] SIDEBAR_MODES = { "Opens on hover", "Always open", "Icons only" };
+	/** How the title screen's sidebar behaves. */
+	public int titleSidebar;
+	public static final String[] PANORAMA_DIMS = { "Clear", "Soft", "Dark" };
+	/** How much the title screen darkens the panorama. */
+	public int titlePanorama = 1;
+	/** The server's status under the Play button. */
+	public boolean titleStatus = true;
+	/** The mascot head at the top of the sidebar. */
+	public boolean titleMascot = true;
+	/** A clock in the corner of the title screen. */
+	public boolean titleClock;
+	/** The yellow splash text at the bottom of the title screen. */
+	public boolean titleSplash;
 
 	// ---- notifications ----
 	/** Coin, quest and login popups (otherwise only the shop's own messages). */
@@ -86,6 +104,12 @@ public final class ClientPrefs {
 		modernMenus = d.modernMenus;
 		uiSounds = d.uiSounds;
 		backdrop = d.backdrop;
+		titleSidebar = d.titleSidebar;
+		titlePanorama = d.titlePanorama;
+		titleStatus = d.titleStatus;
+		titleMascot = d.titleMascot;
+		titleClock = d.titleClock;
+		titleSplash = d.titleSplash;
 		toasts = d.toasts;
 		toastTime = d.toastTime;
 		hudShadow = d.hudShadow;
@@ -115,6 +139,12 @@ public final class ClientPrefs {
 		modernMenus = ProtoValues.asBool(m.get("modernMenus"), modernMenus);
 		uiSounds = ProtoValues.asBool(m.get("sounds"), uiSounds);
 		backdrop = idx(m.get("backdrop"), backdrop, BACKDROPS.length);
+		titleSidebar = idx(m.get("titleSidebar"), titleSidebar, SIDEBAR_MODES.length);
+		titlePanorama = idx(m.get("titlePanorama"), titlePanorama, PANORAMA_DIMS.length);
+		titleStatus = ProtoValues.asBool(m.get("titleStatus"), titleStatus);
+		titleMascot = ProtoValues.asBool(m.get("titleMascot"), titleMascot);
+		titleClock = ProtoValues.asBool(m.get("titleClock"), titleClock);
+		titleSplash = ProtoValues.asBool(m.get("titleSplash"), titleSplash);
 		toasts = ProtoValues.asBool(m.get("toasts"), toasts);
 		toastTime = idx(m.get("toastTime"), toastTime, TOAST_SECONDS.length);
 		hudShadow = ProtoValues.asBool(m.get("hudShadow"), hudShadow);
@@ -131,6 +161,12 @@ public final class ClientPrefs {
 		m.put("modernMenus", modernMenus);
 		m.put("sounds", uiSounds);
 		m.put("backdrop", (double) backdrop);
+		m.put("titleSidebar", (double) titleSidebar);
+		m.put("titlePanorama", (double) titlePanorama);
+		m.put("titleStatus", titleStatus);
+		m.put("titleMascot", titleMascot);
+		m.put("titleClock", titleClock);
+		m.put("titleSplash", titleSplash);
 		m.put("toasts", toasts);
 		m.put("toastTime", (double) toastTime);
 		m.put("hudShadow", hudShadow);

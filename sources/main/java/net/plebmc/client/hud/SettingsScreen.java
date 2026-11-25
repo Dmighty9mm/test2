@@ -13,8 +13,11 @@ import net.plebmc.client.mods.Mod;
  */
 public final class SettingsScreen extends PlebScreen {
 
-	private static final String[] SECTIONS = { "Interface", "Notifications", "HUD", "Performance", "Behavior", "Developer" };
-	private static final String[] ICONS = { "palette", "bell", "hud", "performance", "settings", "debug" };
+	private static final String[] SECTIONS = { "Interface", "Title screen", "Notifications", "HUD", "Performance", "Behavior",
+			"Developer" };
+	/** The Title screen section, for {@link #SettingsScreen(GuiScreen, int)}. */
+	public static final int TITLE_SCREEN = 1;
+	private static final String[] ICONS = { "palette", "home", "bell", "hud", "performance", "settings", "debug" };
 
 	private int section;
 	private final Scroll scroll = new Scroll();
@@ -26,6 +29,12 @@ public final class SettingsScreen extends PlebScreen {
 
 	public SettingsScreen(GuiScreen parent) {
 		super(parent);
+	}
+
+	/** Opens on one section (for example {@link #TITLE_SCREEN}). */
+	public SettingsScreen(GuiScreen parent, int section) {
+		super(parent);
+		this.section = Math.max(0, Math.min(SECTIONS.length - 1, section));
 	}
 
 	private static ClientPrefs p() {
@@ -104,7 +113,35 @@ public final class SettingsScreen extends PlebScreen {
 					saved(() -> pr.uiSounds = !pr.uiSounds)), clip);
 			y += step;
 			break;
-		case 1: // Notifications
+		case 1: // Title screen
+			add(choice("Sidebar", "Open the sidebar when you point at it, keep it open, or show icons only", lx, y, lw, h,
+					() -> ClientPrefs.SIDEBAR_MODES[pr.titleSidebar],
+					saved(() -> pr.titleSidebar = wrap(pr.titleSidebar + 1, ClientPrefs.SIDEBAR_MODES.length)),
+					saved(() -> pr.titleSidebar = wrap(pr.titleSidebar - 1, ClientPrefs.SIDEBAR_MODES.length))), clip);
+			y += step;
+			add(choice("Panorama", "How much the title screen darkens the Minecraft panorama", lx, y, lw, h,
+					() -> ClientPrefs.PANORAMA_DIMS[pr.titlePanorama],
+					saved(() -> pr.titlePanorama = wrap(pr.titlePanorama + 1, ClientPrefs.PANORAMA_DIMS.length)),
+					saved(() -> pr.titlePanorama = wrap(pr.titlePanorama - 1, ClientPrefs.PANORAMA_DIMS.length))), clip);
+			y += step;
+			add(toggle("Server status", "Online players and ping under the Play button", lx, y, lw, h, () -> pr.titleStatus,
+					saved(() -> pr.titleStatus = !pr.titleStatus)), clip);
+			y += step;
+			add(toggle("Mascot", "The PlebMc mascot at the top of the sidebar", lx, y, lw, h, () -> pr.titleMascot,
+					saved(() -> pr.titleMascot = !pr.titleMascot)), clip);
+			y += step;
+			add(toggle("Clock", "The time in the bottom corner", lx, y, lw, h, () -> pr.titleClock,
+					saved(() -> pr.titleClock = !pr.titleClock)), clip);
+			y += step;
+			add(toggle("Splash text", "The yellow Minecraft splash line at the bottom", lx, y, lw, h, () -> pr.titleSplash,
+					saved(() -> pr.titleSplash = !pr.titleSplash)), clip);
+			y += step;
+			add(choice("Accent color", "The color of highlights in every PlebClient menu", lx, y, lw, h,
+					() -> ClientPrefs.ACCENT_NAMES[pr.accent], saved(() -> pr.accent = wrap(pr.accent + 1, ClientPrefs.ACCENTS.length)),
+					saved(() -> pr.accent = wrap(pr.accent - 1, ClientPrefs.ACCENTS.length))), clip);
+			y += step;
+			break;
+		case 2: // Notifications
 			add(toggle("Popups", "Coins, finished quests and the daily login reward", lx, y, lw, h, () -> pr.toasts,
 					saved(() -> pr.toasts = !pr.toasts)), clip);
 			y += step;
@@ -116,7 +153,7 @@ public final class SettingsScreen extends PlebScreen {
 			add(dur, clip);
 			y += step;
 			break;
-		case 2: // HUD
+		case 3: // HUD
 			add(toggle("Text shadow", "A shadow under HUD text, easier to read on bright ground", lx, y, lw, h,
 					() -> pr.hudShadow, saved(() -> pr.hudShadow = !pr.hudShadow)), clip);
 			y += step;
@@ -125,7 +162,7 @@ public final class SettingsScreen extends PlebScreen {
 			add(edit, clip);
 			y += 26;
 			break;
-		case 3: // Performance
+		case 4: // Performance
 			add(choice("Resolution", "How sharp the game draws. Lower is faster.", lx, y, lw, h, FpsBoost::scaleLabel,
 					() -> FpsBoost.cycleScale(1), () -> FpsBoost.cycleScale(-1)), clip);
 			y += step;
@@ -140,7 +177,7 @@ public final class SettingsScreen extends PlebScreen {
 					saved(() -> fps.setEnabled(!fps.isEnabled()))), clip);
 			y += step;
 			break;
-		case 4: // Behavior
+		case 5: // Behavior
 			add(choice("Right Shift opens", "The screen Right Shift takes you to", lx, y, lw, h,
 					() -> ClientPrefs.OPENS[pr.shiftOpens], saved(() -> pr.shiftOpens = wrap(pr.shiftOpens + 1, ClientPrefs.OPENS.length)),
 					saved(() -> pr.shiftOpens = wrap(pr.shiftOpens - 1, ClientPrefs.OPENS.length))), clip);
@@ -217,7 +254,7 @@ public final class SettingsScreen extends PlebScreen {
 			rows.get(i).y = rowBase.get(i) - off;
 		}
 		scroll.drawBar(lx + lw + 3);
-		if (section == 0) {
+		if (section == 0 || section == TITLE_SCREEN) {
 			// accent swatches under the options
 			int y = rowBase.get(rows.size() - 1) - off + 34;
 			if (y + 12 < ly + lh) {
@@ -235,7 +272,7 @@ public final class SettingsScreen extends PlebScreen {
 
 	@Override
 	protected void clicked(int mx, int my, int button) {
-		if (section == 0 && !rows.isEmpty()) {
+		if ((section == 0 || section == TITLE_SCREEN) && !rows.isEmpty()) {
 			int y = rowBase.get(rows.size() - 1) - scroll.y() + 34;
 			for (int i = 0; i < ClientPrefs.ACCENTS.length; i++) {
 				int x = lx + i * 18;

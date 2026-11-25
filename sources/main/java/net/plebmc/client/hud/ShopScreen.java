@@ -21,7 +21,7 @@ import net.plebmc.client.cosmetics.Cosmetics;
 public final class ShopScreen extends PlebScreen {
 
 	private String category = Cosmetics.HAT;
-	private String collection = Cosmetics.collections().isEmpty() ? Cosmetics.REGULAR : Cosmetics.collections().get(0).id;
+	private String collection = Cosmetics.collections().isEmpty() ? Cosmetics.MAIN : Cosmetics.collections().get(0).id;
 	private int page;
 	private String selectedId;
 	private int seenVersion = -1;
@@ -68,7 +68,7 @@ public final class ShopScreen extends PlebScreen {
 		gy = wy + 66;
 		gh = wy + wh - 8 - 44 - gy;
 
-		// collections (Regular, Partners, ...) as a switch in the header
+		// collections (PlebMc, Partners, ...) as a switch in the header
 		if (Cosmetics.collection(collection) == null && !Cosmetics.collections().isEmpty()) {
 			collection = Cosmetics.collections().get(0).id;
 		}
@@ -325,9 +325,11 @@ public final class ShopScreen extends PlebScreen {
 		}
 
 		if (its.isEmpty()) {
-			Ui.icon(Ui.hasIcon(category) ? category : "shop", gx + gw / 2 - 13, gy + 20, 3, Ui.alpha(Ui.accent(), 0x80));
 			Cosmetics.Collection col = Cosmetics.collection(collection);
 			boolean partner = col != null && Cosmetics.collections().indexOf(col) > 0;
+			// the mascot, bobbing a little, keeps the empty page company
+			float bob = (float) Math.sin(System.currentTimeMillis() / 420.0) * 1.2f;
+			Ui.mascot(gx + gw / 2f - 14, gy + 16 + bob, 28, 0.95f);
 			Ui.centered("No " + (partner ? "partner " : "") + categoryName(category).toLowerCase() + " yet",
 					gx + gw / 2, gy + 52, Ui.MUTED);
 			if (partner) {

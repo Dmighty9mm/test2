@@ -29,22 +29,30 @@ final class TitleActions {
 
 	/** The sidebar: id, label, icon, hint. "-" starts the bottom group. */
 	static final String[][] ITEMS = {
-			{ "home", "Home", "home", "Mods, shop, quests, HUD and settings" },
-			{ "play", "Play PlebMc", "play", "Join play.plebmc.top" },
-			{ "single", "Singleplayer", "world", "Your worlds" },
-			{ "multi", "Multiplayer", "server", "Servers and LAN worlds" },
-			{ "wardrobe", "Wardrobe", "wardrobe", "Hats and cloaks everyone on PlebMc sees" },
-			{ "options", "Options", "settings", "Video, controls and sound" },
-			{ "profile", "Edit Profile", "account", "Your name and skin" },
+			{ "play", "Play PlebMc", "nav_play", "Join play.plebmc.top" },
+			{ "single", "Singleplayer", "nav_single", "Your worlds" },
+			{ "multi", "Multiplayer", "nav_multi", "Servers and LAN worlds" },
+			{ "wardrobe", "Wardrobe", "nav_wardrobe", "Hats and cloaks everyone on PlebMc sees" },
+			{ "mods", "Mods", "nav_mods", "Turn mods on and off" },
+			{ "quests", "Quests", "nav_quests", "Daily and weekly quests" },
+			{ "customize", "Customize", "nav_customize", "Colors and the title screen" },
+			{ "options", "Options", "nav_options", "Video, controls and sound" },
+			{ "profile", "Edit Profile", "nav_profile", "Your name and skin" },
 			{ "-" },
-			{ "discord", "Discord", "discord", "Join the PlebMc Discord" },
-			{ "language", "Language", "general", "Change the game language" } };
+			{ "discord", "Discord", "nav_discord", "Join the PlebMc Discord" },
+			{ "language", "Language", "nav_language", "Change the game language" } };
 
 	static void run(GuiScreen menu, String id) {
 		Minecraft mc = Minecraft.getMinecraft();
 		switch (id) {
-		case "home":
-			mc.displayGuiScreen(new LauncherScreen(menu));
+		case "mods":
+			mc.displayGuiScreen(new ModsScreen(menu));
+			break;
+		case "quests":
+			mc.displayGuiScreen(new QuestsScreen(menu));
+			break;
+		case "customize":
+			mc.displayGuiScreen(new SettingsScreen(menu, SettingsScreen.TITLE_SCREEN));
 			break;
 		case "play":
 			PlebMenu.joinServer(menu);

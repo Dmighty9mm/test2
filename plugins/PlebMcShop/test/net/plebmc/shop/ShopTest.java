@@ -201,17 +201,20 @@ public class ShopTest {
         check(Math.abs(minY - 7.6f) < 0.01f && maxAbsX < 6f, "auto placement: " + minY + " " + maxAbsX);
     }
 
-    /** Shop collections (Regular / Partners), partner creators, and old trail items being left out. */
+    /** Shop collections (PlebMc / Partners), partner creators, and old trail items being left out. */
     static void collections(File dir, Logger log) throws Exception {
         net = new FakeNet();
         core = new ShopCore(net, new Store(new File(dir, "col-players.yml"), log),
                 cfg("  red_cloak:", "  p_cloak: {name: P, category: cloak, color: '#FF00FF', collection: Partners, creator: ' Streamer ', price: 5}\n"
                         + "  lost_hat: {name: L, category: hat, render: cap, collection: nope, price: 5}\n"
+                        + "  old_hat: {name: O, category: hat, render: chef, collection: regular, price: 5}\n"
                         + "  old_trail: {name: T, category: trail, render: flame, price: 5}\n  red_cloak:"), log);
         Catalog.Item pc = core.catalog.get("p_cloak");
         check(pc != null && "partners".equals(pc.collection) && "Streamer".equals(pc.creator), "partner item: collection and creator");
-        check("regular".equals(core.catalog.get("lost_hat").collection) && core.catalog.warnings().toString().contains("nope"),
-                "unknown collection falls back to regular with a warning");
+        check("plebmc".equals(core.catalog.get("lost_hat").collection) && core.catalog.warnings().toString().contains("nope"),
+                "unknown collection falls back to plebmc with a warning");
+        check("plebmc".equals(core.catalog.get("old_hat").collection) && !core.catalog.warnings().toString().contains("regular"),
+                "the old 'regular' collection is read as plebmc, quietly");
         check(core.catalog.get("old_trail") == null && core.catalog.warnings().toString().contains("trails were removed"),
                 "trail items are left out: " + core.catalog.warnings());
         P p = join("Partnered", "lobby", true);
@@ -222,7 +225,7 @@ public class ShopTest {
         Cosmetics.Item ci = Cosmetics.item("p_cloak");
         check(ci != null && "partners".equals(ci.collection) && "Streamer".equals(ci.creator)
                 && Cosmetics.catalog(Cosmetics.CLOAK, "partners").size() == 1
-                && Cosmetics.catalog(Cosmetics.CLOAK, "regular").size() == 6, "client splits the shop by collection");
+                && Cosmetics.catalog(Cosmetics.CLOAK, "plebmc").size() == 6, "client splits the shop by collection");
         // the equipped cloak survives a restart (it used to be dropped on load)
         cmd("give", "Partnered", "red_cloak");
         cmd("equip", "Partnered", "cloak", "red_cloak");
@@ -266,14 +269,14 @@ public class ShopTest {
         for (Map<?, ?> m : mighty.got) if (m.containsKey("catalog")) withCatalog = m;
         check(withCatalog != null && ((List<?>) withCatalog.get("catalog")).size() == 24, "catalog has 24 items");
         List<?> cols = (List<?>) withCatalog.get("collections");
-        check(cols != null && cols.size() == 2 && "regular".equals(((Map<?, ?>) cols.get(0)).get("id"))
+        check(cols != null && cols.size() == 2 && "plebmc".equals(((Map<?, ?>) cols.get(0)).get("id"))
                 && "Partners".equals(((Map<?, ?>) cols.get(1)).get("name")), "collections sent: " + cols);
         boolean noTrails = true;
         for (Object o : (List<?>) withCatalog.get("catalog")) {
             Map<?, ?> im = (Map<?, ?>) o;
-            noTrails &= !"trail".equals(im.get("category")) && "regular".equals(im.get("collection"));
+            noTrails &= !"trail".equals(im.get("category")) && "plebmc".equals(im.get("collection"));
         }
-        check(noTrails, "no trails in the shop, everything in Regular by default");
+        check(noTrails, "no trails in the shop, everything in PlebMc by default");
         check(mighty.coins() == 50, "day 1 login reward: " + mighty.coins());
         check(String.valueOf(mighty.last("notify").get("message")).contains("+50 PlebMc Coins"), "login popup");
         check(mighty.done("login") && "general".equals(mighty.quest("login").get("category")) && ((Number) mighty.quest("login").get("streak")).intValue() == 1,

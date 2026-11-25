@@ -10,7 +10,7 @@ work on every server behind the proxy.
 - **Earning**: a daily login reward with a streak, coins for time online, and daily and
   weekly quests in **categories**: by default **General** (counts on every server) and
   **PlebNite** (counts only on PlebNite). The client shows All / General / PlebNite.
-- **Spending**: hats and HD cloaks, in shop collections (Regular, Partners, ...). Everyone on the PlebMc client sees each other's (per server).
+- **Spending**: hats and HD cloaks, in shop collections (PlebMc, Partners, ...). Everyone on the PlebMc client sees each other's (per server).
 - **plebmc.top login**: players log in to the client with their website (NamelessMC)
   account and see their website name and rank (Right Shift > Account), and log out.
 
@@ -125,15 +125,15 @@ checked again on the proxy, so a modified client can't use it. Turn it off with
 
 Each item in `items:` has a `category` (`hat` or `cloak`; trails were removed and are skipped with a warning), a `render` (the look the
 client draws; leave it out for cloaks), a `price` (`-1` = not for sale, give it by command), and optionally a
-`color` (`'#RRGGBB'`, tints a hat or colors a plain cloak), a `description`, a `permission` needed to buy it, a `collection` (shop tab, default `regular`) and a `creator` (shown as "by ...").
+`color` (`'#RRGGBB'`, tints a hat or colors a plain cloak), a `description`, a `permission` needed to buy it, a `collection` (shop tab, default `plebmc`) and a `creator` (shown as "by ...").
 
-### Collections (Regular, Partners)
+### Collections (PlebMc, Partners)
 
 The shop's top tabs come from `collections:` in `config.yml`:
 
 ```yaml
 collections:
-  regular: {name: 'Regular'}
+  plebmc: {name: 'PlebMc'}
   partners: {name: 'Partners', icon: partner, color: '#FF7AC6'}
 ```
 
@@ -143,7 +143,7 @@ Put a partner's item in their tab with `collection: partners` (and `creator: 'Th
   partner_hat: {name: 'Partner Hat', category: hat, render: wizard, color: '#FF7AC6', price: 2000, collection: partners, creator: 'Steve'}
 ```
 
-Add more collections the same way. An item naming a collection that isn't listed goes under `regular` with a warning.
+Add more collections the same way. An item naming a collection that isn't listed goes under `plebmc` with a warning.
 
 ### HD cloaks
 

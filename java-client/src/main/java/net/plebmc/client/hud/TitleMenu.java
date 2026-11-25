@@ -19,33 +19,24 @@ import net.plebmc.client.mods.ClientPrefs;
  * PlebClient menus are on (GuiMainMenu hands drawing, clicks and keys to
  * this class; the vanilla buttons stay in the list but are hidden).
  *
+ * <p>Deliberately quiet: the panorama fills the whole screen, including
+ * behind the sidebar. On top of it there is only
  * <ul>
- * <li>An icon sidebar on the left that grows into a labelled panel while
- * the mouse is over it. A single accent indicator glides to the hovered
- * entry, each entry fades in a highlight, nudges and recolors its icon and
- * slides in its label.</li>
- * <li>The PlebClient wordmark in the middle with a slow float, a light
- * sweep and a glow; chips under it with the game version and the PlebMc
- * server's live status (online, players, ping); a server card with a big
- * Play button.</li>
- * <li>A "What's new" column on wide screens, an account chip, and a slim
- * info bar at the bottom (versions, splash text, credits).</li>
+ * <li>a transparent sidebar on the left (the mascot, icons, and labels that
+ * slide in while the mouse is over it), separated by a thin accent line,
+ * with a translucent hover wash and a small accent indicator;</li>
+ * <li>one Play button, with the server's status under it;</li>
+ * <li>a faint version line at the bottom (plus an optional clock and splash
+ * text).</li>
  * </ul>
- *
- * Every animation is eased by elapsed time (not per frame), so it runs the
- * same at 30 or 240 FPS. Nothing is drawn with blur or shaders: plain
- * colored quads, the font, and a couple of soft glows.
+ * The sidebar can also stay open or stay icons only (Settings, Title
+ * screen). Every animation is eased by elapsed time, so it runs the same at
+ * 30 or 240 FPS.
  */
 public final class TitleMenu {
 
 	private TitleMenu() {
 	}
-
-	/** Short news for the "What's new" column: title, text. */
-	static final String[][] NEWS = {
-			{ "New title screen", "Point at the sidebar to open it." },
-			{ "Partner cosmetics", "A new Partners tab in the shop." },
-			{ "8 new hats", "Shown in 3D in the shop. Trails are gone." } };
 
 	public static boolean active() {
 		Minecraft mc = Minecraft.getMinecraft();
@@ -64,7 +55,10 @@ public final class TitleMenu {
 	private static float[] hover = new float[0];
 	private static float indY = -1, indH, indA; // the sliding indicator
 	private static int keySel = -1; // keyboard selection
-	private static float playHover, chipHover, creditsHover;
+	private static float playHover;
+	private static float creditsHover;
+	private static int tipItem = -1;
+	private static float tipA;
 
 	private static String pending; // action waiting for the fade-out
 	private static long pendingAt;
@@ -79,7 +73,7 @@ public final class TitleMenu {
 		if (s != screen) {
 			screen = s;
 			openedAt = now;
-			expand = 0f;
+			expand = mode() == 1 ? 1f : 0f;
 			indY = -1;
 			fadeInAt = 0;
 		} else if (pending != null || pendingAt != 0) {
@@ -101,17 +95,32 @@ public final class TitleMenu {
 	// ==================== layout ====================
 
 	private static final int COLLAPSED = 30;
-	private static final int ROW = 22;
+
+	/** 0 opens on hover, 1 always open, 2 icons only. */
+	private static int mode() {
+		try {
+			return ClientPrefs.get().titleSidebar;
+		} catch (Throwable t) {
+			return 0;
+		}
+	}
 
 	private static int expanded(int w) {
-		return Math.max(96, Math.min(128, w / 3));
+		return Math.max(96, Math.min(124, w / 3));
 	}
 
 	private static float sideWidth(int w) {
 		return COLLAPSED + (expanded(w) - COLLAPSED) * ease(expand);
 	}
 
-	/** Y of each sidebar entry (top group under the logo mark, bottom group above the info bar). */
+	/** Where the content starts: right of the sidebar as it sits when nobody points at it. */
+	private static int contentLeft(int w) {
+		return mode() == 1 ? expanded(w) : COLLAPSED;
+	}
+
+	private static final int TOP = 34;
+
+	/** Y of each sidebar entry (top group under the mascot, bottom group at the bottom). */
 	private static int[] rows(int h) {
 		String[][] it = TitleActions.ITEMS;
 		int[] y = new int[it.length];
@@ -122,27 +131,29 @@ public final class TitleMenu {
 				break;
 			}
 		}
-		int top = 40;
-		int room = h - 18 - top;
-		int topCount = split;
-		int bottomCount = it.length - split - 1;
-		int row = Math.max(16, Math.min(ROW, room / Math.max(1, topCount + bottomCount + 1)));
+		int bottomCount = it.length - split - (split < it.length ? 1 : 0);
+		int row = rowHeight(h);
 		for (int i = 0; i < split; i++) {
-			y[i] = top + i * row;
+			y[i] = TOP + i * row;
 		}
 		if (split < it.length) {
 			y[split] = -1;
 		}
-		int by = h - 18 - 6 - bottomCount * row;
+		int by = h - 8 - bottomCount * row;
 		for (int i = split + 1; i < it.length; i++) {
-			y[i] = Math.max(top + split * row + 6, by + (i - split - 1) * row);
+			y[i] = Math.max(TOP + split * row + 4, by + (i - split - 1) * row);
 		}
 		return y;
 	}
 
 	private static int rowHeight(int h) {
-		int[] y = rows(h);
-		return y.length > 1 && y[1] > y[0] ? y[1] - y[0] : ROW;
+		int n = 0;
+		for (String[] e : TitleActions.ITEMS) {
+			if (!"-".equals(e[0])) {
+				n++;
+			}
+		}
+		return Math.max(14, Math.min(22, (h - 8 - TOP) / (n + 1)));
 	}
 
 	// ==================== drawing ====================
@@ -160,43 +171,39 @@ public final class TitleMenu {
 		float t = (now % 3_600_000L) / 1000f;
 		int w = s.width, h = s.height;
 		int acc = Ui.accent();
-		TitleActions.pollStatus();
-		// text writes depth here: without this the panels drawn over it would have holes
+		ClientPrefs pr = ClientPrefs.get();
+		if (pr.titleStatus) {
+			TitleActions.pollStatus();
+		}
+		// text writes depth here: without this the quads drawn over it would have holes
 		GlStateManager.disableDepth();
 
-		backdrop(w, h, t, acc);
+		backdrop(w, h, pr.titlePanorama);
 
 		// ---- sidebar hover / expand ----
+		int mode = mode();
 		float sw = sideWidth(w);
-		boolean inSide = mx >= 0 && mx < sw + 2 && my >= 0 && my < h - 16 && pending == null;
+		boolean inSide = mx >= 0 && mx < sw + 2 && my >= 0 && my < h && pending == null;
 		if (inSide) {
 			leftAt = 0;
 		} else if (leftAt == 0) {
 			leftAt = now;
 		}
-		boolean open = inSide || (leftAt != 0 && now - leftAt < 140) || keySel >= 0;
+		boolean open = mode == 1 || (mode == 0 && (inSide || (leftAt != 0 && now - leftAt < 140) || keySel >= 0));
 		expand = approach(expand, open ? 1f : 0f, open ? 11f : 9f);
 		sw = sideWidth(w);
+		float slideIn = ease(intro);
 
 		// ---- content ----
-		float slideIn = ease(intro);
-		int content = COLLAPSED;
-		boolean news = w - content >= 430 && h >= 200;
-		int newsW = news ? Math.min(140, (w - content) / 4) : 0;
-		int cx0 = content + 12;
-		int cx1 = w - 12 - (news ? newsW + 12 : 0);
-		centerpiece(s, cx0, cx1, h, mx, my, t, acc, slideIn);
-		if (news) {
-			newsColumn(w - 12 - newsW, newsW, h, t, acc, intro, now);
-		}
-		accountChip(w, mx, my, acc, slideIn);
-		infoBar(w, h, mx, my, splash, acc, slideIn);
+		int x0 = contentLeft(w);
+		playArea(x0, w, h, mx, my, t, acc, slideIn, pr.titleStatus);
+		footer(x0, w, h, mx, my, splash, acc, slideIn, pr);
 
-		// darken the content a little while the sidebar is open, so it reads as a layer
-		if (expand > 0.01f) {
-			fill(sw, 0, w - sw, h, Ui.alpha(0xFF02050A, Math.round(0x50 * ease(expand))));
+		// a light veil over the content while the sidebar floats open over it
+		if (mode == 0 && expand > 0.01f) {
+			fill(sw, 0, w - sw, h, Ui.alpha(0xFF02050A, Math.round(0x30 * ease(expand))));
 		}
-		sidebar(w, h, mx, my, t, acc, intro, now);
+		sidebar(w, h, mx, my, t, acc, intro, pr.titleMascot);
 
 		// ripples and the fade used between sections
 		ripples(now, acc);
@@ -226,338 +233,157 @@ public final class TitleMenu {
 		GlStateManager.enableDepth();
 	}
 
-	/** Darkens and tints the panorama, with two slow glows and a few drifting sparks. */
-	private static void backdrop(int w, int h, float t, int acc) {
-		// left side darker (the sidebar and text sit there), the rest lets the panorama through
-		gradientH(0, 0, w, h, 0xE6050A10, 0x8C050A10);
-		PlebTheme.gradient(0, 0, w, h / 3, 0x60040609, 0x00040609);
-		PlebTheme.gradient(0, h * 2 / 3, w, h - h * 2 / 3, 0x00040609, 0xD0040609);
-		float gx = w * (0.55f + 0.08f * (float) Math.sin(t * 0.11));
-		float gy = h * (0.42f + 0.06f * (float) Math.cos(t * 0.09));
-		PlebTheme.glow(gx, gy, Math.max(w, h) * 0.42f, Ui.alpha(acc, 0x2E));
-		int second = Ui.mix(acc, 0xFF8B5CFF, 0.6f);
-		PlebTheme.glow(w * (0.9f + 0.04f * (float) Math.cos(t * 0.07)), h * (0.95f + 0.03f * (float) Math.sin(t * 0.13)),
-				Math.max(w, h) * 0.45f, Ui.alpha(second, 0x26));
-		// a faint light beam behind the logo, slowly swinging
-		float beam = (float) Math.sin(t * 0.25) * 0.08f;
-		beam(w * (0.5f + beam), -10, w * 0.12f, h * 0.9f, Ui.alpha(acc, 0x12));
-		// sparks: few, slow, twinkling (no particle system to update)
-		GlStateManager.disableTexture2D();
-		GlStateManager.enableBlend();
-		for (int i = 0; i < 28; i++) {
-			float rx = hash(i * 3 + 11), ry = hash(i * 7 + 5), sp = 0.008f + 0.02f * hash(i * 11 + 7);
-			float x = rx * w + (float) Math.sin(t * 0.4f + i) * 8f;
-			float y = ((ry - t * sp) % 1f + 1f) % 1f * (h + 20) - 10;
-			float tw = 0.5f + 0.5f * (float) Math.sin(t * (1.2f + hash(i) * 1.6f) + i * 1.3f);
-			float size = hash(i * 5 + 3) > 0.78f ? 1.5f : 1f;
-			int c = hash(i * 13 + 1) > 0.45f ? acc : 0xFFFFFFFF;
-			fill(x, y, size, size, Ui.alpha(c, Math.round(25 + 110 * tw)));
+	/** Only shading on the panorama: a soft darkening on the left and at the bottom, plus the chosen dim. */
+	private static void backdrop(int w, int h, int dim) {
+		int all = dim == 0 ? 0 : dim == 1 ? 0x30 : 0x80;
+		if (all > 0) {
+			fill(0, 0, w, h, Ui.alpha(0xFF03060A, all));
 		}
-		GlStateManager.enableTexture2D();
+		gradientH(0, 0, Math.min(w, 170), h, Ui.alpha(0xFF03060A, dim == 0 ? 0x50 : 0x68), 0x0003060A);
+		PlebTheme.gradient(0, h - h / 4, w, h / 4, 0x0003060A, Ui.alpha(0xFF03060A, dim == 0 ? 0x60 : 0x80));
 	}
 
-	// ---- the middle ----
+	// ---- the Play button ----
 
 	private static int playX, playY, playW, playH;
-	private static int chipX, chipY, chipW, chipH;
 
-	private static void centerpiece(GuiScreen s, int x0, int x1, int h, int mx, int my, float t, int acc, float in) {
+	private static void playArea(int x0, int w, int h, int mx, int my, float t, int acc, float in, boolean status) {
 		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
-		int cw = x1 - x0;
-		float cx = x0 + cw / 2f;
-		String a = "PLEB", b = "CLIENT";
-		int tw = font.getStringWidth(a + b);
-		float sc = Math.max(2f, Math.min(5f, Math.min(cw * 0.78f / tw, (h - 120) / 14f)));
-		sc = Math.round(sc * 2f) / 2f;
-		int cardW = Math.min(300, cw - 8);
-		int cardH = 52;
-		float block = 9 * sc + 10 + 14 + 14 + cardH;
-		float top = Math.max(24, (h - 16 - block) / 2f - 4);
-		float rise = (1f - in) * 14f;
-
-		// wordmark: float, shadow, sweep, glow
-		float bob = animations() ? (float) Math.sin(t * 1.1f) * 1.2f : 0f;
-		float lx = cx - tw * sc / 2f;
-		float ly = top + rise + bob;
-		PlebTheme.glow(cx, ly + 4.5f * sc, tw * sc * 0.55f, Ui.alpha(acc, Math.round(0x30 * in)));
-		int aw = Math.round(font.getStringWidth(a) * sc);
-		int alphaIn = Math.round(255 * in);
-		text(font, a, lx + sc * 0.6f, ly + sc * 0.6f, sc, Ui.alpha(0xFF000000, Math.round(0xA0 * in)));
-		text(font, b, lx + aw + sc * 0.6f, ly + sc * 0.6f, sc, Ui.alpha(Ui.mix(acc, 0xFF000000, 0.8f), Math.round(0xE0 * in)));
-		text(font, a, lx, ly, sc, Ui.alpha(0xFFFFFFFF, alphaIn));
-		text(font, b, lx + aw, ly, sc, Ui.alpha(acc, alphaIn));
-		float sweep = (t * 0.3f) % 1.8f;
-		if (sweep < 1f && animations()) {
-			PlebTheme.glow(lx - 16 + (tw * sc + 32) * sweep, ly + 4.5f * sc, 5f * sc, 0x2CFFFFFF);
+		float cx = x0 + (w - x0) / 2f;
+		playW = Math.max(110, Math.min(150, (w - x0) / 3));
+		playH = 24;
+		float rise = (1f - in) * 10f;
+		playX = Math.round(cx - playW / 2f);
+		playY = Math.round(h / 2f - playH / 2f + 6 + rise);
+		boolean over = mx >= playX && mx < playX + playW && my >= playY && my < playY + playH && pending == null
+				&& mx >= sideWidth(w);
+		playHover = approach(playHover, over ? 1f : 0f, 12f);
+		float hv = ease(playHover);
+		int a = Math.round(255 * in);
+		// glass that fills with the accent on hover
+		roundF(playX, playY, playW, playH, Ui.alpha(0xFF05090E, Math.round(0x8C * in * (1f - hv))));
+		if (hv > 0.01f) {
+			gradientRoundF(playX, playY, playW, playH, Ui.alpha(Ui.mix(acc, 0xFFFFFFFF, 0.15f), Math.round(0xF0 * hv * in)),
+					Ui.alpha(Ui.mix(acc, 0xFF000000, 0.15f), Math.round(0xF0 * hv * in)));
 		}
-		// accent underline that breathes
-		float ul = tw * sc * (0.35f + 0.08f * (float) Math.sin(t * 1.4f)) * in;
-		float uy = ly + 9 * sc + 3;
-		gradientH(cx - ul, uy, ul, 1, Ui.alpha(acc, 0), Ui.alpha(acc, 0xE0));
-		gradientH(cx, uy, ul, 1, Ui.alpha(acc, 0xE0), Ui.alpha(acc, 0));
+		outlineF(playX, playY, playW, playH, Ui.alpha(acc, Math.round((0xB0 + 0x4F * hv) * in)));
+		int fg = Ui.mix(0xFFFFFFFF, Ui.ON_ACCENT, hv);
+		String label = "PLAY";
+		int lw = 11 + 6 + font.getStringWidth(label);
+		float lx = cx - lw / 2f + 1.5f * hv;
+		iconF("nav_play", lx - 1, playY + (playH - 11) / 2f, 1f, Ui.alpha(fg, a));
+		text(font, label, lx + 17, playY + (playH - 8) / 2f, 1f, Ui.alpha(fg, a));
 
-		// chips: version | server status | ping
-		float cy = uy + 8;
-		String ver = TitleActions.gameVersion().toUpperCase();
-		String addr = TitleActions.address().toUpperCase();
+		if (!status) {
+			return;
+		}
+		// one quiet line under it: dot, address, players, ping
 		int st = TitleActions.state;
-		String status = st == 1 ? (TitleActions.players.isEmpty() ? "ONLINE" : online(TitleActions.players) + " ONLINE")
-				: st == 2 ? "OFFLINE" : "CHECKING";
-		String ping = st == 1 && TitleActions.ping >= 0 ? TitleActions.ping + " MS" : null;
-		int w1 = font.getStringWidth(ver) + 12;
-		int w2 = font.getStringWidth(addr) + font.getStringWidth(status) + 30;
-		int w3 = ping == null ? 0 : font.getStringWidth(ping) + 20;
-		int total = w1 + 4 + w2 + (ping == null ? 0 : 4 + w3);
-		float px = cx - total / 2f;
-		int ca = Math.round(255 * in);
-		chip(px, cy, w1, Ui.alpha(0xFF0E151C, Math.round(0xD0 * in)), Ui.alpha(Ui.BORDER, ca));
-		text(font, ver, px + 6, cy + 3, 1f, Ui.alpha(Ui.MUTED, ca));
-		px += w1 + 4;
-		chipX = Math.round(px);
-		chipY = Math.round(cy);
-		chipW = w2;
-		chipH = 14;
-		boolean overChip = mx >= chipX && mx < chipX + chipW && my >= chipY && my < chipY + chipH && pending == null;
-		chipHover = approach(chipHover, overChip ? 1f : 0f, 14f);
-		int dot = st == 1 ? Ui.GOOD : st == 2 ? Ui.BAD : Ui.GOLD;
-		chip(px, cy, w2, Ui.alpha(Ui.mix(0xFF0E151C, 0xFF14212B, chipHover), Math.round(0xD0 * in)),
-				Ui.alpha(Ui.mix(Ui.BORDER, acc, chipHover * 0.8f), ca));
-		float pulse = 0.5f + 0.5f * (float) Math.sin(t * (st == 0 ? 6f : 2.4f));
-		PlebTheme.glow(px + 8, cy + 7, 5f + 2f * pulse, Ui.alpha(dot, Math.round(0x70 * in * pulse)));
-		fill(px + 6.5f, cy + 5.5f, 3, 3, Ui.alpha(dot, ca));
-		int tx = Math.round(px + 14);
-		text(font, addr, tx, cy + 3, 1f, Ui.alpha(Ui.TEXT, ca));
-		tx += font.getStringWidth(addr) + 4;
-		fill(tx, cy + 4, 1, 6, Ui.alpha(Ui.BORDER, ca));
-		text(font, status, tx + 5, cy + 3, 1f, Ui.alpha(dot, ca));
-		px += w2 + 4;
-		if (ping != null) {
-			chip(px, cy, w3, Ui.alpha(0xFF0E151C, Math.round(0xD0 * in)), Ui.alpha(Ui.BORDER, ca));
-			int bars = TitleActions.ping < 80 ? 4 : TitleActions.ping < 160 ? 3 : TitleActions.ping < 300 ? 2 : 1;
-			for (int i = 0; i < 4; i++) {
-				int bh = 2 + i * 2;
-				fill(px + 5 + i * 2.5f, cy + 11 - bh, 1.5f, bh, Ui.alpha(i < bars ? Ui.GOOD : Ui.FAINT, ca));
+		String line = TitleActions.address();
+		if (st == 1) {
+			if (!TitleActions.players.isEmpty()) {
+				line += "  \u00b7  " + online(TitleActions.players) + " online";
 			}
-			text(font, ping, px + 17, cy + 3, 1f, Ui.alpha(Ui.MUTED, ca));
-		}
-
-		// server card with the Play button
-		float ky = cy + 14 + 12 + (1f - in) * 10f;
-		float kx = cx - cardW / 2f;
-		int ka = Math.round(255 * Math.min(1f, in * 1.3f));
-		// shadow + glass
-		roundF(kx - 2, ky - 1, cardW + 4, cardH + 4, Ui.alpha(0xFF000000, Math.round(0x40 * in)));
-		gradientRoundF(kx, ky, cardW, cardH, Ui.alpha(0xFF131C25, Math.round(0xEE * in)), Ui.alpha(0xFF0A1016, Math.round(0xF2 * in)));
-		outlineF(kx, ky, cardW, cardH, Ui.alpha(Ui.mix(Ui.BORDER, acc, 0.25f + 0.35f * playHover), ka));
-		gradientH(kx + 1, ky, cardW - 2, 1, Ui.alpha(acc, 0), Ui.alpha(acc, Math.round(0xC0 * in)));
-		// monogram tile
-		float mxp = kx + 8, myp = ky + 8;
-		int ms = cardH - 16;
-		gradientRoundF(mxp, myp, ms, ms, Ui.alpha(acc, ka), Ui.alpha(Ui.mix(acc, 0xFF0A2A33, 0.55f), ka));
-		float ps = ms >= 30 ? 3f : 2f;
-		text(font, "P", mxp + ms / 2f - 2.5f * ps, myp + ms / 2f - 3.5f * ps, ps, Ui.alpha(Ui.ON_ACCENT, ka));
-		// name, motd, players
-		float tx0 = mxp + ms + 8;
-		int textRoom = Math.round(kx + cardW - 8 - 78 - tx0);
-		text(font, "PlebMc Network", tx0, ky + 9, 1f, Ui.alpha(0xFFFFFFFF, ka));
-		String line = st == 1 ? firstLine(TitleActions.motd) : st == 2 ? "Can't reach the server right now" : "Checking the server...";
-		if (line.isEmpty()) {
-			line = "Battle royale, minigames and more";
-		}
-		text(font, Ui.fit(line, textRoom), tx0, ky + 21, 1f, Ui.alpha(st == 2 ? Ui.BAD : Ui.MUTED, ka));
-		float fillFrac = playersFraction(TitleActions.players);
-		float barW = Math.max(30, textRoom);
-		if (st != 2) {
-			roundF(tx0, ky + 35, barW, 4, Ui.alpha(0xFF0A0E12, ka));
+			if (TitleActions.ping >= 0) {
+				line += "  \u00b7  " + TitleActions.ping + " ms";
+			}
 		} else {
-			text(font, "Press Play to try anyway", tx0, ky + 33, 1f, Ui.alpha(Ui.FAINT, ka));
+			line += "  \u00b7  " + (st == 2 ? "offline" : "checking");
 		}
-		if (st == 1 && fillFrac > 0f) {
-			gradientH(tx0 + 1, ky + 36, (barW - 2) * fillFrac, 2, Ui.alpha(acc, ka), Ui.alpha(Ui.GOOD, ka));
-		} else if (st == 0) {
-			float k = (t * 0.8f) % 1f;
-			gradientH(tx0 + 1 + (barW - 2) * Math.max(0f, k - 0.25f), ky + 36, (barW - 2) * 0.25f, 2, Ui.alpha(acc, 0), Ui.alpha(acc, ka));
-		}
-		// Play
-		playW = 70;
-		playH = 22;
-		playX = Math.round(kx + cardW - 8 - playW);
-		playY = Math.round(ky + (cardH - playH) / 2f);
-		boolean overPlay = mx >= playX && mx < playX + playW && my >= playY && my < playY + playH && pending == null;
-		playHover = approach(playHover, overPlay ? 1f : 0f, 14f);
-		float breathe = animations() ? 0.5f + 0.5f * (float) Math.sin(t * 2.2f) : 0.5f;
-		PlebTheme.glow(playX + playW / 2f, playY + playH / 2f, 34 + 10 * playHover,
-				Ui.alpha(acc, Math.round((0x24 + 0x20 * breathe + 0x30 * playHover) * in)));
-		int top0 = Ui.mix(Ui.mix(acc, 0xFFFFFFFF, 0.12f), Ui.mix(acc, 0xFFFFFFFF, 0.35f), playHover);
-		int bot0 = Ui.mix(Ui.mix(acc, 0xFF000000, 0.28f), acc, playHover);
-		float lift = -1.0f * playHover;
-		gradientRoundF(playX, playY + lift, playW, playH, Ui.alpha(top0, ka), Ui.alpha(bot0, ka));
-		fill(playX + 1, playY + lift, playW - 2, 1, Ui.alpha(0xFFFFFFFF, Math.round(0x70 * in)));
-		float ix = playX + 10 + 2f * playHover;
-		iconF("play", ix, playY + lift + 6.5f, 1f, Ui.alpha(Ui.ON_ACCENT, ka));
-		text(font, "PLAY", ix + 14, playY + lift + 7, 1f, Ui.alpha(Ui.ON_ACCENT, ka));
+		int dot = st == 1 ? Ui.GOOD : st == 2 ? Ui.BAD : Ui.GOLD;
+		int tw = font.getStringWidth(line) + 8;
+		float sx = cx - tw / 2f, sy = playY + playH + 9;
+		float pulse = animations() ? 0.6f + 0.4f * (float) Math.sin(t * (st == 0 ? 6f : 2.2f)) : 1f;
+		fill(sx, sy + 2.5f, 3, 3, Ui.alpha(dot, Math.round(a * pulse)));
+		textShadow(font, line, sx + 8, sy, Ui.alpha(0xFFC9D3DB, Math.round(0xD0 * in)));
 	}
 
 	private static String online(String pop) {
 		int i = pop.indexOf('/');
-		return i > 0 ? pop.substring(0, i) : pop;
+		return (i > 0 ? pop.substring(0, i) : pop).trim();
 	}
 
-	private static float playersFraction(String pop) {
-		try {
-			int i = pop.indexOf('/');
-			if (i <= 0) {
-				return 0f;
-			}
-			float on = Integer.parseInt(pop.substring(0, i).trim());
-			float max = Integer.parseInt(pop.substring(i + 1).trim());
-			return max <= 0 ? 0f : Math.max(0.03f, Math.min(1f, on / max));
-		} catch (RuntimeException e) {
-			return 0f;
-		}
-	}
-
-	private static String firstLine(String motd) {
-		if (motd == null) {
-			return "";
-		}
-		int n = motd.indexOf('\n');
-		return (n >= 0 ? motd.substring(0, n) : motd).trim();
-	}
-
-	// ---- news ----
-
-	private static void newsColumn(int x, int w, int h, float t, int acc, float intro, long now) {
-		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
-		int y = Math.max(34, h / 2 - 70);
-		float in0 = ease(Math.max(0f, Math.min(1f, (intro - 0.2f) / 0.8f)));
-		int a0 = Math.round(255 * in0);
-		text(font, "WHAT'S NEW", x, y, 1f, Ui.alpha(acc, a0));
-		fill(x, y + 11, w, 1, Ui.alpha(Ui.BORDER, a0));
-		y += 17;
-		for (int i = 0; i < NEWS.length; i++) {
-			float k = ease(Math.max(0f, Math.min(1f, (intro - 0.3f - i * 0.12f) / 0.6f)));
-			if (k <= 0f) {
-				continue;
-			}
-			List<String> lines = font.listFormattedStringToWidth(NEWS[i][1], w - 12);
-			if (lines.size() > 3) {
-				lines = lines.subList(0, 3);
-			}
-			int ch = 16 + lines.size() * 10;
-			float ox = (1f - k) * 16f;
-			int a = Math.round(255 * k);
-			roundF(x + ox, y, w, ch, Ui.alpha(0xFF0E151C, Math.round(0xC8 * k)));
-			fill(x + ox, y + 2, 2, ch - 4, Ui.alpha(acc, a));
-			text(font, NEWS[i][0], x + ox + 7, y + 4, 1f, Ui.alpha(Ui.TEXT, a));
-			for (int l = 0; l < lines.size(); l++) {
-				text(font, lines.get(l), x + ox + 7, y + 15 + l * 10, 1f, Ui.alpha(Ui.MUTED, a));
-			}
-			y += ch + 5;
-		}
-	}
-
-	// ---- account chip ----
-
-	private static int accX, accY, accW, accH;
-	private static float accHover;
-
-	private static void accountChip(int w, int mx, int my, int acc, float in) {
-		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
-		String name = TitleActions.username();
-		if (name == null || name.isEmpty()) {
-			return;
-		}
-		int tw = font.getStringWidth(name);
-		accW = tw + 26;
-		accH = 16;
-		accX = w - 8 - accW;
-		accY = 6;
-		boolean over = mx >= accX && mx < accX + accW && my >= accY && my < accY + accH && pending == null;
-		accHover = approach(accHover, over ? 1f : 0f, 14f);
-		int a = Math.round(255 * in);
-		roundF(accX, accY, accW, accH, Ui.alpha(Ui.mix(0xFF0E151C, 0xFF16222C, accHover), Math.round(0xD8 * in)));
-		outlineF(accX, accY, accW, accH, Ui.alpha(Ui.mix(Ui.BORDER, acc, accHover), a));
-		gradientRoundF(accX + 3, accY + 3, 10, 10, Ui.alpha(acc, a), Ui.alpha(Ui.mix(acc, 0xFF000000, 0.4f), a));
-		text(font, name.substring(0, 1).toUpperCase(), accX + 5.5f, accY + 4, 1f, Ui.alpha(Ui.ON_ACCENT, a));
-		text(font, name, accX + 18, accY + 4, 1f, Ui.alpha(Ui.mix(Ui.TEXT, 0xFFFFFFFF, accHover), a));
-	}
-
-	// ---- bottom bar ----
+	// ---- bottom line ----
 
 	private static int credX, credW;
 
-	private static void infoBar(int w, int h, int mx, int my, String splash, int acc, float in) {
+	private static void footer(int x0, int w, int h, int mx, int my, String splash, int acc, float in, ClientPrefs pr) {
 		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
-		int y = h - 16;
-		int a = Math.round(255 * in);
-		fill(0, y, w, 16, Ui.alpha(0xFF04070B, Math.round(0xC8 * in)));
-		gradientH(0, y, w, 1, Ui.alpha(acc, Math.round(0x60 * in)), Ui.alpha(acc, 0));
-		String left = TitleActions.gameVersion() + "  \u00b7  " + TitleActions.platform();
+		int y = h - 12;
+		int a = Math.round(0xB0 * in);
+		// fades under the sidebar while it floats open
+		float under = mode() == 0 ? 1f - 0.85f * ease(expand) : 1f;
+		String left = "PlebClient  \u00b7  " + TitleActions.gameVersion();
+		textShadow(font, left, x0 + 8, y, Ui.alpha(0xFF9AA8B4, Math.round(a * under)));
+
 		String cred = TitleActions.hasCredits() ? "Credits" : "";
 		credW = cred.isEmpty() ? 0 : font.getStringWidth(cred);
 		credX = w - 8 - credW;
-		boolean over = credW > 0 && mx >= credX - 3 && mx < credX + credW + 3 && my >= y && my < h && pending == null;
+		boolean over = credW > 0 && mx >= credX - 3 && mx < credX + credW + 3 && my >= y - 3 && my < h && pending == null;
 		creditsHover = approach(creditsHover, over ? 1f : 0f, 14f);
+		int right = w - 8;
 		if (credW > 0) {
-			text(font, cred, credX, y + 4, 1f, Ui.alpha(Ui.mix(Ui.MUTED, acc, creditsHover), a));
-			fill(credX, y + 13, credW * creditsHover, 1, Ui.alpha(acc, a));
+			textShadow(font, cred, credX, y, Ui.alpha(Ui.mix(0xFF9AA8B4, acc, creditsHover), a));
+			fill(credX, y + 9, credW * creditsHover, 1, Ui.alpha(acc, a));
+			right = credX - 10;
 		}
-		int rightEdge = credX - (credW > 0 ? 12 : 0);
-		int lx = COLLAPSED + 8;
-		left = Ui.fit(left, Math.max(20, (rightEdge - lx) * 11 / 20));
-		int lw = font.getStringWidth(left);
-		text(font, left, lx, y + 4, 1f, Ui.alpha(Ui.FAINT, a));
-		// splash text: the vanilla line, as a small accent ticker between the two
-		int room = rightEdge - (lx + lw + 16);
-		if (splash != null && !splash.isEmpty() && room >= 50) {
-			String sp = Ui.fit(splash, room);
-			int sw = font.getStringWidth(sp);
-			float pulse = animations() ? 0.8f + 0.2f * (float) Math.sin(System.currentTimeMillis() / 300.0) : 1f;
-			float sx = lx + lw + 16 + (room - sw) / 2f;
-			fill(sx - 8, y + 6, 3, 3, Ui.alpha(acc, Math.round(a * pulse)));
-			text(font, sp, sx, y + 4, 1f, Ui.alpha(0xFFFFE066, Math.round(a * pulse)));
+		if (pr.titleClock) {
+			java.util.Calendar c = java.util.Calendar.getInstance();
+			int hr = c.get(java.util.Calendar.HOUR);
+			String clock = (hr == 0 ? 12 : hr) + ":" + (c.get(java.util.Calendar.MINUTE) < 10 ? "0" : "")
+					+ c.get(java.util.Calendar.MINUTE) + (c.get(java.util.Calendar.AM_PM) == 0 ? " AM" : " PM");
+			int cw = font.getStringWidth(clock);
+			textShadow(font, clock, right - cw, y, Ui.alpha(0xFFE8EEF2, a));
+			right -= cw + 10;
+		}
+		if (pr.titleSplash && splash != null && !splash.isEmpty()) {
+			int lw = font.getStringWidth(left);
+			int room = right - (x0 + 8 + lw + 16);
+			if (room >= 50) {
+				String sp = Ui.fit(splash, room);
+				int spw = font.getStringWidth(sp);
+				textShadow(font, sp, x0 + 8 + lw + 16 + (room - spw) / 2f, y, Ui.alpha(0xFFFFE066, a));
+			}
 		}
 	}
 
 	// ---- sidebar ----
 
-	private static void sidebar(int w, int h, int mx, int my, float t, int acc, float intro, long now) {
+	private static void sidebar(int w, int h, int mx, int my, float t, int acc, float intro, boolean mascot) {
 		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
 		float e = ease(expand);
 		float sw = sideWidth(w);
 		float slide = (1f - ease(Math.min(1f, intro * 1.6f))) * -(COLLAPSED + 6);
 		GlStateManager.pushMatrix();
 		GlStateManager.translate(slide, 0f, 0f);
-		int bottom = h - 16;
-		// panel: glassy, with a shadow and an accent edge that brightens as it opens
-		if (e > 0.01f) {
-			gradientH(sw, 0, 18 * e, bottom, Ui.alpha(0xFF000000, Math.round(0x70 * e)), 0x00000000);
-		}
-		gradientH(0, 0, sw, bottom, 0xFF070B11, 0xFF0B1118);
-		fill(sw - 1, 0, 1, bottom, Ui.alpha(Ui.mix(Ui.BORDER_SOFT, acc, 0.15f + 0.6f * e), 0xFF));
-		PlebTheme.gradient(Math.round(sw - 1), 0, 1, bottom / 2, Ui.alpha(acc, Math.round(0x90 * e)), Ui.alpha(acc, 0));
+		// no panel: a translucent shade for the labels, and the thin accent divider
+		gradientH(0, 0, sw, h, Ui.alpha(0xFF02050A, Math.round(0x40 + 0x50 * e)), Ui.alpha(0xFF02050A, Math.round(0x10 + 0x30 * e)));
+		int lineA = Math.round(0x70 + 0x60 * e);
+		PlebTheme.gradient(Math.round(sw - 1), 0, 1, h / 2, Ui.alpha(acc, Math.round(lineA * 0.15f)), Ui.alpha(acc, lineA));
+		PlebTheme.gradient(Math.round(sw - 1), h / 2, 1, h - h / 2, Ui.alpha(acc, lineA), Ui.alpha(acc, Math.round(lineA * 0.15f)));
 
-		// logo mark: a small accent tile with P, and the name when open
-		float lx = 7, ly = 8;
-		float lp = animations() ? 0.5f + 0.5f * (float) Math.sin(t * 1.8f) : 0.5f;
-		PlebTheme.glow(lx + 8, ly + 8, 12 + 3 * lp, Ui.alpha(acc, Math.round(0x40 + 0x20 * lp)));
-		gradientRoundF(lx, ly, 16, 16, acc, Ui.mix(acc, 0xFF0A2A33, 0.5f));
-		text(font, "P", lx + 5f, ly + 4f, 1f, Ui.ON_ACCENT);
+		// the mascot (or a small P tile) and the name when open
+		float lx = 6, ly = 7;
+		float bob = animations() ? (float) Math.sin(t * 1.6f) * 0.6f : 0f;
+		if (mascot) {
+			Ui.mascot(lx, ly - 1 + bob, 18, 1f);
+		} else {
+			gradientRoundF(lx + 1, ly, 16, 16, acc, Ui.mix(acc, 0xFF0A2A33, 0.5f));
+			text(font, "P", lx + 6f, ly + 4f, 1f, Ui.ON_ACCENT);
+		}
 		if (e > 0.05f) {
 			int la = Math.round(255 * e);
 			float ox = (1f - e) * -6f;
-			text(font, "PLEB", lx + 22 + ox, ly + 4, 1f, Ui.alpha(0xFFFFFFFF, la));
-			text(font, "CLIENT", lx + 22 + ox + font.getStringWidth("PLEB"), ly + 4, 1f, Ui.alpha(acc, la));
+			textShadow(font, "Pleb", lx + 24 + ox, ly + 5, Ui.alpha(0xFFFFFFFF, la));
+			textShadow(font, "Client", lx + 24 + ox + font.getStringWidth("Pleb"), ly + 5, Ui.alpha(acc, la));
 		}
-		fill(7, 30, sw - 14, 1, Ui.alpha(Ui.BORDER_SOFT, 0xFF));
 
 		// entries
 		String[][] it = TitleActions.ITEMS;
 		int[] ys = rows(h);
 		int rh = rowHeight(h) - 2;
 		int hovered = -1;
-		if (pending == null && mx >= 0 && mx < sw && my < bottom) {
+		if (pending == null && mx >= 0 && mx < sw) {
 			for (int i = 0; i < it.length; i++) {
 				if (ys[i] >= 0 && my >= ys[i] && my < ys[i] + rh) {
 					hovered = i;
@@ -570,7 +396,7 @@ public final class TitleMenu {
 		if (hover.length != it.length) {
 			hover = new float[it.length];
 		}
-		// the sliding indicator
+		// the indicator: a short accent bar that glides between entries
 		if (hovered >= 0) {
 			float ty = ys[hovered] + 3, th = rh - 6;
 			if (indY < 0) {
@@ -586,55 +412,62 @@ public final class TitleMenu {
 		}
 		for (int i = 0; i < it.length; i++) {
 			if (ys[i] < 0) {
-				// the divider between the groups
-				int dy = ys[i + 1 < it.length ? i + 1 : i] - 5;
-				fill(9, dy, sw - 18, 1, Ui.alpha(Ui.BORDER_SOFT, 0xFF));
+				// a short faint gap marker between the groups
+				int dy = ys[i + 1 < it.length ? i + 1 : i] - 3;
+				fill(10, dy, 10 + (sw - 30) * e, 1, Ui.alpha(0xFFFFFFFF, 0x18));
 				continue;
 			}
 			hover[i] = approach(hover[i], i == hovered ? 1f : 0f, 13f);
 			float hv = ease(hover[i]);
 			int y = ys[i];
 			boolean primary = "play".equals(it[i][0]);
-			// highlight: an accent wash from the left that fades in
+			// hover: a translucent accent wash that fades out to the right, no box
 			if (hv > 0.01f) {
-				roundF(4, y, sw - 8, rh, Ui.alpha(0xFF162330, Math.round(0xC0 * hv)));
-				gradientH(4, y, (sw - 8) * (0.45f + 0.55f * hv), rh, Ui.alpha(acc, Math.round(0x40 * hv)), Ui.alpha(acc, 0));
-				outlineF(4, y, sw - 8, rh, Ui.alpha(acc, Math.round(0x50 * hv)));
+				gradientH(0, y, sw - 1, rh, Ui.alpha(acc, Math.round(0x2C * hv)), Ui.alpha(acc, 0));
 			}
-			// icon: nudges right, grows a little and lights up
-			float icx = 15 + 2.5f * hv;
+			// icon: nudges right, grows a little and takes the accent
+			float icx = 15 + 2f * hv;
 			float icy = y + rh / 2f;
-			int base = primary ? acc : Ui.MUTED;
-			int ic = Ui.mix(base, primary ? Ui.mix(acc, 0xFFFFFFFF, 0.4f) : acc, hv);
-			if (primary) {
-				float pr = animations() ? 0.5f + 0.5f * (float) Math.sin(t * 2.6f) : 0.5f;
-				PlebTheme.glow(icx, icy, 9 + 3 * pr + 3 * hv, Ui.alpha(acc, Math.round(0x34 + 0x20 * pr)));
-			}
+			int base = primary ? acc : 0xFFDCE4EA;
+			int ic = Ui.mix(base, primary ? Ui.mix(acc, 0xFFFFFFFF, 0.45f) : acc, hv);
 			GlStateManager.pushMatrix();
 			GlStateManager.translate(icx, icy, 0f);
-			float s = 1f + 0.12f * hv;
-			GlStateManager.scale(s, s, 1f);
-			if (hv > 0.01f) {
-				iconF(it[i][2], -4.5f + 0.5f, -4.5f + 0.5f, 1f, Ui.alpha(acc, Math.round(0x50 * hv)));
-			}
-			iconF(it[i][2], -4.5f, -4.5f, 1f, ic);
+			float sc = (rh < 14 ? 0.82f : 1f) * (1f + 0.08f * hv);
+			GlStateManager.scale(sc, sc, 1f);
+			iconF(it[i][2], -5.5f + 0.6f, -5.5f + 0.6f, 1f, 0x90000000);
+			iconF(it[i][2], -5.5f, -5.5f, 1f, ic);
 			GlStateManager.popMatrix();
-			// label: slides in with the panel, brightens on hover
+			// label: slides in with the sidebar, brightens on hover
 			if (e > 0.04f) {
-				float lxp = 30 + (1f - e) * -10f + 2f * hv;
-				int room = Math.round(sw - lxp - 8);
+				float lxp = 31 + (1f - e) * -10f + 2f * hv;
+				int room = Math.round(sw - lxp - 6);
 				if (room > 8) {
 					String label = Ui.fit(it[i][1], room);
-					int lc = primary ? Ui.mix(acc, 0xFFFFFFFF, 0.3f * hv) : Ui.mix(0xFFB7C4CE, 0xFFFFFFFF, hv);
-					text(font, label, lxp, icy - 3.5f, 1f, Ui.alpha(lc, Math.round(255 * e)));
+					int lc = primary ? Ui.mix(acc, 0xFFFFFFFF, 0.3f * hv) : Ui.mix(0xFFD0D9E0, 0xFFFFFFFF, hv);
+					textShadow(font, label, lxp, icy - 3.5f, Ui.alpha(lc, Math.round(255 * e)));
 				}
 			}
 		}
 		if (indA > 0.01f && indY >= 0) {
-			fill(2, indY + (rh - 6 - indH) / 2f, 2, Math.max(0f, indH), Ui.alpha(acc, Math.round(255 * indA)));
-			PlebTheme.glow(3, indY + (rh - 6) / 2f, 7, Ui.alpha(acc, Math.round(0x50 * indA)));
+			fill(0, indY + (rh - 6 - indH) / 2f, 2, Math.max(0f, indH), Ui.alpha(acc, Math.round(255 * indA)));
 		}
 		GlStateManager.popMatrix();
+
+		// icons only: the label as a small tag next to the icon
+		if (mode() == 2) {
+			if (hovered >= 0) {
+				tipItem = hovered;
+			}
+			tipA = approach(tipA, hovered >= 0 ? 1f : 0f, 14f);
+			if (tipA > 0.02f && tipItem >= 0 && tipItem < it.length && ys[tipItem] >= 0) {
+				String label = it[tipItem][1];
+				int tw = font.getStringWidth(label) + 10;
+				float tx = sw + 5 + (1f - tipA) * -4f, ty = ys[tipItem] + (rh - 14) / 2f;
+				roundF(tx, ty, tw, 14, Ui.alpha(0xFF05090E, Math.round(0xC8 * tipA)));
+				fill(tx, ty + 3, 1, 8, Ui.alpha(acc, Math.round(255 * tipA)));
+				text(font, label, tx + 5, ty + 3, 1f, Ui.alpha(0xFFFFFFFF, Math.round(255 * tipA)));
+			}
+		}
 	}
 
 	private static void ripples(long now, int acc) {
@@ -646,7 +479,7 @@ public final class TitleMenu {
 				continue;
 			}
 			float e = ease(k);
-			PlebTheme.glow(r[0], r[1], 6 + 34 * e, Ui.alpha(acc, Math.round(0x60 * (1f - k))));
+			PlebTheme.glow(r[0], r[1], 6 + 28 * e, Ui.alpha(acc, Math.round(0x50 * (1f - k))));
 		}
 	}
 
@@ -660,7 +493,7 @@ public final class TitleMenu {
 		int w = s.width, h = s.height;
 		String[][] it = TitleActions.ITEMS;
 		float sw = sideWidth(w);
-		if (mx < sw && my < h - 16) {
+		if (mx < sw) {
 			int[] ys = rows(h);
 			int rh = rowHeight(h) - 2;
 			for (int i = 0; i < it.length; i++) {
@@ -675,15 +508,7 @@ public final class TitleMenu {
 			start("play", mx, my);
 			return true;
 		}
-		if (mx >= chipX && mx < chipX + chipW && my >= chipY && my < chipY + chipH) {
-			start("multi", mx, my);
-			return true;
-		}
-		if (mx >= accX && mx < accX + accW && my >= accY && my < accY + accH) {
-			start("profile", mx, my);
-			return true;
-		}
-		if (credW > 0 && mx >= credX - 3 && mx < credX + credW + 3 && my >= h - 16) {
+		if (credW > 0 && mx >= credX - 3 && mx < credX + credW + 3 && my >= h - 15) {
 			sound();
 			TitleActions.credits();
 			return true;
@@ -691,7 +516,7 @@ public final class TitleMenu {
 		return true;
 	}
 
-	/** Keys: up/down move through the sidebar, Enter opens, Escape closes the selection. */
+	/** Keys: up/down move through the sidebar, Enter opens, Escape clears, 1-9 open an entry. */
 	public static boolean key(GuiScreen s, char c, int key) {
 		String[][] it = TitleActions.ITEMS;
 		if (key == 200 || key == 208) { // up / down
@@ -710,6 +535,19 @@ public final class TitleMenu {
 		if (key == 1 && keySel >= 0) {
 			keySel = -1;
 			return true;
+		}
+		if (key >= 2 && key <= 10 && pending == null) { // 1..9
+			int n = key - 2;
+			for (int i = 0; i < it.length; i++) {
+				if ("-".equals(it[i][0])) {
+					continue;
+				}
+				if (n-- == 0) {
+					keySel = i;
+					start(it[i][0], -1, -1);
+					return true;
+				}
+			}
 		}
 		return false;
 	}
@@ -769,12 +607,6 @@ public final class TitleMenu {
 		return x * x * (3f - 2f * x);
 	}
 
-	private static float hash(int n) {
-		n = (n << 13) ^ n;
-		int m = (n * (n * n * 15731 + 789221) + 1376312589) & 0x7FFFFFFF;
-		return m / (float) 0x7FFFFFFF;
-	}
-
 	private static void text(FontRenderer f, String s, float x, float y, float sc, int c) {
 		if (s == null || s.isEmpty() || (c >>> 24) < 5) {
 			return;
@@ -791,12 +623,15 @@ public final class TitleMenu {
 		GlStateManager.popMatrix();
 	}
 
-	private static void chip(float x, float y, int w, int fill, int border) {
-		roundF(x, y, w, 14, fill);
-		outlineF(x, y, w, 14, border);
+	private static void textShadow(FontRenderer f, String s, float x, float y, int c) {
+		if (s == null || s.isEmpty() || (c >>> 24) < 5) {
+			return;
+		}
+		GlStateManager.enableBlend();
+		f.drawString(s, x, y, c, true);
 	}
 
-	/** A 9x9 icon at fractional coordinates. */
+	/** An icon at fractional coordinates. */
 	private static void iconF(String name, float x, float y, float px, int color) {
 		int[][] runs = Ui.runs(name);
 		if (runs == null) {
@@ -899,21 +734,6 @@ public final class TitleMenu {
 		vtx(x + w - 1, y + 1, t1);
 		vtx(x + w - 1, y + h - 1, b1);
 		vtx(x + w, y + h - 1, b1);
-		end();
-	}
-
-	/** A soft vertical light beam (bright at the top, gone at the bottom). */
-	private static void beam(float cx, float y, float halfW, float h, int c) {
-		int clear = c & 0x00FFFFFF;
-		begin();
-		vtx(cx, y, c);
-		vtx(cx - halfW, y, clear);
-		vtx(cx - halfW * 1.8f, y + h, clear);
-		vtx(cx, y + h, clear);
-		vtx(cx + halfW, y, clear);
-		vtx(cx, y, c);
-		vtx(cx, y + h, clear);
-		vtx(cx + halfW * 1.8f, y + h, clear);
 		end();
 	}
 }

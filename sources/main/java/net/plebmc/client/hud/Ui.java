@@ -5,6 +5,12 @@ import java.util.List;
 import java.util.Map;
 
 import net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager;
+import net.lax1dude.eaglercraft.v1_8.opengl.WorldRenderer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.texture.ITextureObject;
+import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.util.ResourceLocation;
 import net.plebmc.client.mods.ClientPrefs;
 
 /**
@@ -314,6 +320,20 @@ public final class Ui {
 				"..#####..", ".........");
 		icon("partner", ".##...##.", "####.####", "#########", "#########", ".#######.", "..#####..", "...###...",
 				"....#....", ".........");
+		// 11x11 line icons for the title screen sidebar
+		icon("nav_options", "....###....", ".##.###.##.", ".#########.", "..#######..", "####...####", "####...####", "####...####", "..#######..", ".#########.", ".##.###.##.", "....###....");
+		icon("nav_language", "...#####...", ".##..#..##.", ".#..#.#..#.", "#...#.#...#", "#..#...#..#", "###########", "#..#...#..#", "#...#.#...#", ".#..#.#..#.", ".##..#..##.", "...#####...");
+		icon("nav_quit", ".....#.....", "..#..#..#..", ".#...#...#.", "#....#....#", "#....#....#", "#.........#", "#.........#", ".#.......#.", "..#.....#..", "...#####...", "...........");
+		icon("nav_play", "...........", "...#.......", "...##......", "...###.....", "...####....", "...#####...", "...####....", "...###.....", "...##......", "...#.......", "...........");
+		icon("nav_single", "....###....", "..##...##..", "##.......##", "#.##...##.#", "#...###...#", "#....#....#", "#....#....#", "#....#....#", "##...#...##", "..##.#.##..", "....###....");
+		icon("nav_multi", "###########", "#.........#", "#.##....#.#", "#.........#", "###########", "...........", "###########", "#.........#", "#.##....#.#", "#.........#", "###########");
+		icon("nav_wardrobe", ".....##....", "....#..#...", ".......#...", "......#....", ".....#.....", "....#.#....", "...#...#...", "..#.....#..", ".#.......#.", "###########", "...........");
+		icon("nav_mods", "...........", "..###......", "###########", "..###......", "......###..", "###########", "......###..", "...###.....", "###########", "...###.....", "...........");
+		icon("nav_quests", "..#######..", "###.....###", "#.#.....#.#", "#.#.....#.#", ".##.....##.", "..#.....#..", "...#...#...", "....###....", ".....#.....", "....###....", "..#######..");
+		icon("nav_customize", "........###", ".......####", "......####.", ".....####..", "....####...", "...####....", "..#.##.....", ".###.......", "####.......", "###........", "#..........");
+		icon("nav_profile", "....###....", "...#...#...", "...#...#...", "...#...#...", "....###....", "...........", "..#######..", ".#.......#.", "#.........#", "#.........#", "###########");
+		icon("nav_discord", "...........", "..##...##..", ".#########.", "###########", "##..###..##", "##..###..##", "###########", ".####.####.", "..##...##..", "...........", "...........");
+		icon("nav_forge", "...........", ".##########", "###########", ".#########.", "....###....", "....###....", "...#####...", ".#########.", ".#########.", "...........", "...........");
 	}
 
 	private static void icon(String name, String... rows) {
@@ -344,11 +364,15 @@ public final class Ui {
 	}
 
 	public static boolean hasIcon(String name) {
-		return RUNS.containsKey(name);
+		return RUNS.containsKey(name) || "mascot".equals(name);
 	}
 
 	/** Draws a 9x9 icon at (x, y), {@code px} GUI pixels per icon pixel. */
 	public static void icon(String name, int x, int y, int px, int color) {
+		if ("mascot".equals(name)) {
+			mascot(x - px, y - px, 11 * px, ((color >>> 24) & 0xFF) / 255f);
+			return;
+		}
 		int[][] runs = RUNS.get(name);
 		if (runs == null) {
 			return;
@@ -356,5 +380,41 @@ public final class Ui {
 		for (int[] r : runs) {
 			rect(x + r[0] * px, y + r[1] * px, r[2] * px, px, color);
 		}
+	}
+
+	private static final ResourceLocation MASCOT = new ResourceLocation("plebitems", "textures/gui/mascot.png");
+	private static final ResourceLocation MASCOT_BIG = new ResourceLocation("plebitems", "textures/gui/mascot_big.png");
+
+	/** The PlebMc mascot's head, {@code size} GUI pixels square, smoothly scaled. */
+	public static void mascot(float x, float y, float size, float alpha) {
+		if (alpha <= 0.01f) {
+			return;
+		}
+		Minecraft mc = Minecraft.getMinecraft();
+		ResourceLocation loc = size > 28 ? MASCOT_BIG : MASCOT;
+		try {
+			mc.getTextureManager().bindTexture(loc);
+			ITextureObject tex = mc.getTextureManager().getTexture(loc);
+			if (tex != null) {
+				tex.setBlurMipmap(true, false);
+			}
+		} catch (Throwable t) {
+			return;
+		}
+		GlStateManager.enableTexture2D();
+		GlStateManager.enableBlend();
+		GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+		GlStateManager.enableAlpha();
+		GlStateManager.alphaFunc(516, 0.01f);
+		GlStateManager.color(1f, 1f, 1f, alpha);
+		WorldRenderer wr = Tessellator.getInstance().getWorldRenderer();
+		wr.begin(7, DefaultVertexFormats.POSITION_TEX);
+		wr.pos(x, y + size, 0).tex(0, 1).endVertex();
+		wr.pos(x + size, y + size, 0).tex(1, 1).endVertex();
+		wr.pos(x + size, y, 0).tex(1, 0).endVertex();
+		wr.pos(x, y, 0).tex(0, 0).endVertex();
+		Tessellator.getInstance().draw();
+		GlStateManager.alphaFunc(516, 0.1f);
+		GlStateManager.color(1f, 1f, 1f, 1f);
 	}
 }

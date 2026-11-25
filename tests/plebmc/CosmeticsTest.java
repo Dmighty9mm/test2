@@ -40,7 +40,7 @@ public class CosmeticsTest {
 		check(sent.size() == 1 && sent.get(0).contains("\"open\""), "join asks the server for the shop state");
 		check(!Cosmetics.serverSupported() && Cosmetics.coins() == -1, "no server support before a message");
 		check(Cosmetics.catalog("hat").size() > 0 && Cosmetics.catalog("cloak").size() > 0 && Cosmetics.catalog("trail").isEmpty(), "default catalog (no trails)");
-		check(Cosmetics.collections().size() == 2 && Cosmetics.catalog("hat", "regular").size() == Cosmetics.catalog("hat").size()
+		check(Cosmetics.collections().size() == 2 && Cosmetics.catalog("hat", "plebmc").size() == Cosmetics.catalog("hat").size()
 				&& Cosmetics.catalog("hat", "partners").isEmpty(), "default collections");
 
 		String me = "00000000-0000-0000-0000-000000000001";
@@ -133,15 +133,15 @@ public class CosmeticsTest {
 		check(q != null && q.length == 20 && q[19] == 1f, "model blob parsed");
 		check(Cosmetics.parseModel("{\"quads\":[1,2,3]}".getBytes(java.nio.charset.StandardCharsets.UTF_8)) == null
 				&& Cosmetics.parseModel("nope".getBytes(java.nio.charset.StandardCharsets.UTF_8)) == null, "bad model blobs refused");
-		// collections: Regular / Partners, a creator, unknown collections fall back to the first, trails ignored
-		Cosmetics.handle("{\"type\":\"state\",\"collections\":[{\"id\":\"regular\",\"name\":\"Regular\"},{\"id\":\"Partners\",\"name\":\"Partners\",\"icon\":\"partner\",\"color\":\"#FF7AC6\"}],"
+		// collections: PlebMc / Partners, a creator, unknown collections fall back to the first, trails ignored
+		Cosmetics.handle("{\"type\":\"state\",\"collections\":[{\"id\":\"plebmc\",\"name\":\"PlebMc\"},{\"id\":\"Partners\",\"name\":\"Partners\",\"icon\":\"partner\",\"color\":\"#FF7AC6\"}],"
 				+ "\"catalog\":[{\"id\":\"a\",\"category\":\"hat\",\"render\":\"cap\",\"price\":1},"
 				+ "{\"id\":\"b\",\"category\":\"hat\",\"render\":\"wizard\",\"collection\":\"partners\",\"creator\":\"Streamer\",\"price\":1},"
 				+ "{\"id\":\"c\",\"category\":\"hat\",\"render\":\"bunny\",\"collection\":\"gone\",\"price\":1},"
 				+ "{\"id\":\"d\",\"category\":\"trail\",\"render\":\"flame\",\"price\":1}]}");
 		check(Cosmetics.collections().size() == 2 && "partners".equals(Cosmetics.collections().get(1).id)
 				&& Cosmetics.collections().get(1).color == 0xFFFF7AC6, "collections read");
-		check(Cosmetics.catalog("hat", "regular").size() == 2 && Cosmetics.catalog("hat", "partners").size() == 1
+		check(Cosmetics.catalog("hat", "plebmc").size() == 2 && Cosmetics.catalog("hat", "partners").size() == 1
 				&& "Streamer".equals(Cosmetics.item("b").creator) && Cosmetics.item("d") == null, "items split by collection, trails ignored");
 
 		// admin flag and admin data
