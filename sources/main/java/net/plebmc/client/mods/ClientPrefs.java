@@ -44,8 +44,11 @@ public final class ClientPrefs {
 	public static final String[] PANORAMA_DIMS = { "Clear", "Soft", "Dark" };
 	/** How much the title screen darkens the panorama. */
 	public int titlePanorama = 1;
-	/** The server's status under the Play button. */
-	public boolean titleStatus = true;
+	public static final String[] BACKGROUNDS = { "PlebMc wallpaper", "Minecraft panorama" };
+	/** What the title screen shows behind everything. */
+	public int titleBackground;
+	/** The little animated mascot in the corner of the title screen. */
+	public boolean titleBuddy = true;
 	/** The mascot head at the top of the sidebar. */
 	public boolean titleMascot = true;
 	/** A clock in the corner of the title screen. */
@@ -112,7 +115,8 @@ public final class ClientPrefs {
 		backdrop = d.backdrop;
 		titleSidebar = d.titleSidebar;
 		titlePanorama = d.titlePanorama;
-		titleStatus = d.titleStatus;
+		titleBackground = d.titleBackground;
+		titleBuddy = d.titleBuddy;
 		titleMascot = d.titleMascot;
 		titleClock = d.titleClock;
 		titleSplash = d.titleSplash;
@@ -149,7 +153,8 @@ public final class ClientPrefs {
 		backdrop = idx(m.get("backdrop"), backdrop, BACKDROPS.length);
 		titleSidebar = idx(m.get("titleSidebar"), titleSidebar, SIDEBAR_MODES.length);
 		titlePanorama = idx(m.get("titlePanorama"), titlePanorama, PANORAMA_DIMS.length);
-		titleStatus = ProtoValues.asBool(m.get("titleStatus"), titleStatus);
+		titleBackground = idx(m.get("titleBackground"), titleBackground, BACKGROUNDS.length);
+		titleBuddy = ProtoValues.asBool(m.get("titleBuddy"), titleBuddy);
 		titleMascot = ProtoValues.asBool(m.get("titleMascot"), titleMascot);
 		titleClock = ProtoValues.asBool(m.get("titleClock"), titleClock);
 		titleSplash = ProtoValues.asBool(m.get("titleSplash"), titleSplash);
@@ -173,7 +178,8 @@ public final class ClientPrefs {
 		m.put("backdrop", (double) backdrop);
 		m.put("titleSidebar", (double) titleSidebar);
 		m.put("titlePanorama", (double) titlePanorama);
-		m.put("titleStatus", titleStatus);
+		m.put("titleBackground", (double) titleBackground);
+		m.put("titleBuddy", titleBuddy);
 		m.put("titleMascot", titleMascot);
 		m.put("titleClock", titleClock);
 		m.put("titleSplash", titleSplash);

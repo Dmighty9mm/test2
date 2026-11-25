@@ -164,6 +164,25 @@ as a plain one in its `color`. Two examples ship with the plugin (`cloaks/plebmc
 `cloaks/storm.png`, copied into the folder on first start) and are used by
 `plebmc_cloak` and `storm_cloak` in the default config.
 
+### Animated cloaks
+
+Stack the frames top to bottom in one PNG, each frame in the cape layout above (so a
+256x128 cloak with 16 frames is a 256x2048 image), and add `frametime` (milliseconds per
+frame, default 100, 20 to 10000):
+
+```yaml
+  aurora_cloak: {name: 'Aurora Cloak', category: cloak, texture: 'cloaks/aurora.png', frametime: 90, price: 12000, description: 'Animated northern lights'}
+```
+
+The frame count is the image height divided by half its width. Limits: 64 frames,
+8,388,608 pixels in total (for example 512x256 x 64 frames) and 8 MB per file. `aurora_cloak`
+(`cloaks/aurora.png`, 16 frames) ships as an example.
+
+The easiest way to make one is the **Cloak Maker** (`tools/cloak-maker/index.html` in the repo;
+open it in a browser or put it on GitHub Pages). Drop in a GIF, a set of frame images or one
+picture (it can add a shine, sparkles, a glow pulse and more), or pick a built-in effect; it
+shows the cloak on a 3D player, checks the limits and gives you the PNG plus the config line.
+
 ### 3D model hats (same as cloaks)
 
 Make a hat in Blockbench, paint its texture, **File > Save Model** (`.bbmodel`), put it in

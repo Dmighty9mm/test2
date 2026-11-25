@@ -51,9 +51,17 @@ final class Catalog {
 		return CATEGORIES.contains(c);
 	}
 
-	/** Cloak textures: a PNG in the standard cape layout (64x32) at any multiple, up to 4096x2048. */
+	/**
+	 * Cloak textures: a PNG in the standard cape layout (64x32) at any
+	 * multiple, up to 4096x2048. An animated cloak stacks its frames top to
+	 * bottom (width x width/2 each, up to 64 frames and 8,388,608 pixels in
+	 * all, for example 512x256 x 64 or 1024x512 x 16).
+	 */
 	static final int MAX_TEXTURE_BYTES = 4 * 1024 * 1024;
+	static final int MAX_ANIMATED_BYTES = 8 * 1024 * 1024;
 	static final int MAX_TEXTURE_WIDTH = 4096;
+	static final int MAX_FRAMES = 64;
+	static final long MAX_ANIMATED_PIXELS = 8_388_608L;
 
 	/** What the PlebMc client can draw. Items with another render are skipped. */
 	static final List<String> HAT_RENDERS = Collections.unmodifiableList(java.util.Arrays.asList("tophat", "crown",
@@ -75,6 +83,9 @@ final class Catalog {
 		byte[] png;
 		String textureHash;
 		int textureWidth;
+		/** Animated cloaks: frames in the texture (1 = still) and milliseconds per frame. */
+		int frames = 1;
+		int frameTime = 100;
 		/** Model hats: the quads the client draws, and their content hash. */
 		byte[] modelBlob;
 		String modelHash;
@@ -120,6 +131,10 @@ final class Catalog {
 			if (textureHash != null) {
 				m.put("texture", textureHash);
 				m.put("textureWidth", textureWidth);
+				if (frames > 1) {
+					m.put("frames", frames);
+					m.put("frameTime", frameTime);
+				}
 			}
 			m.put("description", description);
 			m.put("collection", collection);
@@ -214,6 +229,7 @@ final class Catalog {
 				byTexture.put(it.textureHash, it);
 				byTexture.put(it.modelHash, it);
 			} else if (tex != null && CLOAK.equals(category) && folder != null) {
+				it.frameTime = (int) Math.max(20, Math.min(10_000, s.num("frametime", 100)));
 				String problem = loadTexture(it, folder, tex);
 				if (problem != null) {
 					warnings.add("item " + id + ": texture " + tex + " " + problem + ", showing a plain cloak");
@@ -275,17 +291,30 @@ final class Catalog {
 			if (!f.isFile()) {
 				return "was not found at " + f.getPath();
 			}
-			if (f.length() > MAX_TEXTURE_BYTES) {
-				return "is bigger than 4 MB";
+			if (f.length() > MAX_ANIMATED_BYTES) {
+				return "is bigger than 8 MB";
 			}
 			byte[] b = java.nio.file.Files.readAllBytes(f.toPath());
 			int[] wh = pngSize(b);
 			if (wh == null) {
 				return "is not a PNG";
 			}
-			if (wh[0] != wh[1] * 2 || wh[0] % 64 != 0 || wh[0] > MAX_TEXTURE_WIDTH) {
-				return "is " + wh[0] + "x" + wh[1] + ": use the cape layout at 64x32 or a multiple (128x64 ... 4096x2048)";
+			if (wh[0] % 64 != 0 || wh[0] > MAX_TEXTURE_WIDTH || wh[1] == 0 || wh[1] % (wh[0] / 2) != 0) {
+				return "is " + wh[0] + "x" + wh[1] + ": use the cape layout at 64x32 or a multiple (128x64 ... 4096x2048),"
+						+ " or frames of that size stacked top to bottom for an animated cloak";
 			}
+			int frames = wh[1] / (wh[0] / 2);
+			if (frames == 1 && b.length > MAX_TEXTURE_BYTES) {
+				return "is bigger than 4 MB";
+			}
+			if (frames > MAX_FRAMES) {
+				return "has " + frames + " frames, the most is " + MAX_FRAMES;
+			}
+			if (frames > 1 && (long) wh[0] * wh[1] > MAX_ANIMATED_PIXELS) {
+				return "is " + wh[0] + "x" + wh[1] + ", too big for an animated cloak: use smaller frames (512x256 x 64,"
+						+ " 1024x512 x 16) or fewer of them";
+			}
+			it.frames = frames;
 			java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-1");
 			StringBuilder h = new StringBuilder();
 			for (byte x : md.digest(b)) {

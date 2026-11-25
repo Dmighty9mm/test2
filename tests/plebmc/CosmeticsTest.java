@@ -151,6 +151,23 @@ public class CosmeticsTest {
 		check(Cosmetics.admin().allowed && Cosmetics.admin().players.size() == 2 && "Amy".equals(Cosmetics.admin().players.get(0).name)
 				&& Cosmetics.admin().player("u1").owned.contains("halo") && Cosmetics.admin().servers.size() == 2, "admin data read");
 
+		// the title screen remembers the balance and the outfit after leaving (and across restarts)
+		Cosmetics.reset();
+		Cosmetics.handle("{\"type\":\"state\",\"coins\":4321,\"currency\":\"PlebMc Coins\",\"equipped\":{\"hat\":\"wizard\",\"cloak\":\"red_cloak\"},"
+				+ "\"catalog\":[{\"id\":\"wizard\",\"name\":\"Wizard\",\"category\":\"hat\",\"color\":\"#112233\"},"
+				+ "{\"id\":\"red_cloak\",\"name\":\"Anim\",\"category\":\"cloak\",\"texture\":\"0123456789abcdef\",\"textureWidth\":128,\"frames\":6,\"frameTime\":80}]}");
+		Cosmetics.reset();
+		check(Cosmetics.coins() < 0 && Cosmetics.lastCoins() == 4321 && Cosmetics.lastWorn("hat") != null
+				&& "wizard".equals(Cosmetics.lastWorn("hat").id), "last coins and hat kept after leaving");
+		String look = Cosmetics.lookJson();
+		Cosmetics.loadLook("{}");
+		Cosmetics.loadLook(look);
+		check(Cosmetics.lastCoins() == 4321 && Cosmetics.lastWorn("hat").color == 0x112233 && Cosmetics.lastWorn("cloak") != null
+				&& Cosmetics.lastWorn("cloak").frameTime == 80 && "0123456789abcdef".equals(Cosmetics.lastWorn("cloak").texture),
+				"last look saved and loaded: " + look);
+		Cosmetics.loadLook("not json");
+		check(Cosmetics.lastCoins() == 4321, "a broken saved look is ignored");
+
 		System.out.println("CosmeticsTest: " + checks + " checks, failures=" + failures);
 		System.exit(failures == 0 ? 0 : 1);
 	}

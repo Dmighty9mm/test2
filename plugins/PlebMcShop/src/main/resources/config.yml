@@ -149,6 +149,10 @@ collections:
 #             64x32 layout (at 512x256 that's the 80x128 box at (8,8)). Players download
 #             it from the proxy once and keep it until it changes. /plebshop reload
 #             picks up new or edited files.
+#             Animated cloaks: stack the frames top to bottom in one PNG (each frame is
+#             the cape layout, e.g. 256x128, so 16 frames = 256x2048), up to 64 frames,
+#             8 MB. 'frametime' is milliseconds per frame (default 100). The PlebMc
+#             Cloak Maker (tools/cloak-maker in the client repo) builds these for you.
 #   model:    hats: a 3D model in this plugin's folder, like 'hats/myhat.bbmodel'. Save it
 #             from Blockbench (File > Save Model) with its texture painted in, drop it in
 #             the hats folder, add an item and run /plebshop reload. Players download it
@@ -185,6 +189,7 @@ items:
 
   plebmc_cloak: {name: 'PlebMc Cloak', category: cloak, texture: 'cloaks/plebmc.png', price: 6000, description: 'HD cloak with the PlebMc mark'}
   storm_cloak:  {name: 'Storm Cloak', category: cloak, texture: 'cloaks/storm.png', price: 9000, description: 'The storm, on your back (HD)'}
+  aurora_cloak: {name: 'Aurora Cloak', category: cloak, texture: 'cloaks/aurora.png', frametime: 90, price: 12000, description: 'Animated northern lights'}
   red_cloak:    {name: 'Red Cloak', category: cloak, color: '#B71C1C', price: 1500, description: 'A plain red cloak'}
   midnight_cloak: {name: 'Midnight Cloak', category: cloak, color: '#1A1F3A', price: 1500, description: 'A plain dark blue cloak'}
   mint_cloak:   {name: 'Mint Cloak', category: cloak, color: '#3FD8B0', price: 1500, description: 'A plain mint cloak'}

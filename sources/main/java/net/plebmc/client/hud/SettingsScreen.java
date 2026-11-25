@@ -119,13 +119,18 @@ public final class SettingsScreen extends PlebScreen {
 					saved(() -> pr.titleSidebar = wrap(pr.titleSidebar + 1, ClientPrefs.SIDEBAR_MODES.length)),
 					saved(() -> pr.titleSidebar = wrap(pr.titleSidebar - 1, ClientPrefs.SIDEBAR_MODES.length))), clip);
 			y += step;
-			add(choice("Panorama", "How much the title screen darkens the Minecraft panorama", lx, y, lw, h,
+			add(choice("Background dim", "How much the title screen darkens its background", lx, y, lw, h,
 					() -> ClientPrefs.PANORAMA_DIMS[pr.titlePanorama],
 					saved(() -> pr.titlePanorama = wrap(pr.titlePanorama + 1, ClientPrefs.PANORAMA_DIMS.length)),
 					saved(() -> pr.titlePanorama = wrap(pr.titlePanorama - 1, ClientPrefs.PANORAMA_DIMS.length))), clip);
 			y += step;
-			add(toggle("Server status", "Online players and ping under the Play button", lx, y, lw, h, () -> pr.titleStatus,
-					saved(() -> pr.titleStatus = !pr.titleStatus)), clip);
+			add(choice("Background", "The PlebMc wallpaper or the classic Minecraft panorama", lx, y, lw, h,
+					() -> ClientPrefs.BACKGROUNDS[pr.titleBackground],
+					saved(() -> pr.titleBackground = wrap(pr.titleBackground + 1, ClientPrefs.BACKGROUNDS.length)),
+					saved(() -> pr.titleBackground = wrap(pr.titleBackground - 1, ClientPrefs.BACKGROUNDS.length))), clip);
+			y += step;
+			add(toggle("Mini mascot", "The little mascot in the corner (click him)", lx, y, lw, h, () -> pr.titleBuddy,
+					saved(() -> pr.titleBuddy = !pr.titleBuddy)), clip);
 			y += step;
 			add(toggle("Mascot", "The PlebMc mascot at the top of the sidebar", lx, y, lw, h, () -> pr.titleMascot,
 					saved(() -> pr.titleMascot = !pr.titleMascot)), clip);

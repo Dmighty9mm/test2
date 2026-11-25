@@ -21,7 +21,8 @@ import net.plebmc.client.cosmetics.Cosmetics;
 /**
  * Cloak cosmetics: the cape model with the server's texture (any multiple of
  * the 64x32 cape layout, so 512x256 and up draw in full detail because the
- * model's UVs are fractions of the image) or a plain colored cloak. Moves
+ * model's UVs are fractions of the image; several frames stacked top to
+ * bottom make an animated cloak) or a plain colored cloak. Moves
  * exactly like a vanilla cape, and replaces one while it is worn.
  */
 public final class CloakLayer implements LayerRenderer<AbstractClientPlayer> {
@@ -44,11 +45,25 @@ public final class CloakLayer implements LayerRenderer<AbstractClientPlayer> {
 	// ==================== textures ====================
 
 	private static final Map<String, ResourceLocation> loaded = new HashMap<>();
+	private static final Map<String, ResourceLocation[]> animated = new HashMap<>();
 	private static final Map<String, Boolean> failed = new HashMap<>();
+	/** Animated cloaks: the biggest frame count, and pixels across all frames (GPU memory). */
+	static final int MAX_FRAMES = 64;
+	static final long MAX_ANIMATED_PIXELS = 8_388_608L;
 
-	/** The texture to bind for a cloak (its HD image once downloaded, a plain one meanwhile). */
+	/**
+	 * The texture to bind for a cloak (its HD image once downloaded, a plain
+	 * one meanwhile). An image taller than the cape layout (width x width/2)
+	 * is an animation: its frames are stacked top to bottom, and the frame
+	 * shown changes every {@code frameTime} milliseconds.
+	 */
 	static ResourceLocation texture(Cosmetics.Item it) {
 		if (it.texture != null) {
+			ResourceLocation[] frames = animated.get(it.texture);
+			if (frames != null) {
+				long t = System.currentTimeMillis() / Math.max(20, it.frameTime);
+				return frames[(int) (t % frames.length)];
+			}
 			ResourceLocation rl = loaded.get(it.texture);
 			if (rl != null) {
 				return rl;
@@ -57,11 +72,27 @@ public final class CloakLayer implements LayerRenderer<AbstractClientPlayer> {
 			if (png != null) {
 				try {
 					ImageData img = ImageData.loadImageFile(png);
-					if (img != null && img.width == img.height * 2 && img.width >= 64) {
-						rl = Minecraft.getMinecraft().getTextureManager().getDynamicTextureLocation("plebcloak_" + it.texture,
-								new DynamicTexture(img.toBufferedImage()));
-						loaded.put(it.texture, rl);
-						return rl;
+					int fh = img == null ? 0 : img.width / 2;
+					if (img != null && img.width >= 64 && fh > 0 && img.height % fh == 0) {
+						int n = img.height / fh;
+						if (n == 1) {
+							rl = Minecraft.getMinecraft().getTextureManager().getDynamicTextureLocation("plebcloak_" + it.texture,
+									new DynamicTexture(img.toBufferedImage()));
+							loaded.put(it.texture, rl);
+							return rl;
+						}
+						if (n <= MAX_FRAMES && (long) img.width * img.height <= MAX_ANIMATED_PIXELS) {
+							frames = new ResourceLocation[n];
+							for (int f = 0; f < n; f++) {
+								int[] px = new int[img.width * fh];
+								System.arraycopy(img.pixels, f * img.width * fh, px, 0, px.length);
+								ImageData frame = new ImageData(img.width, fh, px, true);
+								frames[f] = Minecraft.getMinecraft().getTextureManager()
+										.getDynamicTextureLocation("plebcloak_" + it.texture + "_" + f, new DynamicTexture(frame.toBufferedImage()));
+							}
+							animated.put(it.texture, frames);
+							return frames[0];
+						}
 					}
 				} catch (Throwable t) {
 					// fall through to the plain look

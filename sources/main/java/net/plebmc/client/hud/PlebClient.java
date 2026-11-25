@@ -130,6 +130,8 @@ public final class PlebClient {
 			net.plebmc.client.mods.FpsLarp.INSTANCE.load(STORE);
 			ClientPrefs.get().load(STORE);
 			net.plebmc.client.cosmetics.Cosmetics.loadSeen(STORE.get(QUESTS_SEEN_KEY));
+			net.plebmc.client.cosmetics.Cosmetics.loadLook(STORE.get(LOOK_KEY));
+			savedLook = net.plebmc.client.cosmetics.Cosmetics.lookVersion();
 		} catch (Throwable t) {
 			LOG.warn("mod/Apollo init failed: " + t);
 		}
@@ -179,6 +181,21 @@ public final class PlebClient {
 	}
 
 	static final String QUESTS_SEEN_KEY = "questsSeen";
+	static final String LOOK_KEY = "lastLook";
+	private static int savedLook;
+
+	/** Saves the last balance and outfit (for the title screen) when they changed. */
+	static void saveLookIfChanged() {
+		try {
+			int v = net.plebmc.client.cosmetics.Cosmetics.lookVersion();
+			if (v != savedLook) {
+				savedLook = v;
+				STORE.set(LOOK_KEY, net.plebmc.client.cosmetics.Cosmetics.lookJson());
+			}
+		} catch (Throwable t) {
+			LOG.warn("could not save the last look: " + t);
+		}
+	}
 
 	/** Remembers which quests the player has seen (for the NEW tags). */
 	static void saveQuestsSeen() {

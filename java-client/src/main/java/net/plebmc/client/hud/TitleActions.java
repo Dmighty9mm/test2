@@ -1,21 +1,24 @@
 package net.plebmc.client.hud;
 
+import java.util.Map;
+
+import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.minecraft.MinecraftProfileTexture;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiLanguage;
 import net.minecraft.client.gui.GuiMultiplayer;
 import net.minecraft.client.gui.GuiOptions;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiSelectWorld;
-import net.minecraft.client.multiplayer.ServerData;
-import net.minecraft.client.network.OldServerPinger;
-import net.minecraft.util.EnumChatFormatting;
+import net.minecraft.client.resources.DefaultPlayerSkin;
+import net.minecraft.util.ResourceLocation;
 import net.plebmc.forge.compat.EagRuntime;
 
 /**
  * The Forge side of the PlebClient title screen: what each sidebar entry
- * opens (Forge's mod list and Quit instead of Edit Profile), the PlebMc
- * server's live status (the vanilla server list ping), and the strings for
- * the info bar. {@link TitleMenu} is shared with the browser client.
+ * opens (Forge's mod list and Quit instead of Edit Profile), the player's
+ * skin (from Mojang), and the strings for the bottom line. {@link TitleMenu} is shared with the browser client.
  */
 final class TitleActions {
 
@@ -113,79 +116,47 @@ final class TitleActions {
 	static void credits() {
 	}
 
-	// ==================== server status ====================
-
-	/** 0 = checking, 1 = online, 2 = offline. */
-	static volatile int state;
-	static String motd = "";
-	static String players = "";
-	static long ping = -1;
-
-	private static OldServerPinger pinger;
-	private static ServerData data;
-	private static volatile boolean asked;
-	private static long lastCheck;
-	private static long sentAt;
-
-	/** Called every frame while the title screen is open: pings every 30 seconds, reads the answer. */
-	static void pollStatus() {
-		long now = System.currentTimeMillis();
-		if (pinger == null) {
-			pinger = new OldServerPinger();
-		}
-		if (!asked && (lastCheck == 0 || now - lastCheck > 30_000L)) {
-			lastCheck = now;
-			sentAt = now;
-			asked = true;
-			final ServerData d = new ServerData(PlebMenu.SERVER_NAME, PlebMenu.SERVER_ADDRESS, false);
-			data = d;
-			Thread th = new Thread(() -> {
-				try {
-					pinger.ping(d);
-				} catch (Throwable t) {
-					d.pingToServer = -1L;
-					d.serverMOTD = "";
-					d.field_78841_f = true;
-					if (state != 1) {
-						state = 2;
-					}
-					asked = false;
-				}
-			}, "PlebClient title ping");
-			th.setDaemon(true);
-			th.start();
-			return;
-		}
-		try {
-			pinger.pingPendingNetworks();
-		} catch (Throwable t) {
-			// keep going
-		}
-		ServerData d = data;
-		if (asked && d != null) {
-			if (d.pingToServer >= 0 && d.populationInfo != null && !d.populationInfo.isEmpty()) {
-				motd = d.serverMOTD == null ? "" : d.serverMOTD;
-				players = EnumChatFormatting.getTextWithoutFormattingCodes(d.populationInfo);
-				ping = d.pingToServer;
-				state = 1;
-				asked = false;
-			} else if (now - sentAt > 10_000L) {
-				state = 2;
-				asked = false;
-			}
-		}
+	static void openLink(String url) {
+		EagRuntime.openLink(url);
 	}
 
-	/** Title screen closed: stop pinging. */
-	static void stopStatus() {
-		if (pinger != null) {
-			try {
-				pinger.clearPendingNetworks();
-			} catch (Throwable t) {
-				// ignore
-			}
+	private static volatile GameProfile filled;
+	private static volatile boolean filling;
+	private static boolean slimSkin;
+
+	/** The player's skin from Mojang (looked up once, in the background), or the default one meanwhile. */
+	static ResourceLocation skin() {
+		Minecraft mc = Minecraft.getMinecraft();
+		GameProfile gp = mc.getSession().getProfile();
+		if (filled == null && !filling && gp.getId() != null) {
+			filling = true;
+			Thread th = new Thread(() -> {
+				try {
+					filled = mc.getSessionService().fillProfileProperties(gp, false);
+				} catch (Throwable t) {
+					filled = gp;
+				}
+			}, "PlebClient skin lookup");
+			th.setDaemon(true);
+			th.start();
 		}
-		asked = false;
-		lastCheck = 0;
+		try {
+			if (filled != null) {
+				Map<MinecraftProfileTexture.Type, MinecraftProfileTexture> m = mc.getSkinManager().loadSkinFromCache(filled);
+				MinecraftProfileTexture tex = m.get(MinecraftProfileTexture.Type.SKIN);
+				if (tex != null) {
+					slimSkin = "slim".equals(tex.getMetadata("model"));
+					return mc.getSkinManager().loadSkin(tex, MinecraftProfileTexture.Type.SKIN);
+				}
+			}
+		} catch (Throwable t) {
+			// fall back to the default skin
+		}
+		slimSkin = gp.getId() != null && "slim".equals(DefaultPlayerSkin.getSkinType(gp.getId()));
+		return gp.getId() != null ? DefaultPlayerSkin.getDefaultSkin(gp.getId()) : DefaultPlayerSkin.getDefaultSkinLegacy();
+	}
+
+	static boolean slim() {
+		return slimSkin;
 	}
 }

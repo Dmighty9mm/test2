@@ -56,6 +56,8 @@ public final class Cosmetics {
 		/** Cloaks: the server's texture id (a content hash), or null for a plain colored cloak. */
 		public String texture;
 		public int textureWidth;
+		/** Animated cloaks: milliseconds per frame (the frames are stacked top to bottom in the texture). */
+		public int frameTime = 100;
 		/** Model hats ("render":"model"): the server's model id (a content hash); the texture is {@link #texture}. */
 		public String model;
 		/** The shop collection (tab) it's listed in: plebmc, partners, ... */
@@ -277,7 +279,7 @@ public final class Cosmetics {
 	private static final Map<String, byte[]> textures = new java.util.LinkedHashMap<>();
 	private static final Map<String, String[]> textureParts = new HashMap<>();
 	private static final Set<String> requested = new HashSet<>();
-	static final int MAX_PARTS = 256;
+	static final int MAX_PARTS = 512;
 	static final int MAX_TEXTURES = 48;
 
 	/** The PNG for a texture id once it has arrived; asks the server for it the first time. */
@@ -486,6 +488,7 @@ public final class Cosmetics {
 				catalog = Collections.unmodifiableList(items);
 				serverCatalog = true;
 			}
+			rememberLook();
 		} else if ("players".equals(type)) {
 			if (Boolean.TRUE.equals(m.get("clear"))) {
 				others.clear();
@@ -516,6 +519,7 @@ public final class Cosmetics {
 		} else if ("notify".equals(type)) {
 			if (m.containsKey("coins")) {
 				coins = Math.max(0, num(m.get("coins"), 0));
+				rememberLook();
 			}
 			String title = str(m.get("title"), "");
 			String text = str(m.get("message"), "");
@@ -580,6 +584,7 @@ public final class Cosmetics {
 		if (CLOAK.equals(cat) && tex != null && tex.matches("[0-9a-f]{8,64}")) {
 			it.texture = tex;
 			it.textureWidth = (int) Math.max(0, num(m.get("textureWidth"), 0));
+			it.frameTime = (int) Math.max(20, Math.min(10_000, num(m.get("frameTime"), 100)));
 		}
 		if (MODEL.equals(render)) {
 			String model = str(m.get("model"), null);
@@ -767,6 +772,104 @@ public final class Cosmetics {
 			seen.retainAll(now);
 		}
 		return changed;
+	}
+
+	// ==================== the last look (for the title screen) ====================
+
+	private static long lastCoins = -1;
+	private static String lastCurrency = "PlebMc Coins";
+	private static Item lastHat, lastCloak;
+	private static int lookVersion;
+
+	/** Keeps the balance and what the player wore, so the title screen can show them after leaving. */
+	private static void rememberLook() {
+		boolean changed = false;
+		if (coins >= 0 && coins != lastCoins) {
+			lastCoins = coins;
+			changed = true;
+		}
+		if (!currency.equals(lastCurrency)) {
+			lastCurrency = currency;
+			changed = true;
+		}
+		Item h = item(equipped.get(HAT)), c = item(equipped.get(CLOAK));
+		if (h != lastHat || c != lastCloak) {
+			lastHat = h;
+			lastCloak = c;
+			changed = true;
+		}
+		if (changed) {
+			lookVersion++;
+		}
+	}
+
+	/** The last balance a server sent (kept after leaving and across restarts), or -1. */
+	public static long lastCoins() {
+		return coins >= 0 ? coins : lastCoins;
+	}
+
+	public static String lastCurrency() {
+		return lastCurrency;
+	}
+
+	/** The hat or cloak the player last wore on a server, or null. */
+	public static Item lastWorn(String category) {
+		return HAT.equals(category) ? lastHat : CLOAK.equals(category) ? lastCloak : null;
+	}
+
+	/** Changes every time the remembered look changes (to know when to save it). */
+	public static int lookVersion() {
+		return lookVersion;
+	}
+
+	public static String lookJson() {
+		Map<String, Object> m = new java.util.LinkedHashMap<>();
+		m.put("coins", (double) lastCoins);
+		m.put("currency", lastCurrency);
+		if (lastHat != null) {
+			m.put("hat", itemJson(lastHat));
+		}
+		if (lastCloak != null) {
+			m.put("cloak", itemJson(lastCloak));
+		}
+		return net.plebmc.client.apollo.proto.Json.write(m);
+	}
+
+	public static void loadLook(String raw) {
+		try {
+			Object o = raw == null || raw.isEmpty() ? null : net.plebmc.client.apollo.proto.Json.parse(raw);
+			if (!(o instanceof Map)) {
+				return;
+			}
+			Map<?, ?> m = (Map<?, ?>) o;
+			lastCoins = (long) num(m.get("coins"), -1);
+			lastCurrency = str(m.get("currency"), lastCurrency);
+			Item h = readItem(m.get("hat")), c = readItem(m.get("cloak"));
+			lastHat = h != null && HAT.equals(h.category) ? h : null;
+			lastCloak = c != null && CLOAK.equals(c.category) ? c : null;
+		} catch (RuntimeException e) {
+			// a broken value: forget it
+		}
+	}
+
+	private static Map<String, Object> itemJson(Item it) {
+		Map<String, Object> m = new java.util.LinkedHashMap<>();
+		m.put("id", it.id);
+		m.put("name", it.name);
+		m.put("category", it.category);
+		m.put("render", it.render);
+		if (it.color >= 0) {
+			m.put("color", String.format("#%06X", it.color));
+		}
+		if (it.texture != null) {
+			m.put("texture", it.texture);
+			m.put("textureWidth", (double) it.textureWidth);
+			m.put("frameTime", (double) it.frameTime);
+		}
+		if (it.model != null) {
+			m.put("model", it.model);
+		}
+		return m;
 	}
 
 	public static String seenJson() {

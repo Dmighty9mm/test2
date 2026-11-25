@@ -19,13 +19,15 @@ import net.plebmc.client.mods.ClientPrefs;
  * PlebClient menus are on (GuiMainMenu hands drawing, clicks and keys to
  * this class; the vanilla buttons stay in the list but are hidden).
  *
- * <p>Deliberately quiet: the panorama fills the whole screen, including
- * behind the sidebar. On top of it there is only
+ * <p>Deliberately quiet: the PlebMc wallpaper (or the panorama) fills the
+ * whole screen, including behind the sidebar. On top of it there is only
  * <ul>
  * <li>a transparent sidebar on the left (the mascot, icons, and labels that
  * slide in while the mouse is over it), separated by a thin accent line,
  * with a translucent hover wash and a small accent indicator;</li>
- * <li>one Play button, with the server's status under it;</li>
+ * <li>the player's own skin, with the hat and cloak they last wore on
+ * PlebMc, standing in the middle (click it for the web store), the Pleb
+ * Coins balance in the top right and the mini mascot in the corner;</li>
  * <li>a faint version line at the bottom (plus an optional clock and splash
  * text).</li>
  * </ul>
@@ -55,7 +57,6 @@ public final class TitleMenu {
 	private static float[] hover = new float[0];
 	private static float indY = -1, indH, indA; // the sliding indicator
 	private static int keySel = -1; // keyboard selection
-	private static float playHover;
 	private static float creditsHover;
 	private static int tipItem = -1;
 	private static float tipA;
@@ -70,6 +71,7 @@ public final class TitleMenu {
 	/** Called from GuiMainMenu.initGui (also on resize and when coming back from another screen). */
 	public static void init(GuiScreen s) {
 		long now = System.currentTimeMillis();
+		PlebClient.saveLookIfChanged();
 		if (s != screen) {
 			screen = s;
 			openedAt = now;
@@ -89,7 +91,7 @@ public final class TitleMenu {
 
 	/** The title screen went away (another screen or the game). */
 	public static void closed() {
-		TitleActions.stopStatus();
+		PlebClient.saveLookIfChanged();
 	}
 
 	// ==================== layout ====================
@@ -172,12 +174,12 @@ public final class TitleMenu {
 		int w = s.width, h = s.height;
 		int acc = Ui.accent();
 		ClientPrefs pr = ClientPrefs.get();
-		if (pr.titleStatus) {
-			TitleActions.pollStatus();
-		}
 		// text writes depth here: without this the quads drawn over it would have holes
 		GlStateManager.disableDepth();
 
+		if (pr.titleBackground == 0) {
+			wallpaper(w, h, mx, my);
+		}
 		backdrop(w, h, pr.titlePanorama);
 
 		// ---- sidebar hover / expand ----
@@ -196,8 +198,12 @@ public final class TitleMenu {
 
 		// ---- content ----
 		int x0 = contentLeft(w);
-		playArea(x0, w, h, mx, my, t, acc, slideIn, pr.titleStatus);
+		showcase(x0, w, h, mx, my, t, acc, slideIn);
+		coinsChip(w, mx, my, acc, slideIn);
 		footer(x0, w, h, mx, my, splash, acc, slideIn, pr);
+		if (pr.titleBuddy) {
+			buddy(w, h, mx, my, now, slideIn);
+		}
 
 		// a light veil over the content while the sidebar floats open over it
 		if (mode == 0 && expand > 0.01f) {
@@ -243,64 +249,308 @@ public final class TitleMenu {
 		PlebTheme.gradient(0, h - h / 4, w, h / 4, 0x0003060A, Ui.alpha(0xFF03060A, dim == 0 ? 0x60 : 0x80));
 	}
 
-	// ---- the Play button ----
+	// ---- the wallpaper ----
 
-	private static int playX, playY, playW, playH;
+	private static final ResourceLocation WALLPAPER = new ResourceLocation("plebitems", "textures/gui/wallpaper.jpg");
+	private static float parX, parY;
 
-	private static void playArea(int x0, int w, int h, int mx, int my, float t, int acc, float in, boolean status) {
-		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
-		float cx = x0 + (w - x0) / 2f;
-		playW = Math.max(110, Math.min(150, (w - x0) / 3));
-		playH = 24;
-		float rise = (1f - in) * 10f;
-		playX = Math.round(cx - playW / 2f);
-		playY = Math.round(h / 2f - playH / 2f + 6 + rise);
-		boolean over = mx >= playX && mx < playX + playW && my >= playY && my < playY + playH && pending == null
-				&& mx >= sideWidth(w);
-		playHover = approach(playHover, over ? 1f : 0f, 12f);
-		float hv = ease(playHover);
-		int a = Math.round(255 * in);
-		// glass that fills with the accent on hover
-		roundF(playX, playY, playW, playH, Ui.alpha(0xFF05090E, Math.round(0x8C * in * (1f - hv))));
-		if (hv > 0.01f) {
-			gradientRoundF(playX, playY, playW, playH, Ui.alpha(Ui.mix(acc, 0xFFFFFFFF, 0.15f), Math.round(0xF0 * hv * in)),
-					Ui.alpha(Ui.mix(acc, 0xFF000000, 0.15f), Math.round(0xF0 * hv * in)));
-		}
-		outlineF(playX, playY, playW, playH, Ui.alpha(acc, Math.round((0xB0 + 0x4F * hv) * in)));
-		int fg = Ui.mix(0xFFFFFFFF, Ui.ON_ACCENT, hv);
-		String label = "PLAY";
-		int lw = 11 + 6 + font.getStringWidth(label);
-		float lx = cx - lw / 2f + 1.5f * hv;
-		iconF("nav_play", lx - 1, playY + (playH - 11) / 2f, 1f, Ui.alpha(fg, a));
-		text(font, label, lx + 17, playY + (playH - 8) / 2f, 1f, Ui.alpha(fg, a));
-
-		if (!status) {
+	/** The PlebMc wallpaper over the whole screen (cover), drifting a little with the mouse. */
+	private static void wallpaper(int w, int h, int mx, int my) {
+		Minecraft mc = Minecraft.getMinecraft();
+		try {
+			mc.getTextureManager().bindTexture(WALLPAPER);
+			net.minecraft.client.renderer.texture.ITextureObject tex = mc.getTextureManager().getTexture(WALLPAPER);
+			if (tex != null) {
+				tex.setBlurMipmap(true, false);
+			}
+		} catch (Throwable t) {
 			return;
 		}
-		// one quiet line under it: dot, address, players, ping
-		int st = TitleActions.state;
-		String line = TitleActions.address();
-		if (st == 1) {
-			if (!TitleActions.players.isEmpty()) {
-				line += "  \u00b7  " + online(TitleActions.players) + " online";
-			}
-			if (TitleActions.ping >= 0) {
-				line += "  \u00b7  " + TitleActions.ping + " ms";
-			}
-		} else {
-			line += "  \u00b7  " + (st == 2 ? "offline" : "checking");
+		parX = approach(parX, w > 0 ? (mx / (float) w - 0.5f) : 0f, 3f);
+		parY = approach(parY, h > 0 ? (my / (float) h - 0.5f) : 0f, 3f);
+		// cover the screen at 16:9 with a 4% margin for the drift
+		float iw = w * 1.04f, ih = iw * 9f / 16f;
+		if (ih < h * 1.04f) {
+			ih = h * 1.04f;
+			iw = ih * 16f / 9f;
 		}
-		int dot = st == 1 ? Ui.GOOD : st == 2 ? Ui.BAD : Ui.GOLD;
-		int tw = font.getStringWidth(line) + 8;
-		float sx = cx - tw / 2f, sy = playY + playH + 9;
-		float pulse = animations() ? 0.6f + 0.4f * (float) Math.sin(t * (st == 0 ? 6f : 2.2f)) : 1f;
-		fill(sx, sy + 2.5f, 3, 3, Ui.alpha(dot, Math.round(a * pulse)));
-		textShadow(font, line, sx + 8, sy, Ui.alpha(0xFFC9D3DB, Math.round(0xD0 * in)));
+		float x = (w - iw) / 2f - parX * (iw - w) * 0.9f;
+		float y = (h - ih) / 2f - parY * (ih - h) * 0.9f;
+		GlStateManager.enableTexture2D();
+		GlStateManager.disableBlend();
+		GlStateManager.color(1f, 1f, 1f, 1f);
+		WorldRenderer r = Tessellator.getInstance().getWorldRenderer();
+		r.begin(7, DefaultVertexFormats.POSITION_TEX);
+		r.pos(x, y + ih, 0).tex(0, 1).endVertex();
+		r.pos(x + iw, y + ih, 0).tex(1, 1).endVertex();
+		r.pos(x + iw, y, 0).tex(1, 0).endVertex();
+		r.pos(x, y, 0).tex(0, 0).endVertex();
+		Tessellator.getInstance().draw();
+		GlStateManager.enableBlend();
 	}
 
-	private static String online(String pop) {
-		int i = pop.indexOf('/');
-		return (i > 0 ? pop.substring(0, i) : pop).trim();
+	// ---- the player showcase (opens the web store) ----
+
+	private static final String STORE_URL = "https://shop.plebmc.top";
+	private static net.minecraft.client.model.ModelPlayer steve, alex;
+	private static int showX, showY, showW, showH;
+	private static float showHover;
+
+	private static void showcase(int x0, int w, int h, int mx, int my, float t, int acc, float in) {
+		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
+		// right of center, so the wallpaper's own mascot keeps the left side
+		float cx = x0 + (w - x0) * (ClientPrefs.get().titleBackground == 0 ? 0.66f : 0.5f);
+		float scale = Math.max(34f, Math.min(64f, h * 0.2f));
+		float tall = 2f * scale; // the model is 32 pixels = 2 units
+		float foot = h / 2f + tall / 2f + 2 + (1f - in) * 10f;
+		showW = Math.round(scale * 1.6f);
+		showH = Math.round(tall + 8);
+		showX = Math.round(cx - showW / 2f);
+		showY = Math.round(foot - tall - 6);
+		// the pill under the player is part of the button too
+		int pillW = font.getStringWidth("shop.plebmc.top") + 26, pillH = 16;
+		float pillX = cx - pillW / 2f, pillY = foot + 20;
+		boolean over = pending == null && mx >= sideWidth(w)
+				&& ((mx >= showX && mx < showX + showW && my >= showY && my < showY + showH)
+						|| (mx >= pillX && mx < pillX + pillW && my >= pillY && my < pillY + pillH));
+		showHover = approach(showHover, over ? 1f : 0f, 10f);
+		float hv = ease(showHover);
+		int a = Math.round(255 * in);
+
+		// a soft spot of light to stand in, brighter on hover
+		PlebTheme.glow(cx, foot - 1, scale * (0.9f + 0.15f * hv), Ui.alpha(acc, Math.round((0x30 + 0x30 * hv) * in)));
+		gradientH(cx - scale * 0.55f, foot, scale * 0.55f, 1, Ui.alpha(acc, 0), Ui.alpha(acc, Math.round(0xA0 * in)));
+		gradientH(cx, foot, scale * 0.55f, 1, Ui.alpha(acc, Math.round(0xA0 * in)), Ui.alpha(acc, 0));
+
+		// the player: your skin and what you last wore, turning gently and looking at the mouse
+		float headY = foot - tall * 0.85f;
+		float look = Math.max(-1f, Math.min(1f, (cx - mx) / Math.max(1f, w * 0.5f)));
+		float lookY = Math.max(-1f, Math.min(1f, (headY - my) / Math.max(1f, h * 0.5f)));
+		float sway = animations() ? (float) Math.sin(t * 0.6f) * 14f : 0f;
+		float bodyYaw = sway - look * 25f + hv * 8f * (float) Math.sin(t * 2f);
+		drawPlayer(cx, foot - (1f + hv) * 1.5f, scale, bodyYaw, -look * 35f, -lookY * 20f, t, in);
+
+		// name, then the store pill
+		String name = TitleActions.username();
+		if (name != null && !name.isEmpty()) {
+			int nw = font.getStringWidth(name);
+			textShadow(font, name, cx - nw / 2f, foot + 6, Ui.alpha(0xFFFFFFFF, a));
+		}
+		roundF(pillX, pillY, pillW, pillH, Ui.alpha(Ui.mix(0xFF05090E, acc, hv * 0.85f), Math.round((0x9C + 0x50 * hv) * in)));
+		outlineF(pillX, pillY, pillW, pillH, Ui.alpha(acc, Math.round((0x90 + 0x6F * hv) * in)));
+		int fg = Ui.mix(0xFFFFFFFF, Ui.ON_ACCENT, hv);
+		iconF("shop", pillX + 6, pillY + 3.5f, 1f, Ui.alpha(hv > 0.5f ? fg : acc, a));
+		text(font, "shop.plebmc.top", pillX + 19, pillY + 4, 1f, Ui.alpha(fg, a));
+		if (hv > 0.02f) {
+			String tip = "Open the store";
+			int tw = font.getStringWidth(tip);
+			textShadow(font, tip, cx - tw / 2f, pillY + pillH + 5 + (1f - hv) * -3f, Ui.alpha(0xFFDCE4EA, Math.round(0xC0 * hv * in)));
+		}
+	}
+
+	/** Draws the player model in the GUI: feet at (x, foot), {@code scale} GUI pixels per block. */
+	private static void drawPlayer(float x, float foot, float scale, float bodyYaw, float headYaw, float headPitch, float t,
+			float in) {
+		Minecraft mc = Minecraft.getMinecraft();
+		boolean slim = TitleActions.slim();
+		if (steve == null) {
+			steve = new net.minecraft.client.model.ModelPlayer(0f, false);
+			alex = new net.minecraft.client.model.ModelPlayer(0f, true);
+		}
+		net.minecraft.client.model.ModelPlayer m = slim ? alex : steve;
+		m.isChild = false;
+		m.isSneak = false;
+		m.swingProgress = 0f;
+		ResourceLocation skin = TitleActions.skin();
+		GlStateManager.pushMatrix();
+		GlStateManager.clear(256);
+		GlStateManager.enableDepth();
+		GlStateManager.depthMask(true);
+		GlStateManager.enableTexture2D();
+		GlStateManager.enableAlpha();
+		GlStateManager.enableBlend();
+		GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+		GlStateManager.color(1f, 1f, 1f, in);
+		GlStateManager.disableCull();
+		try {
+			GlStateManager.translate(x, foot - 1.5f * scale, 120f);
+			GlStateManager.scale(scale, scale, scale);
+			GlStateManager.rotate(180f, 1f, 0f, 0f);
+			GlStateManager.scale(1f, -1f, 1f);
+			net.minecraft.client.renderer.RenderHelper.enableGUIStandardItemLighting();
+			GlStateManager.translate(0f, 1f, 0f);
+			GlStateManager.rotate(-8f, 1f, 0f, 0f);
+			GlStateManager.rotate(bodyYaw, 0f, 1f, 0f);
+			GlStateManager.translate(0f, -1f, 0f);
+			float age = t * 20f;
+			m.setRotationAngles(0f, 0f, age, headYaw, headPitch, 0.0625f, null);
+			if (skin != null) {
+				mc.getTextureManager().bindTexture(skin);
+			}
+			float sc = 0.0625f;
+			m.bipedHead.render(sc);
+			m.bipedBody.render(sc);
+			m.bipedRightArm.render(sc);
+			m.bipedLeftArm.render(sc);
+			m.bipedRightLeg.render(sc);
+			m.bipedLeftLeg.render(sc);
+			m.bipedHeadwear.render(sc);
+			m.bipedBodyWear.render(sc);
+			m.bipedRightArmwear.render(sc);
+			m.bipedLeftArmwear.render(sc);
+			m.bipedRightLegwear.render(sc);
+			m.bipedLeftLegwear.render(sc);
+			// the cloak and hat they last wore on PlebMc
+			net.plebmc.client.cosmetics.Cosmetics.Item cloak = net.plebmc.client.cosmetics.Cosmetics
+					.lastWorn(net.plebmc.client.cosmetics.Cosmetics.CLOAK);
+			if (cloak != null) {
+				mc.getTextureManager().bindTexture(CloakLayer.texture(cloak));
+				GlStateManager.pushMatrix();
+				GlStateManager.translate(0f, 0f, 0.125f);
+				GlStateManager.rotate(8f + (float) Math.sin(t * 1.3f) * 3f, 1f, 0f, 0f);
+				GlStateManager.rotate(180f, 0f, 1f, 0f);
+				m.renderCape(sc);
+				GlStateManager.popMatrix();
+			}
+			net.plebmc.client.cosmetics.Cosmetics.Item hat = net.plebmc.client.cosmetics.Cosmetics
+					.lastWorn(net.plebmc.client.cosmetics.Cosmetics.HAT);
+			if (hat != null) {
+				GlStateManager.pushMatrix();
+				m.bipedHead.postRender(sc);
+				GlStateManager.scale(sc, sc, sc);
+				if (net.plebmc.client.cosmetics.Cosmetics.MODEL.equals(hat.render)) {
+					CosmeticLayer.model(hat);
+				} else {
+					CosmeticLayer.draw(hat.render, hat.color, age);
+				}
+				GlStateManager.popMatrix();
+			}
+		} catch (Throwable e) {
+			// a model or texture that isn't ready: skip this frame
+		} finally {
+			GlStateManager.popMatrix();
+			net.minecraft.client.renderer.RenderHelper.disableStandardItemLighting();
+			GlStateManager.disableLighting();
+			GlStateManager.enableCull();
+			GlStateManager.disableDepth();
+			GlStateManager.enableTexture2D();
+			GlStateManager.color(1f, 1f, 1f, 1f);
+		}
+	}
+
+	// ---- coins (top right) ----
+
+	private static int coinX, coinY, coinW, coinH;
+	private static float coinHover;
+
+	private static void coinsChip(int w, int mx, int my, int acc, float in) {
+		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
+		long c = net.plebmc.client.cosmetics.Cosmetics.lastCoins();
+		String amount = c < 0 ? "--" : String.format("%,d", c);
+		String cur = shortCurrency(net.plebmc.client.cosmetics.Cosmetics.lastCurrency());
+		int aw = font.getStringWidth(amount), cw = font.getStringWidth(cur);
+		coinW = 8 + 9 + 5 + aw + 5 + cw + 8;
+		coinH = 18;
+		coinX = w - 8 - coinW;
+		coinY = 8;
+		boolean over = pending == null && mx >= coinX && mx < coinX + coinW && my >= coinY && my < coinY + coinH;
+		coinHover = approach(coinHover, over ? 1f : 0f, 14f);
+		float hv = ease(coinHover);
+		int a = Math.round(255 * in);
+		roundF(coinX, coinY, coinW, coinH, Ui.alpha(0xFF05090E, Math.round((0x9C + 0x30 * hv) * in)));
+		outlineF(coinX, coinY, coinW, coinH, Ui.alpha(Ui.mix(0xFF2A3440, Ui.GOLD, 0.35f + 0.65f * hv), a));
+		float spin = animations() ? (float) Math.abs(Math.cos(System.currentTimeMillis() / 900.0)) : 1f;
+		GlStateManager.pushMatrix();
+		GlStateManager.translate(coinX + 8 + 4.5f, coinY + 9f, 0f);
+		GlStateManager.scale(0.35f + 0.65f * spin, 1f, 1f);
+		iconF("coin", -4.5f, -4.5f, 1f, Ui.alpha(Ui.GOLD, a));
+		GlStateManager.popMatrix();
+		textShadow(font, amount, coinX + 22, coinY + 5, Ui.alpha(0xFFFFE07A, a));
+		textShadow(font, cur, coinX + 22 + aw + 5, coinY + 5, Ui.alpha(0xFFB9C4CD, a));
+		if (hv > 0.02f) {
+			String tip = c < 0 ? "Join PlebMc to load your coins" : "Open the shop";
+			int tw = font.getStringWidth(tip);
+			textShadow(font, tip, coinX + coinW - tw, coinY + coinH + 4, Ui.alpha(0xFFDCE4EA, Math.round(0xC0 * hv * in)));
+		}
+	}
+
+	/** "PlebMc Coins" reads as "Pleb Coins" in the chip. */
+	private static String shortCurrency(String cur) {
+		if (cur == null || cur.isEmpty()) {
+			return "Pleb Coins";
+		}
+		return cur.replace("PlebMc ", "Pleb ");
+	}
+
+	// ---- the mini mascot (bottom right) ----
+
+	private static final ResourceLocation BUDDY = new ResourceLocation("plebitems", "textures/gui/buddy.png");
+	/** Milliseconds per frame of the mini mascot's animation (frame 0 is him standing there). */
+	private static final int[] BUDDY_MS = { 520, 210, 200, 180, 160, 140, 120, 70, 70, 120, 140, 150, 140, 120, 60, 70, 70, 80,
+			90, 240 };
+	private static long buddyStart; // 0 = standing; else when he was clicked
+	private static long buddyBack; // when he pops back in
+	private static float buddyHover;
+	private static int budX, budY, budS;
+
+	private static void buddy(int w, int h, int mx, int my, long now, float in) {
+		budS = Math.max(28, Math.min(40, h / 7));
+		budX = w - 8 - budS;
+		budY = h - 16 - budS;
+		boolean over = pending == null && mx >= budX && mx < budX + budS && my >= budY && my < budY + budS;
+		buddyHover = approach(buddyHover, over && buddyStart == 0 ? 1f : 0f, 12f);
+		int frame = 0;
+		float pop = 1f;
+		if (buddyStart != 0) {
+			long e = now - buddyStart;
+			int acc = 0;
+			frame = -1;
+			for (int i = 1; i < BUDDY_MS.length; i++) {
+				acc += BUDDY_MS[i];
+				if (e < acc) {
+					frame = i;
+					break;
+				}
+			}
+			if (frame < 0) {
+				// blown up: gone for a moment, then back
+				if (buddyBack == 0) {
+					buddyBack = now + 900;
+				}
+				if (now < buddyBack) {
+					return;
+				}
+				float k = Math.min(1f, (now - buddyBack) / 260f);
+				pop = ease(k);
+				frame = 0;
+				if (k >= 1f) {
+					buddyStart = 0;
+					buddyBack = 0;
+				}
+			}
+		}
+		float bob = buddyStart == 0 && animations() ? (float) Math.abs(Math.sin(now / 380.0)) * -1.5f : 0f;
+		float hop = -3f * ease(buddyHover);
+		float s = budS * pop;
+		float x = budX + (budS - s) / 2f, y = budY + (budS - s) + bob + hop;
+		try {
+			Minecraft.getMinecraft().getTextureManager().bindTexture(BUDDY);
+		} catch (Throwable t) {
+			return;
+		}
+		float u0 = (frame % 5) / 5f, v0 = (frame / 5) / 4f, u1 = u0 + 0.2f, v1 = v0 + 0.25f;
+		GlStateManager.enableTexture2D();
+		GlStateManager.enableBlend();
+		GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+		GlStateManager.color(1f, 1f, 1f, in);
+		WorldRenderer r = Tessellator.getInstance().getWorldRenderer();
+		r.begin(7, DefaultVertexFormats.POSITION_TEX);
+		r.pos(x, y + s, 0).tex(u0, v1).endVertex();
+		r.pos(x + s, y + s, 0).tex(u1, v1).endVertex();
+		r.pos(x + s, y, 0).tex(u1, v0).endVertex();
+		r.pos(x, y, 0).tex(u0, v0).endVertex();
+		Tessellator.getInstance().draw();
+		GlStateManager.color(1f, 1f, 1f, 1f);
 	}
 
 	// ---- bottom line ----
@@ -504,8 +754,25 @@ public final class TitleMenu {
 			}
 			return true;
 		}
-		if (mx >= playX && mx < playX + playW && my >= playY && my < playY + playH) {
-			start("play", mx, my);
+		if (budS > 0 && ClientPrefs.get().titleBuddy && mx >= budX && mx < budX + budS && my >= budY && my < budY + budS) {
+			if (buddyStart == 0) {
+				buddyStart = System.currentTimeMillis();
+				buddyBack = 0;
+			}
+			return true;
+		}
+		if (mx >= coinX && mx < coinX + coinW && my >= coinY && my < coinY + coinH) {
+			start("wardrobe", mx, my);
+			return true;
+		}
+		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
+		int pillW = font.getStringWidth("shop.plebmc.top") + 26;
+		boolean onPill = my >= showY + showH && my < showY + showH + 40
+				&& Math.abs(mx - (showX + showW / 2f)) < pillW / 2f;
+		if ((mx >= showX && mx < showX + showW && my >= showY && my < showY + showH) || onPill) {
+			sound();
+			ripple(mx, my);
+			TitleActions.openLink(STORE_URL);
 			return true;
 		}
 		if (credW > 0 && mx >= credX - 3 && mx < credX + credW + 3 && my >= h - 15) {
@@ -552,13 +819,17 @@ public final class TitleMenu {
 		return false;
 	}
 
+	private static void ripple(int mx, int my) {
+		if (ripples.isEmpty()) {
+			rippleBase = System.currentTimeMillis();
+		}
+		ripples.add(new float[] { mx, my, System.currentTimeMillis() - rippleBase });
+	}
+
 	private static void start(String id, int mx, int my) {
 		sound();
 		if (mx >= 0) {
-			if (ripples.isEmpty()) {
-				rippleBase = System.currentTimeMillis();
-			}
-			ripples.add(new float[] { mx, my, System.currentTimeMillis() - rippleBase });
+			ripple(mx, my);
 		}
 		if ("discord".equals(id)) {
 			// opens a browser tab: no fade
