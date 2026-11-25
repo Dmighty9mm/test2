@@ -219,9 +219,14 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 		wr.begin(7, DefaultVertexFormats.POSITION_TEX_COLOR);
 		for (int i = 0; i + 20 <= q.length; i += 20) {
 			float shade = shade(q, i);
+			// push each face a hair outward (a little more for later cubes), so the two
+			// sides of a flat plane (a brim) and faces of touching cubes never z-fight
+			float[] n = outward(q, i);
+			float push = 0.012f + Math.min(40, i / 120) * 0.003f;
+			float ox = n[0] * push, oy = n[1] * push, oz = n[2] * push;
 			for (int c = 0; c < 4; c++) {
 				int k = i + c * 5;
-				wr.pos(q[k], q[k + 1], q[k + 2]).tex(q[k + 3], q[k + 4]).color(shade, shade, shade, 1f).endVertex();
+				wr.pos(q[k] + ox, q[k + 1] + oy, q[k + 2] + oz).tex(q[k + 3], q[k + 4]).color(shade, shade, shade, 1f).endVertex();
 			}
 		}
 		t.draw();
@@ -230,6 +235,18 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 		GlStateManager.enableCull();
 		GlStateManager.enableLighting();
 		return true;
+	}
+
+	/** The quad's outward unit normal (corners go clockwise seen from outside). */
+	private static float[] outward(float[] q, int i) {
+		float ax = q[i + 5] - q[i], ay = q[i + 6] - q[i + 1], az = q[i + 7] - q[i + 2];
+		float bx = q[i + 15] - q[i], by = q[i + 16] - q[i + 1], bz = q[i + 17] - q[i + 2];
+		float nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+		float len = (float) Math.sqrt(nx * nx + ny * ny + nz * nz);
+		if (len < 1e-6f) {
+			return new float[3];
+		}
+		return new float[] { -nx / len, -ny / len, -nz / len };
 	}
 
 	/** Minecraft-style face shading from the quad's normal: top 1.0, sides 0.8/0.62, bottom 0.5. */

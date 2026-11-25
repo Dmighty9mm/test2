@@ -140,9 +140,45 @@ public abstract class Mod {
                 public boolean on() {
                         return value != 0;
                 }
+
+                /** Free-text settings (custom labels): the typed text, or the default. */
+                private String defText;
+                private String text;
+
+                public boolean isText() {
+                        return labels == TEXT;
+                }
+
+                public String text() {
+                        return text == null ? "" : text;
+                }
+
+                public String defText() {
+                        return defText == null ? "" : defText;
+                }
+
+                public void setText(String t) {
+                        if (t == null) {
+                                text = defText;
+                                return;
+                        }
+                        // one line, no section signs, kept short
+                        t = t.replace('\n', ' ').replace('\u00a7', ' ');
+                        text = t.length() > 24 ? t.substring(0, 24) : t;
+                }
         }
 
         public static final String[] OFF_ON = { "Off", "On" };
+        /** Marks a free-text setting. */
+        public static final String[] TEXT = { "" };
+
+        protected final Setting textSetting(String key, String name, String description, String def) {
+                Setting st = new Setting(key, name, description, TEXT, 0);
+                st.defText = def;
+                st.text = def;
+                settings.add(st);
+                return st;
+        }
 
         protected final Setting setting(String key, String name, String description, String[] labels, int def) {
                 Setting st = new Setting(key, name, description, labels, def);
@@ -175,6 +211,9 @@ public abstract class Mod {
         public void resetSettings() {
                 for (Setting st : settings) {
                         st.set(st.def);
+                        if (st.isText()) {
+                                st.setText(null);
+                        }
                 }
         }
 

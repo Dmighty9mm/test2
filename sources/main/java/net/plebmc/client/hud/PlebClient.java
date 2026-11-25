@@ -132,6 +132,21 @@ public final class PlebClient {
 			net.plebmc.client.cosmetics.Cosmetics.loadSeen(STORE.get(QUESTS_SEEN_KEY));
 			net.plebmc.client.cosmetics.Cosmetics.loadLook(STORE.get(LOOK_KEY));
 			savedLook = net.plebmc.client.cosmetics.Cosmetics.lookVersion();
+			// the shop's catalog and textures, saved in the browser's file system (IndexedDB)
+			net.plebmc.client.cosmetics.Cosmetics.setCache(new net.plebmc.client.cosmetics.Cosmetics.Cache() {
+				@Override
+				public byte[] get(String key) {
+					net.lax1dude.eaglercraft.v1_8.internal.vfs2.VFile2 f = new net.lax1dude.eaglercraft.v1_8.internal.vfs2.VFile2(
+							"plebmc_shop", key.replace('/', '_'));
+					return f.exists() ? f.getAllBytes() : null;
+				}
+
+				@Override
+				public void put(String key, byte[] value) {
+					new net.lax1dude.eaglercraft.v1_8.internal.vfs2.VFile2("plebmc_shop", key.replace('/', '_'))
+							.setAllBytes(value);
+				}
+			});
 		} catch (Throwable t) {
 			LOG.warn("mod/Apollo init failed: " + t);
 		}
@@ -203,6 +218,35 @@ public final class PlebClient {
 			STORE.set(QUESTS_SEEN_KEY, net.plebmc.client.cosmetics.Cosmetics.seenJson());
 		} catch (Throwable t) {
 			LOG.warn("could not save seen quests: " + t);
+		}
+	}
+
+	/** Copies every setting (not the login) to the clipboard; false if that failed. */
+	public static boolean exportSettings() {
+		try {
+			saveSettings();
+			net.minecraft.client.gui.GuiScreen.setClipboardString(net.plebmc.client.mods.SettingsTransfer.export(STORE));
+			return true;
+		} catch (Throwable t) {
+			LOG.warn("could not export settings: " + t);
+			return false;
+		}
+	}
+
+	/** Loads an export from the clipboard: the number of parts loaded, or -1 if it isn't one. */
+	public static int importSettings() {
+		try {
+			int n = net.plebmc.client.mods.SettingsTransfer.importInto(STORE,
+					net.minecraft.client.gui.GuiScreen.getClipboardString());
+			if (n > 0) {
+				mods.load(STORE);
+				net.plebmc.client.mods.FpsLarp.INSTANCE.load(STORE);
+				ClientPrefs.get().load(STORE);
+			}
+			return n;
+		} catch (Throwable t) {
+			LOG.warn("could not import settings: " + t);
+			return -1;
 		}
 	}
 
@@ -397,10 +441,14 @@ public final class PlebClient {
 	// ==================== HUD ====================
 
 	/** GuiIngame.renderGameOverlay end: Apollo overlays then HUD mods. */
+	/** The partial tick of the frame being drawn (HUD mods read the camera with it). */
+	static float framePartialTicks = 1f;
+
 	public static void renderHud(ScaledResolution res, float partialTicks) {
 		if (mc == null) {
 			return;
 		}
+		framePartialTicks = partialTicks;
 		int guiW = res.getScaledWidth();
 		int guiH = res.getScaledHeight();
 		try {

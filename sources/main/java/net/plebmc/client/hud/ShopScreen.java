@@ -20,6 +20,9 @@ import net.plebmc.client.cosmetics.Cosmetics;
  */
 public final class ShopScreen extends PlebScreen {
 
+	/** Where the collection tabs start, so the header's subtitle stops before them. */
+	private int tabsLeft = Integer.MAX_VALUE / 2;
+
 	private String category = Cosmetics.HAT;
 	private String collection = Cosmetics.collections().isEmpty() ? Cosmetics.MAIN : Cosmetics.collections().get(0).id;
 	private int page;
@@ -42,7 +45,39 @@ public final class ShopScreen extends PlebScreen {
 	}
 
 	private List<Cosmetics.Item> items() {
-		return Cosmetics.catalog(category, collection);
+		return items(category);
+	}
+
+	/** The "Owned" tab: everything you own in a category, from every collection. */
+	private static final String OWNED = "_owned";
+
+	private List<Cosmetics.Item> items(String cat) {
+		if (OWNED.equals(collection)) {
+			List<Cosmetics.Item> out = new java.util.ArrayList<>();
+			for (Cosmetics.Item it : Cosmetics.catalog(cat)) {
+				if (Cosmetics.owns(it.id)) {
+					out.add(it);
+				}
+			}
+			return out;
+		}
+		return Cosmetics.catalog(cat, collection);
+	}
+
+	/** The shop's collections plus an "Owned" tab, so anything you own can be worn from here. */
+	private static List<Cosmetics.Collection> tabs() {
+		List<Cosmetics.Collection> out = new java.util.ArrayList<>(Cosmetics.collections());
+		out.add(new Cosmetics.Collection(OWNED, "Owned", "check", 0xFF5BD98A, "Everything you own, from every collection"));
+		return out;
+	}
+
+	private static boolean hasTab(String id) {
+		for (Cosmetics.Collection c : tabs()) {
+			if (c.id.equals(id)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static String categoryName(String c) {
@@ -69,15 +104,18 @@ public final class ShopScreen extends PlebScreen {
 		gh = wy + wh - 8 - 44 - gy;
 
 		// collections (PlebMc, Partners, ...) as a switch in the header
-		if (Cosmetics.collection(collection) == null && !Cosmetics.collections().isEmpty()) {
-			collection = Cosmetics.collections().get(0).id;
+		if (!hasTab(collection)) {
+			collection = tabs().get(0).id;
 		}
 		int segW = 0;
-		for (Cosmetics.Collection col : Cosmetics.collections()) {
+		for (Cosmetics.Collection col : tabs()) {
 			segW += Ui.width(col.name) + 13 + 14 + 2;
 		}
-		int sx = wx + ww - 28 - segW;
-		for (Cosmetics.Collection col : Cosmetics.collections()) {
+		// left of the coin balance and the close button, so they never overlap
+		int coinW = coinChipWidth();
+		int sx = wx + ww - 30 - (coinW > 0 ? coinW + 6 : 0) - segW;
+		tabsLeft = sx;
+		for (Cosmetics.Collection col : tabs()) {
 			int w = Ui.width(col.name) + 13 + 14;
 			Tab t = tab(col.name, Ui.hasIcon(col.icon) ? col.icon : "shop", col.color, sx, wy + 11, w, 16,
 					() -> collection.equals(col.id), () -> {
@@ -95,7 +133,7 @@ public final class ShopScreen extends PlebScreen {
 		// category tabs (every category the shop knows)
 		int tx = gx;
 		for (String c : Cosmetics.CATEGORIES) {
-			List<Cosmetics.Item> all = Cosmetics.catalog(c, collection);
+			List<Cosmetics.Item> all = items(c);
 			int owned = 0;
 			for (Cosmetics.Item it : all) {
 				if (Cosmetics.owns(it.id)) {
@@ -276,12 +314,22 @@ public final class ShopScreen extends PlebScreen {
 		}
 	}
 
+	/** What the offline preview wears: the item being tried on, else the equipped one, else the last worn. */
+	private static Cosmetics.Item offlineWorn(String category) {
+		String id = Cosmetics.previewId(category);
+		if (id == null) {
+			id = Cosmetics.equippedId(category);
+		}
+		Cosmetics.Item it = id == null ? null : Cosmetics.item(id);
+		return it != null ? it : Cosmetics.lastWorn(category);
+	}
+
 	// ==================== drawing ====================
 
 	@Override
 	protected void drawContent(int mx, int my, float pt) {
 		Ui.window(wx, wy, ww, wh);
-		header(wx, wy, ww, "shop", "Shop", "Cosmetics everyone on PlebMc can see", true);
+		header(wx, wy, ww, "shop", "Shop", Ui.fit("Cosmetics everyone on PlebMc can see", Math.max(0, tabsLeft - wx - 40)), true);
 
 		// preview
 		Ui.card(pvx, pvy, pvw, pvh, 0xFF0B0F13, Ui.BORDER_SOFT);
@@ -292,24 +340,9 @@ public final class ShopScreen extends PlebScreen {
 			int scale = Math.max(20, Math.min(60, (pvh - 52) * 10 / 21));
 			drawModel(pvx + pvw / 2, pvy + pvh - 24, scale, yaw, this.mc.thePlayer);
 		} else {
-			Cosmetics.Item show = Cosmetics.item(selectedId);
-			if (show == null && Cosmetics.HAT.equals(category) && !items().isEmpty()) {
-				show = items().get(0);
-			}
-			if (show != null && Cosmetics.HAT.equals(show.category)) {
-				// no player out here: the hat on its own, big
-				float big = Math.max(3f, Math.min(5.5f, pvw / 22f));
-				CosmeticLayer.thumb(show, pvx + pvw / 2f, pvy + pvh / 2f, big, yaw + 60f + (System.currentTimeMillis() % 12000L) / 33.3f,
-						System.currentTimeMillis() / 50f);
-				Ui.centered(Ui.fit(show.name, pvw - 8), pvx + pvw / 2, pvy + pvh - 30, Ui.MUTED);
-			} else if (show != null && Cosmetics.CLOAK.equals(show.category)) {
-				int cw2 = Math.min(pvw - 30, 50), ch2 = cw2 * 8 / 5;
-				Ui.rect(pvx + pvw / 2 - cw2 / 2 - 1, pvy + pvh / 2 - ch2 / 2 - 1, cw2 + 2, ch2 + 2, 0xFF000000);
-				CloakLayer.thumb(show, pvx + pvw / 2 - cw2 / 2, pvy + pvh / 2 - ch2 / 2, cw2, ch2);
-			} else {
-				Ui.centered("Join a world to", pvx + pvw / 2, pvy + pvh / 2 - 6, Ui.FAINT);
-				Ui.centered("see yourself here", pvx + pvw / 2, pvy + pvh / 2 + 4, Ui.FAINT);
-			}
+			// not in a world: your own skin, wearing what you're trying on
+			int scale = Math.max(20, Math.min(60, (pvh - 52) * 10 / 21));
+			TitleMenu.drawSkinModel(pvx + pvw / 2f, pvy + pvh - 24, scale, yaw, offlineWorn(Cosmetics.CLOAK), offlineWorn(Cosmetics.HAT));
 		}
 		Ui.icon("drag", pvx + 6, pvy + pvh - 14, 1, Ui.FAINT);
 		Ui.text("Drag to spin", pvx + 18, pvy + pvh - 13, Ui.FAINT);

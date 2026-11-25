@@ -298,6 +298,7 @@ public final class TitleMenu {
 	private static net.minecraft.client.model.ModelPlayer steve, alex;
 	private static int showX, showY, showW, showH;
 	private static float showHover;
+	private static float storeX, storeY, storeW, storeH;
 
 	private static void showcase(int x0, int w, int h, int mx, int my, float t, int acc, float in) {
 		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
@@ -313,9 +314,13 @@ public final class TitleMenu {
 		// the pill under the player is part of the button too
 		int pillW = font.getStringWidth("Store") + 26, pillH = 16;
 		float pillX = cx - pillW / 2f, pillY = foot + 20;
-		boolean over = pending == null && mx >= sideWidth(w)
-				&& ((mx >= showX && mx < showX + showW && my >= showY && my < showY + showH)
-						|| (mx >= pillX && mx < pillX + pillW && my >= pillY && my < pillY + pillH));
+		// only the Store button is a button; the player just watches the mouse
+		storeX = pillX;
+		storeY = pillY;
+		storeW = pillW;
+		storeH = pillH;
+		boolean over = pending == null && mx >= sideWidth(w) && mx >= pillX && mx < pillX + pillW && my >= pillY
+				&& my < pillY + pillH;
 		showHover = approach(showHover, over ? 1f : 0f, 10f);
 		float hv = ease(showHover);
 		int a = Math.round(255 * in);
@@ -330,8 +335,10 @@ public final class TitleMenu {
 		float look = Math.max(-1f, Math.min(1f, (cx - mx) / Math.max(1f, w * 0.5f)));
 		float lookY = Math.max(-1f, Math.min(1f, (headY - my) / Math.max(1f, h * 0.5f)));
 		float sway = animations() ? (float) Math.sin(t * 0.6f) * 14f : 0f;
-		float bodyYaw = sway - look * 25f + hv * 8f * (float) Math.sin(t * 2f);
-		drawPlayer(cx, foot - (1f + hv) * 1.5f, scale, bodyYaw, -look * 35f, -lookY * 20f, t, in);
+		float bodyYaw = sway + look * 25f + hv * 8f * (float) Math.sin(t * 2f);
+		drawPlayer(cx, foot - (1f + hv) * 1.5f, scale, bodyYaw, look * 35f, -lookY * 20f, t, in,
+				net.plebmc.client.cosmetics.Cosmetics.lastWorn(net.plebmc.client.cosmetics.Cosmetics.CLOAK),
+				net.plebmc.client.cosmetics.Cosmetics.lastWorn(net.plebmc.client.cosmetics.Cosmetics.HAT), -8f);
 
 		// name, then the store pill
 		String name = TitleActions.username();
@@ -352,8 +359,17 @@ public final class TitleMenu {
 	}
 
 	/** Draws the player model in the GUI: feet at (x, foot), {@code scale} GUI pixels per block. */
+	/**
+	 * The player's own skin wearing the given cloak and hat, for previews that work
+	 * without a world (the shop on the main menu).
+	 */
+	public static void drawSkinModel(float x, float foot, float scale, float yaw, net.plebmc.client.cosmetics.Cosmetics.Item cloak,
+			net.plebmc.client.cosmetics.Cosmetics.Item hat) {
+		drawPlayer(x, foot, scale, yaw, 0f, 0f, System.currentTimeMillis() / 1000f, 1f, cloak, hat, 0f);
+	}
+
 	private static void drawPlayer(float x, float foot, float scale, float bodyYaw, float headYaw, float headPitch, float t,
-			float in) {
+			float in, net.plebmc.client.cosmetics.Cosmetics.Item cloak, net.plebmc.client.cosmetics.Cosmetics.Item hat, float tilt) {
 		Minecraft mc = Minecraft.getMinecraft();
 		boolean slim = TitleActions.slim();
 		if (steve == null) {
@@ -382,7 +398,7 @@ public final class TitleMenu {
 			GlStateManager.scale(1f, -1f, 1f);
 			net.minecraft.client.renderer.RenderHelper.enableGUIStandardItemLighting();
 			GlStateManager.translate(0f, 1f, 0f);
-			GlStateManager.rotate(-8f, 1f, 0f, 0f);
+			GlStateManager.rotate(tilt, 1f, 0f, 0f);
 			GlStateManager.rotate(bodyYaw, 0f, 1f, 0f);
 			GlStateManager.translate(0f, -1f, 0f);
 			float age = t * 20f;
@@ -403,9 +419,6 @@ public final class TitleMenu {
 			m.bipedLeftArmwear.render(sc);
 			m.bipedRightLegwear.render(sc);
 			m.bipedLeftLegwear.render(sc);
-			// the cloak and hat they last wore on PlebMc
-			net.plebmc.client.cosmetics.Cosmetics.Item cloak = net.plebmc.client.cosmetics.Cosmetics
-					.lastWorn(net.plebmc.client.cosmetics.Cosmetics.CLOAK);
 			if (cloak != null) {
 				mc.getTextureManager().bindTexture(CloakLayer.texture(cloak));
 				GlStateManager.pushMatrix();
@@ -415,8 +428,6 @@ public final class TitleMenu {
 				m.renderCape(sc);
 				GlStateManager.popMatrix();
 			}
-			net.plebmc.client.cosmetics.Cosmetics.Item hat = net.plebmc.client.cosmetics.Cosmetics
-					.lastWorn(net.plebmc.client.cosmetics.Cosmetics.HAT);
 			if (hat != null) {
 				GlStateManager.pushMatrix();
 				m.bipedHead.postRender(sc);
@@ -619,7 +630,20 @@ public final class TitleMenu {
 			// Lucky
 			"Lucky isn't even that lucky", "Lucky rage quit. Again.", "Lucky's luck ran out in 2019",
 			"Lucky said \"one more game\"", "Lucky lost to a chicken", "Lucky blamed lag. It wasn't lag.",
-			"Lucky still owes Mighty coins", "Lucky thinks I'm cute. Correct." };
+			"Lucky still owes Mighty coins", "Lucky thinks I'm cute. Correct.", "Lucky's CPS: 3 on a good day",
+			"Lucky tried to bridge. RIP.", "Lucky asked me for PvP tips",
+			// more Mighty
+			"Mighty fixes one bug, adds three", "Mighty's code runs on vibes", "Mighty AFK'd in a lava pool",
+			"Mighty named me. No regrets.",
+			// ArchMc
+			"ArchMc? Never heard of it.", "ArchMc called. Nobody answered.", "ArchMc's TPS is a rumor",
+			"ArchMc players come here to cry", "ArchMc is just PlebMc at home", "Even ArchMc's lobby is lagging",
+			// Zentic, better known as Zenshit
+			"Zentic? You mean Zenshit?", "Zenshit has 3 players. 2 are bots.", "Zenshit's anticheat is a sign",
+			"Zenshit: zen for zero players", "I'd rather blow up than play Zenshit", "Zenshit pays me to stay quiet",
+			// random
+			"Hold still, I'm about to explode", "I am 90% TNT, 10% vibes", "Have you touched grass today?",
+			"Your skin looks clean. Suspicious.", "Bedrock players can't see me", "Left click me. Go on." };
 	private static int buddyLine = -1;
 	private static long buddyLineAt;
 	private static float buddyBubble;
@@ -897,11 +921,7 @@ public final class TitleMenu {
 			start("wardrobe", mx, my);
 			return true;
 		}
-		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
-		int pillW = font.getStringWidth("Store") + 26;
-		boolean onPill = my >= showY + showH && my < showY + showH + 40
-				&& Math.abs(mx - (showX + showW / 2f)) < pillW / 2f;
-		if ((mx >= showX && mx < showX + showW && my >= showY && my < showY + showH) || onPill) {
+		if (storeW > 0 && mx >= storeX && mx < storeX + storeW && my >= storeY && my < storeY + storeH) {
 			sound();
 			ripple(mx, my);
 			TitleActions.openLink(STORE_URL);

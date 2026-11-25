@@ -52,6 +52,10 @@ public final class SettingsScreen extends PlebScreen {
 		return ((v % n) + n) % n;
 	}
 
+	private static String transferMsg;
+	private static long transferAt;
+	private static boolean transferExport;
+
 	@Override
 	protected void build() {
 		ww = Math.min(this.width - 16, 440);
@@ -82,6 +86,24 @@ public final class SettingsScreen extends PlebScreen {
 			rebuild();
 		});
 		reset.style(Style.DANGER).icon("reset").tip = "Puts every setting on this screen back to default (not your mods or HUD)";
+
+		// every PlebClient setting as one line of text (never your login)
+		boolean fresh = System.currentTimeMillis() - transferAt < 3500;
+		Button exp = button(fresh && transferMsg != null && transferExport ? transferMsg : "Export all", rx, wy + wh - 26 - 40, rw, 16, () -> {
+			transferExport = true;
+			transferMsg = PlebClient.exportSettings() ? "Copied!" : "Couldn't copy";
+			transferAt = System.currentTimeMillis();
+			rebuild();
+		});
+		exp.icon("next").tip = "Copies your mods, HUD layout and settings to the clipboard (not your login)";
+		Button imp = button(fresh && transferMsg != null && !transferExport ? transferMsg : "Import all", rx, wy + wh - 26 - 20, rw, 16, () -> {
+			transferExport = false;
+			int n = PlebClient.importSettings();
+			transferMsg = n < 0 ? "Not a PlebClient export" : "Imported!";
+			transferAt = System.currentTimeMillis();
+			rebuild();
+		});
+		imp.icon("back").tip = "Copy an export, then click to load it (replaces your mods, HUD layout and settings)";
 
 		lx = rx + rw + 10;
 		lw = wx + ww - 12 - lx;

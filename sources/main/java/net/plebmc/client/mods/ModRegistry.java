@@ -83,6 +83,10 @@ public final class ModRegistry {
                         if (s.get("opts") instanceof Map) {
                                 Map<?, ?> o = (Map<?, ?>) s.get("opts");
                                 for (Mod.Setting st : m.settings()) {
+                                        if (st.isText()) {
+                                                st.setText(o.get(st.key) instanceof String ? (String) o.get(st.key) : null);
+                                                continue;
+                                        }
                                         double v = ProtoValues.asNumber(o.get(st.key), st.def);
                                         st.set(Double.isNaN(v) ? st.def : (int) v);
                                 }
@@ -102,7 +106,7 @@ public final class ModRegistry {
                         if (!m.settings().isEmpty()) {
                                 Map<String, Object> o = new LinkedHashMap<>();
                                 for (Mod.Setting st : m.settings()) {
-                                        o.put(st.key, (double) st.get());
+                                        o.put(st.key, st.isText() ? (Object) st.text() : (Object) (double) st.get());
                                 }
                                 s.put("opts", o);
                         }

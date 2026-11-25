@@ -177,6 +177,24 @@ public class ClientModsTest {
                 HudBox coords = reg.coordinates.layout(v, M);
                 check(coords.texts.get(0).text.equals("X: -12.3") && coords.texts.get(2).text.equals("Z: 1000.1")
                                 && coords.texts.get(3).text.equals("Facing: North (-Z)"), "coordinates + facing");
+                reg.coordinates.setting("compact").set(1);
+                reg.coordinates.setting("label_x").setText("x ");
+                HudBox one = reg.coordinates.layout(v, M);
+                check(one.texts.size() == 1 && one.texts.get(0).text.startsWith("x -12.3") && one.texts.get(0).text.contains("Facing: North"),
+                                "one line keeps facing on it, with a custom label");
+                String saved = reg.serialize();
+                reg.coordinates.resetSettings();
+                check(reg.coordinates.setting("label_x").text().equals("X: "), "label resets to default");
+                MapStore ms = new MapStore();
+                ms.set(ModRegistry.STORE_KEY, saved);
+                reg.load(ms);
+                check(reg.coordinates.setting("label_x").text().equals("x "), "custom label saved and loaded");
+                String ex = net.plebmc.client.mods.SettingsTransfer.export(ms);
+                MapStore other = new MapStore();
+                check(net.plebmc.client.mods.SettingsTransfer.importInto(other, ex) == 1 && other.get(ModRegistry.STORE_KEY) != null,
+                                "settings export imports into another client");
+                check(net.plebmc.client.mods.SettingsTransfer.importInto(other, "hello") == -1, "random text is not an import");
+                reg.coordinates.resetSettings();
                 check(Mods.Coordinates.facing(0).startsWith("South") && Mods.Coordinates.facing(90).startsWith("West")
                                 && Mods.Coordinates.facing(-90).startsWith("East") && Mods.Coordinates.facing(44).startsWith("South"),
                                 "vanilla compass directions");
@@ -187,7 +205,9 @@ public class ClientModsTest {
                 HudBox keys = reg.keystrokes.layout(v, M);
                 check(keys.rects.get(0).argb == HudBox.BG_PRESSED && keys.rects.get(1).argb == HudBox.BG,
                                 "keystrokes: W pressed, A not");
-                check(keys.texts.get(4).text.equals("LMB 9") && keys.texts.get(4).argb == HudBox.TEXT_PRESSED, "LMB cell shows CPS");
+                check(keys.texts.get(4).text.equals("LMB") && keys.texts.get(5).text.equals("9")
+                                && keys.texts.get(5).argb == HudBox.TEXT_PRESSED && keys.texts.get(5).y > keys.texts.get(4).y,
+                                "LMB label above its CPS");
                 check(reg.armor.layout(v, M) == null && reg.armor.preview(v, M) != null,
                                 "armor hides with no armor but previews in the editor");
                 check(reg.armor.preview(v, M).items.size() == 5 && reg.armor.preview(v, M).items.get(0).id.equals("diamond_helmet"),
@@ -387,5 +407,19 @@ public class ClientModsTest {
 
                 System.out.println("ClientModsTest: " + checks + " checks, failures=" + failures);
                 System.exit(failures > 0 ? 1 : 0);
+        }
+
+        static final class MapStore implements SettingsStore {
+                final Map<String, String> m = new HashMap<>();
+
+                @Override
+                public String get(String key) {
+                        return m.get(key);
+                }
+
+                @Override
+                public void set(String key, String value) {
+                        m.put(key, value);
+                }
         }
 }

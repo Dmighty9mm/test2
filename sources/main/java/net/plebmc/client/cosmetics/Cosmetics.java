@@ -249,10 +249,96 @@ public final class Cosmetics {
 		});
 	}
 
+	// ==================== offline copy of the shop ====================
+
+	/** Somewhere to keep the PlebioAPI catalog and its textures between sessions. */
+	public interface Cache {
+		byte[] get(String key);
+
+		void put(String key, byte[] value);
+	}
+
+	private static Cache cache;
+	private static List<Item> cachedCatalog;
+	private static List<Collection> cachedCollections;
+
+	/**
+	 * Sets the store for the offline shop and loads the last PlebioAPI
+	 * catalog from it, so the shop shows every hat and cloak even before
+	 * (or without) joining the server.
+	 */
+	public static void setCache(Cache c) {
+		cache = c;
+		try {
+			byte[] b = c == null ? null : c.get("catalog");
+			Object o = b == null ? null : Json.parse(new String(b, StandardCharsets.UTF_8));
+			if (o instanceof Map) {
+				List<Collection> cs = readCollections(((Map<?, ?>) o).get("collections"));
+				List<Item> items = readCatalog(((Map<?, ?>) o).get("catalog"));
+				if (items != null && !items.isEmpty()) {
+					cachedCatalog = items;
+					cachedCollections = cs != null ? cs : DEFAULT_COLLECTIONS;
+					if (!serverCatalog) {
+						catalog = cachedCatalog;
+						collections = cachedCollections;
+						version++;
+					}
+				}
+			}
+		} catch (Throwable t) {
+			warn("could not load the saved shop: " + t);
+		}
+	}
+
+	/** True when the shop shows a saved copy of the server's catalog (not connected to it). */
+	public static boolean offlineCatalog() {
+		return !serverCatalog && cachedCatalog != null;
+	}
+
+	private static void cachePut(String key, byte[] value) {
+		if (cache != null) {
+			try {
+				cache.put(key, value);
+			} catch (Throwable t) {
+				warn("could not save " + key + ": " + t);
+			}
+		}
+	}
+
+	private static List<Collection> readCollections(Object v) {
+		if (!(v instanceof List)) {
+			return null;
+		}
+		List<Collection> cs = new ArrayList<>();
+		for (Object e : (List<?>) v) {
+			if (e instanceof Map && ((Map<?, ?>) e).get("id") instanceof String) {
+				Map<?, ?> c = (Map<?, ?>) e;
+				String cid = ((String) c.get("id")).toLowerCase();
+				cs.add(new Collection(cid, str(c.get("name"), cid), str(c.get("icon"), "shop"),
+						parseColor(str(c.get("color"), "")), str(c.get("description"), "")));
+			}
+		}
+		return cs.isEmpty() ? null : Collections.unmodifiableList(cs);
+	}
+
+	private static List<Item> readCatalog(Object v) {
+		if (!(v instanceof List)) {
+			return null;
+		}
+		List<Item> items = new ArrayList<>();
+		for (Object e : (List<?>) v) {
+			Item it = readItem(e);
+			if (it != null) {
+				items.add(it);
+			}
+		}
+		return Collections.unmodifiableList(items);
+	}
+
 	/** Forget everything from the last server (disconnect or server switch). */
 	public static void reset() {
-		catalog = DEFAULT_CATALOG;
-		collections = DEFAULT_COLLECTIONS;
+		catalog = cachedCatalog != null ? cachedCatalog : DEFAULT_CATALOG;
+		collections = cachedCollections != null ? cachedCollections : DEFAULT_COLLECTIONS;
 		serverCatalog = false;
 		coins = -1;
 		currency = "PlebMc Coins";
@@ -288,6 +374,18 @@ public final class Cosmetics {
 			return null;
 		}
 		byte[] b = textures.get(id);
+		if (b == null && cache != null && !requested.contains(id)) {
+			// saved from an earlier session (the id is a content hash, so it can't be stale)
+			try {
+				b = cache.get("tex/" + id);
+			} catch (Throwable t) {
+				b = null;
+			}
+			if (b != null) {
+				putTexture(id, b);
+				return b;
+			}
+		}
 		if (b == null && !requested.contains(id) && send(obj("type", "texture", "id", id))) {
 			requested.add(id);
 		}
@@ -384,6 +482,11 @@ public final class Cosmetics {
 			warn("bad cloak texture " + id);
 			return;
 		}
+		putTexture(id, png);
+		cachePut("tex/" + id, png);
+	}
+
+	private static void putTexture(String id, byte[] png) {
 		if (textures.size() >= MAX_TEXTURES) {
 			textures.remove(textures.keySet().iterator().next());
 		}
@@ -463,30 +566,23 @@ public final class Cosmetics {
 			if (m.containsKey("loginStreak")) {
 				loginStreak = (int) Math.max(0, num(m.get("loginStreak"), 0));
 			}
-			if (m.get("collections") instanceof List) {
-				List<Collection> cs = new ArrayList<>();
-				for (Object e : (List<?>) m.get("collections")) {
-					if (e instanceof Map && ((Map<?, ?>) e).get("id") instanceof String) {
-						Map<?, ?> c = (Map<?, ?>) e;
-						String cid = ((String) c.get("id")).toLowerCase();
-						cs.add(new Collection(cid, str(c.get("name"), cid), str(c.get("icon"), "shop"),
-								parseColor(str(c.get("color"), "")), str(c.get("description"), "")));
-					}
-				}
-				if (!cs.isEmpty()) {
-					collections = Collections.unmodifiableList(cs);
-				}
+			List<Collection> cs = readCollections(m.get("collections"));
+			if (cs != null) {
+				collections = cs;
 			}
-			if (m.get("catalog") instanceof List) {
-				List<Item> items = new ArrayList<>();
-				for (Object e : (List<?>) m.get("catalog")) {
-					Item it = readItem(e);
-					if (it != null) {
-						items.add(it);
-					}
-				}
-				catalog = Collections.unmodifiableList(items);
+			List<Item> items = readCatalog(m.get("catalog"));
+			if (items != null) {
+				catalog = items;
 				serverCatalog = true;
+				// keep a copy, so the shop works offline next time
+				cachedCatalog = items;
+				cachedCollections = collections;
+				Map<String, Object> saved = new LinkedHashMap<>();
+				saved.put("catalog", m.get("catalog"));
+				if (m.get("collections") instanceof List) {
+					saved.put("collections", m.get("collections"));
+				}
+				cachePut("catalog", Json.write(saved).getBytes(StandardCharsets.UTF_8));
 			}
 			rememberLook();
 		} else if ("players".equals(type)) {
