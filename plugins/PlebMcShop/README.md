@@ -112,6 +112,44 @@ Passwords never go through the game, and the API key never leaves the proxy.
 | `/plebshop give <player> <item>` / `remove` | Give or take an item for free |
 | `/plebshop equip <player> <hat\|trail\|cloak> <item\|none>` | Put something on a player |
 
+## Staff lock (cracked servers): do this first
+
+On an offline-mode (cracked) server the proxy can't check who someone is. Your UUID is made
+from your name, so anyone who types an Owner's name gets that Owner's UUID, which means
+their LuckPerms rank, their BungeeCord permissions, their plebmc.top link and the admin menu.
+The staff lock closes that: protected names need a password at login.
+
+1. In `plugins/EaglercraftXBungee/authservice.yml` on the proxy set
+   ```yaml
+   enable_authentication_system: true
+   use_onboard_eaglerx_system: false
+   ```
+   (PlebioAPI answers the auth hooks: everyone else still joins with no password, only
+   protected names get the password screen. Don't run another Eaglercraft auth plugin with it.)
+2. Put the new `PlebioAPI.jar` in `plugins/` and restart the proxy.
+3. In the **proxy console** (not in game), protect every staff name:
+   ```
+   plebshop staff set <YourName> <password>
+   plebshop staff list
+   ```
+   `plebshop staff remove <name>` unprotects one, `plebshop staff add <name>` locks one
+   until it has a password. Passwords are at least 8 characters and saved salted and hashed
+   in `plugins/PlebioAPI/staff-lock.yml`.
+4. Join as that name: the client shows a password screen. Type the password; Eaglercraft
+   can remember it for that server.
+
+What it does:
+
+- A protected name only gets in after the right password (checked with Eaglercraft's
+  challenge hash, so the password itself never crosses the network). Names compare ignoring
+  case, so `owner` can't get around `Owner`. 5 wrong passwords from one address lock it out
+  for 10 minutes. Without the password the proxy refuses the login before any server sees it.
+- Java players (Forge, vanilla) can't use a protected name unless the proxy is in online mode.
+- The admin menu and in-game `/plebshop` also need a name that gave its password at this
+  login. If a website Owner/staff name or a `plebshop.admin` player shows up unprotected,
+  that name is locked on the spot (logged in the console) until you set its password.
+- Turn it off with `staff-lock.enabled: false` (not recommended on a cracked server).
+
 ## Admin menu in the client
 
 Players logged in on the website (see above) whose website group is in `admin-menu.groups`

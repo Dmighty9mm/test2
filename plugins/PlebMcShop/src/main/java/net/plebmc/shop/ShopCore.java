@@ -58,6 +58,19 @@ final class ShopCore {
 		default boolean kick(UUID player, String reason) {
 			return false;
 		}
+
+		/**
+		 * The player proved they own their name at this login (staff password,
+		 * see StaffLock), or the staff lock is off. On a cracked server a name
+		 * proves nothing, so admin powers need this too.
+		 */
+		default boolean staffVerified(UUID player) {
+			return true;
+		}
+
+		/** A player with staff powers but no password: lock their name until one is set. */
+		default void protectStaff(UUID player) {
+		}
 	}
 
 	/** Re-reads config.yml (set by the proxy plugin; the admin menu's Reload uses it). */
@@ -486,6 +499,9 @@ final class ShopCore {
 			m.put("displayName", a.displayName);
 			m.put("groups", a.groups);
 			m.put("staff", a.staff);
+			if (a.staff && config.bool("staff-lock.protect-website-staff", true) && !net.staffVerified(p)) {
+				net.protectStaff(p);
+			}
 		}
 		m.put("admin", isAdmin(p));
 		m.put("site", website.url);
@@ -623,6 +639,20 @@ final class ShopCore {
 	 * every admin message, so a client can't just claim it.
 	 */
 	synchronized boolean isAdmin(UUID p) {
+		if (!adminGroup(p)) {
+			return false;
+		}
+		if (!net.staffVerified(p)) {
+			// right website group but the name wasn't password-checked: on a cracked
+			// server that could be anyone typing the Owner's name
+			net.protectStaff(p);
+			return false;
+		}
+		return true;
+	}
+
+	/** Logged in on the website with a group from admin-menu.groups (says nothing about who typed the name). */
+	private boolean adminGroup(UUID p) {
 		if (!config.bool("admin-menu.enabled", true)) {
 			return false;
 		}
@@ -650,7 +680,9 @@ final class ShopCore {
 			r.put("type", "admin");
 			r.put("allowed", false);
 			r.put("ok", false);
-			r.put("message", "Only website Owners can use the admin menu.");
+			r.put("message", adminGroup(p)
+					? "Your name has no staff password yet. Set one in the proxy console (plebshop staff set <name> <password>), then rejoin."
+					: "Only website Owners can use the admin menu.");
 			send(p, r);
 			return;
 		}

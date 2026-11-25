@@ -21,7 +21,9 @@ import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.connection.Server;
+import net.md_5.bungee.api.connection.PendingConnection;
 import net.md_5.bungee.api.event.ChatEvent;
+import net.md_5.bungee.api.event.LoginEvent;
 import net.md_5.bungee.api.event.PlayerDisconnectEvent;
 import net.md_5.bungee.api.event.PluginMessageEvent;
 import net.md_5.bungee.api.event.ServerSwitchEvent;
@@ -45,6 +47,12 @@ public final class BungeeShop extends Plugin implements Listener {
 	static final String BRIDGE = "PlebMcBridge";
 
 	private ShopCore core;
+	private StaffLock staffLock;
+	private final BungeeNet bnet = new BungeeNet();
+	/** Players who gave their staff password at this login (the only ones who get admin powers). */
+	private final java.util.Set<UUID> staffVerified = ConcurrentHashMap.newKeySet();
+	/** EaglerXBungee is installed and its auth hooks are on (staff can get the password screen). */
+	private boolean eaglerAuth;
 
 	/**
 	 * The plugin used to be called PlebMcShop. On the first start as PlebioAPI,
@@ -90,9 +98,10 @@ public final class BungeeShop extends Plugin implements Listener {
 					}
 				}
 			}
-			core = new ShopCore(new BungeeNet(), new Store(new File(getDataFolder(), "players.yml"), getLogger()),
+			core = new ShopCore(bnet, new Store(new File(getDataFolder(), "players.yml"), getLogger()),
 					Cfg.load(cfg), getLogger());
 			core.folder(getDataFolder());
+			staffLock = new StaffLock(new File(getDataFolder(), "staff-lock.yml"), getLogger());
 			core.reloader = this::reload;
 		} catch (IOException e) {
 			getLogger().severe("Could not load config.yml: " + e);
@@ -101,6 +110,18 @@ public final class BungeeShop extends Plugin implements Listener {
 		getProxy().registerChannel(CHANNEL);
 		getProxy().getPluginManager().registerListener(this, this);
 		getProxy().getPluginManager().registerCommand(this, new AdminCommand());
+		eaglerAuth = registerEaglerAuth();
+		getProxy().getScheduler().schedule(this, staffLock::cleanup, 1, 1, TimeUnit.MINUTES);
+		if (staffLockOn()) {
+			int n = staffLock.all().size();
+			getLogger().info("Staff lock: " + n + " protected name" + (n == 1 ? "" : "s")
+					+ (eaglerAuth ? "" : " (Eaglercraft password screen OFF: protected names can't join until you turn on"
+							+ " EaglerXBungee's authservice.yml, see the PlebioAPI README)"));
+			if (n == 0) {
+				getLogger().warning("Staff lock: no protected names yet. On a cracked server anyone can join as your Owner."
+						+ " In this console run: plebshop staff set <name> <password>");
+			}
+		}
 		getProxy().getScheduler().schedule(this, core::minute, 1, 1, TimeUnit.MINUTES);
 		getProxy().getScheduler().schedule(this, core::saveIfDirty, 30, 30, TimeUnit.SECONDS);
 		getLogger().info(core.catalog.all().size() + " cosmetics, " + core.quests.allQuests().size() + " quests in "
@@ -121,6 +142,92 @@ public final class BungeeShop extends Plugin implements Listener {
 		} catch (IOException e) {
 			getLogger().severe("Could not reload config.yml: " + e);
 		}
+	}
+
+	// ==================== staff lock ====================
+
+	private boolean staffLockOn() {
+		return core != null && core.config.bool("staff-lock.enabled", true);
+	}
+
+	/** Hooks EaglerXBungee's password screen if it's installed and its auth system is on. */
+	private boolean registerEaglerAuth() {
+		net.md_5.bungee.api.plugin.Plugin eagler = getProxy().getPluginManager().getPlugin("EaglercraftXBungee");
+		if (eagler == null) {
+			return false;
+		}
+		try {
+			Class.forName("net.lax1dude.eaglercraft.v1_8.plugin.gateway_bungeecord.api.event.EaglercraftIsAuthRequiredEvent");
+			getProxy().getPluginManager().registerListener(this, new EaglerStaffAuth(staffLock, getLogger()));
+		} catch (ClassNotFoundException | LinkageError e) {
+			getLogger().warning("Staff lock: this EaglerXBungee has no auth events (" + e + "), update it");
+			return false;
+		}
+		try {
+			File auth = new File(eagler.getDataFolder(), "authservice.yml");
+			Cfg a = Cfg.load(auth);
+			boolean on = a.bool("enable_authentication_system", false);
+			boolean onboard = a.bool("use_onboard_eaglerx_system", true);
+			if (!on || onboard) {
+				getLogger().warning("Staff lock: in plugins/EaglercraftXBungee/authservice.yml set enable_authentication_system: true"
+						+ " and use_onboard_eaglerx_system: false, then restart, or staff can't log in with a password");
+			}
+			return on && !onboard;
+		} catch (IOException | RuntimeException e) {
+			getLogger().warning("Staff lock: could not read EaglerXBungee's authservice.yml: " + e);
+			return true;
+		}
+	}
+
+	private static String address(PendingConnection c) {
+		java.net.SocketAddress a = c.getSocketAddress();
+		return a instanceof java.net.InetSocketAddress && ((java.net.InetSocketAddress) a).getAddress() != null
+				? ((java.net.InetSocketAddress) a).getAddress().getHostAddress()
+				: null;
+	}
+
+	private static boolean isEagler(PendingConnection c) {
+		for (Class<?> k = c.getClass(); k != null; k = k.getSuperclass()) {
+			if (k.getName().endsWith(".EaglerInitialHandler")) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The last word on protected names: an Eaglercraft player must have just
+	 * given the right password; a Java player must be Mojang-verified (online
+	 * mode). Anyone else typing a staff name is refused before they reach a
+	 * server, so they never get that name's UUID, rank or website link.
+	 */
+	@EventHandler(priority = net.md_5.bungee.event.EventPriority.LOWEST)
+	@SuppressWarnings("deprecation")
+	public void onLogin(LoginEvent e) {
+		PendingConnection c = e.getConnection();
+		String name = c.getName();
+		if (!staffLockOn() || e.isCancelled() || !staffLock.isProtected(name)) {
+			return;
+		}
+		StaffLock.Entry entry = staffLock.get(name);
+		String why = null;
+		if (!entry.hasPassword()) {
+			why = "This staff name is locked until the server owner sets its password.";
+		} else if (isEagler(c)) {
+			if (!staffLock.consumeVerified(name, address(c))) {
+				why = eaglerAuth ? "This is a staff name. Join again and enter its password."
+						: "Staff password login isn't set up on this server yet.";
+			}
+		} else if (!c.isOnlineMode()) {
+			why = "This is a staff name. Join with PlebClient (Eaglercraft) and enter its password.";
+		}
+		if (why != null) {
+			e.setCancelled(true);
+			e.setCancelReason(TextComponent.fromLegacyText("\u00a7c" + why));
+			getLogger().warning("Staff lock: refused " + name + " from " + address(c) + ": " + why);
+			return;
+		}
+		staffVerified.add(c.getUniqueId() != null ? c.getUniqueId() : StaffLock.offlineUuid(entry.name));
 	}
 
 	// ==================== events ====================
@@ -158,6 +265,7 @@ public final class BungeeShop extends Plugin implements Listener {
 	@EventHandler
 	public void onQuit(PlayerDisconnectEvent e) {
 		String server = lastServer.remove(e.getPlayer().getUniqueId());
+		staffVerified.remove(e.getPlayer().getUniqueId());
 		core.quit(e.getPlayer().getUniqueId(), server);
 	}
 
@@ -250,6 +358,20 @@ public final class BungeeShop extends Plugin implements Listener {
 		}
 
 		@Override
+		public boolean staffVerified(UUID player) {
+			return !staffLockOn() || staffVerified.contains(player);
+		}
+
+		@Override
+		public void protectStaff(UUID player) {
+			ProxiedPlayer p = ProxyServer.getInstance().getPlayer(player);
+			if (p != null && staffLockOn() && staffLock.protect(p.getName())) {
+				getLogger().warning("Staff lock: " + p.getName() + " has staff powers but no password, so the name is now locked."
+						+ " Set its password in this console: plebshop staff set " + p.getName() + " <password>");
+			}
+		}
+
+		@Override
 		public long now() {
 			return System.currentTimeMillis();
 		}
@@ -295,6 +417,18 @@ public final class BungeeShop extends Plugin implements Listener {
 		@Override
 		@SuppressWarnings("deprecation")
 		public void execute(CommandSender sender, String[] args) {
+			if (args.length > 0 && "staff".equalsIgnoreCase(args[0])) {
+				staffCommand(sender, args);
+				return;
+			}
+			if (sender instanceof ProxiedPlayer && sender.hasPermission(ShopCore.ADMIN)
+					&& !bnet.staffVerified(((ProxiedPlayer) sender).getUniqueId())) {
+				// BungeeCord permissions go by name, which a cracked player can just type
+				bnet.protectStaff(((ProxiedPlayer) sender).getUniqueId());
+				sender.sendMessage(TextComponent.fromLegacyText("\u00a7cYour name has no staff password yet, so /plebshop is off for it."
+						+ " Set one in the proxy console: plebshop staff set " + sender.getName() + " <password>, then rejoin."));
+				return;
+			}
 			core.command(new ShopCore.Sender() {
 				@Override
 				public void reply(String line) {
@@ -306,6 +440,72 @@ public final class BungeeShop extends Plugin implements Listener {
 					return sender.hasPermission(perm);
 				}
 			}, "plebshop", args, BungeeShop.this::reload);
+		}
+
+		/** /plebshop staff ...: console only, since in-game the name proves nothing. */
+		@SuppressWarnings("deprecation")
+		private void staffCommand(CommandSender sender, String[] a) {
+			java.util.function.Consumer<String> reply = line -> sender.sendMessage(TextComponent.fromLegacyText(line));
+			if (sender instanceof ProxiedPlayer) {
+				reply.accept("\u00a7cStaff passwords can only be changed from the proxy console.");
+				return;
+			}
+			String sub = a.length < 2 ? "help" : a[1].toLowerCase(java.util.Locale.ROOT);
+			switch (sub) {
+			case "set":
+				if (a.length != 4) {
+					reply.accept("Usage: plebshop staff set <name> <password>");
+					return;
+				}
+				String err = staffLock.setPassword(a[2], a[3]);
+				if (err != null) {
+					reply.accept("\u00a7c" + err);
+					return;
+				}
+				reply.accept("\u00a7a" + a[2] + " is protected. Join with PlebClient and type this password at the password screen."
+						+ (eaglerAuth ? "" : " \u00a7eThe password screen is OFF: turn on EaglerXBungee's authservice.yml (see the PlebioAPI README) and restart."));
+				kickUnverified(a[2]);
+				return;
+			case "add":
+				if (a.length != 3) {
+					reply.accept("Usage: plebshop staff add <name>  (locks it until you set a password)");
+					return;
+				}
+				reply.accept(staffLock.protect(a[2]) ? a[2] + " is locked. Set its password: plebshop staff set " + a[2] + " <password>"
+						: a[2] + " was already protected.");
+				kickUnverified(a[2]);
+				return;
+			case "remove":
+				if (a.length != 3) {
+					reply.accept("Usage: plebshop staff remove <name>");
+					return;
+				}
+				reply.accept(staffLock.remove(a[2]) ? a[2] + " is no longer protected: anyone can join with that name again."
+						: a[2] + " wasn't protected.");
+				return;
+			case "list": {
+				List<StaffLock.Entry> all = staffLock.all();
+				reply.accept("Protected names (" + all.size() + "):" + (eaglerAuth ? "" : " \u00a7e[password screen OFF]"));
+				for (StaffLock.Entry e : all) {
+					reply.accept(" - " + e.name + (e.hasPassword() ? "" : " \u00a7c(locked: no password set)"));
+				}
+				return;
+			}
+			default:
+				reply.accept("plebshop staff set <name> <password>  - protect a name with a password (or change it)");
+				reply.accept("plebshop staff add <name>  - lock a name until it has a password");
+				reply.accept("plebshop staff remove <name>  - stop protecting a name");
+				reply.accept("plebshop staff list");
+			}
+		}
+
+		/** Someone on a newly protected name who didn't give its password is kicked. */
+		@SuppressWarnings("deprecation")
+		private void kickUnverified(String name) {
+			ProxiedPlayer p = getProxy().getPlayer(name);
+			if (p != null && !staffVerified.contains(p.getUniqueId())) {
+				p.disconnect(TextComponent.fromLegacyText("\u00a7cThis name is now a protected staff name. Rejoin and enter its password."));
+			}
 		}
 
 		@Override

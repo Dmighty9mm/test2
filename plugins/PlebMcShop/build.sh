@@ -10,7 +10,8 @@ get() { [ -f "lib/$2" ] || curl -sSfL -o "lib/$2" "https://repo1.maven.org/maven
 for a in api chat config event protocol; do get net/md-5/bungeecord-$a/$V bungeecord-$a-$V.jar; done
 get com/google/code/gson/gson/2.8.0 gson-2.8.0.jar
 get org/yaml/snakeyaml/2.2 snakeyaml-2.2.jar
-CP=$(ls lib/bungeecord-*-$V.jar | tr '\n' ':')lib/gson-2.8.0.jar:lib/snakeyaml-2.2.jar
+# EaglerXBungee (in this repo) for the staff password screen; optional at runtime
+CP=$(ls lib/bungeecord-*-$V.jar | tr '\n' ':')lib/gson-2.8.0.jar:lib/snakeyaml-2.2.jar:../../gateway/EaglercraftXBungee/EaglerXBungee-Latest.jar
 rm -rf build/classes && mkdir -p build/classes
 javac --release 8 -Xlint:-options -cp "$CP" -d build/classes $(find src/main/java -name '*.java')
 cp -r src/main/resources/bungee.yml src/main/resources/config.yml src/main/resources/cloaks src/main/resources/hats build/classes/

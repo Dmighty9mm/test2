@@ -105,6 +105,19 @@ admin-menu:
   groups: ['Owner']
   broadcast-title: '&b&lAnnouncement'
 
+# Staff lock: on a cracked (offline-mode) server anyone can type the Owner's name and
+# get the Owner's UUID, rank and website link. Protected names need a password at login
+# (the Eaglercraft password screen). Set them in the proxy console:
+#   plebshop staff set <name> <password>
+# Needs plugins/EaglercraftXBungee/authservice.yml: enable_authentication_system: true
+# and use_onboard_eaglerx_system: false. Java players can't use a protected name
+# unless the proxy is in online mode. The admin menu and in-game /plebshop only work
+# for a name that gave its password at this login.
+staff-lock:
+  enabled: true
+  # names linked to a website staff group get locked automatically (until you set a password)
+  protect-website-staff: true
+
 
 messages:
   website-login-title: '&bplebmc.top'

@@ -28,6 +28,10 @@ public class ShopTest {
         public boolean hasPermission(UUID p, String perm) { P x = online.get(p); return x != null && x.perms.contains(perm); }
         public long now() { return now; }
         public void async(Runnable r) { r.run(); }
+        /** Players who did NOT give a staff password at login (cracked impostors), and names the core asked to lock. */
+        final Set<UUID> unverified = new HashSet<>(); final List<UUID> protectedAsked = new ArrayList<>();
+        public boolean staffVerified(UUID p) { return !unverified.contains(p); }
+        public void protectStaff(UUID p) { protectedAsked.add(p); }
     }
 
     static class P {
@@ -392,6 +396,15 @@ public class ShopTest {
         sleepCooldown();
         core.fromClient(web.id, "{\"type\":\"admin\",\"action\":\"reload\"}");
         check(web.last("admin").get("message").toString().startsWith("Reloaded"), "admin reload");
+        // ---- cracked impostor: same name (so same UUID and website link), but no staff password at login ----
+        net.unverified.add(web.id);
+        sleepCooldown();
+        core.fromClient(web.id, "{\"type\":\"admin\",\"action\":\"coins\",\"op\":\"set\",\"amount\":999999,\"player\":\"" + web.id + "\"}");
+        check(Boolean.FALSE.equals(web.last("admin").get("allowed")) && String.valueOf(web.last("admin").get("message")).contains("staff password"),
+                "unverified Owner name refused: " + web.last("admin"));
+        check(!core.isAdmin(web.id) && net.protectedAsked.contains(web.id), "unverified Owner gets no admin flag and the name gets locked");
+        net.unverified.remove(web.id);
+        check(core.isAdmin(web.id), "verified Owner is admin again");
         check(acc.get("groups").toString().equals("[Owner, Member]") && Boolean.TRUE.equals(acc.get("staff")), "groups by rank: " + acc.get("groups"));
         check(site.lastBody.contains("\"code\":\"ABC123\"") && site.lastBody.contains("\"username\":\"Webby\"") && site.lastBody.contains(Website.identifier(web.id)), "verify body: " + site.lastBody);
         // next join: logged in straight away, with a popup
@@ -477,6 +490,7 @@ public class ShopTest {
 
         System.out.println(checks - failed + "/" + checks + " plugin checks passed");
         int q = QuestsTest.run();
-        System.exit(failed == 0 && q == 0 ? 0 : 1);
+        int sl = StaffLockTest.run(dir, log);
+        System.exit(failed == 0 && q == 0 && sl == 0 ? 0 : 1);
     }
 }
