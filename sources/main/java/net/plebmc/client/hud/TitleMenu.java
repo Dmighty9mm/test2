@@ -311,7 +311,7 @@ public final class TitleMenu {
 		showX = Math.round(cx - showW / 2f);
 		showY = Math.round(foot - tall - 6);
 		// the pill under the player is part of the button too
-		int pillW = font.getStringWidth("shop.plebmc.top") + 26, pillH = 16;
+		int pillW = font.getStringWidth("Store") + 26, pillH = 16;
 		float pillX = cx - pillW / 2f, pillY = foot + 20;
 		boolean over = pending == null && mx >= sideWidth(w)
 				&& ((mx >= showX && mx < showX + showW && my >= showY && my < showY + showH)
@@ -343,7 +343,7 @@ public final class TitleMenu {
 		outlineF(pillX, pillY, pillW, pillH, Ui.alpha(acc, Math.round((0x90 + 0x6F * hv) * in)));
 		int fg = Ui.mix(0xFFFFFFFF, Ui.ON_ACCENT, hv);
 		iconF("shop", pillX + 6, pillY + 3.5f, 1f, Ui.alpha(hv > 0.5f ? fg : acc, a));
-		text(font, "shop.plebmc.top", pillX + 19, pillY + 4, 1f, Ui.alpha(fg, a));
+		text(font, "Store", pillX + 19, pillY + 4, 1f, Ui.alpha(fg, a));
 		if (hv > 0.02f) {
 			String tip = "Open the store";
 			int tw = font.getStringWidth(tip);
@@ -608,9 +608,18 @@ public final class TitleMenu {
 	}
 
 	/** What the mini mascot says when you point at him (a new line each time). */
-	private static final String[] BUDDY_LINES = { "Click me. I dare you.", "Pleb Coins come from quests!",
-			"Daily login = free coins", "New cloaks in the shop!", "Right Shift opens the mods", "Ssss... just kidding",
-			"Try the Cloak Maker!", "Join PlebMc, it's lit", "Did you do your quests?", "I like TNT. A lot." };
+	private static final String[] BUDDY_LINES = {
+			// tips
+			"Click me. I dare you.", "Pleb Coins come from quests!", "Daily login = free coins",
+			"New cloaks in the shop!", "Right Shift opens the mods", "I like TNT. A lot.",
+			// Mighty
+			"Mighty coded me at 3 AM", "Mighty owes me 5 Pleb Coins", "Mighty's aim? Never met it",
+			"Don't tell Mighty I'm alive", "Mighty calls spam-clicking PvP", "Mighty pressed F5 to win",
+			"Mighty fell in the void again", "Mighty's mic is always on",
+			// Lucky
+			"Lucky isn't even that lucky", "Lucky rage quit. Again.", "Lucky's luck ran out in 2019",
+			"Lucky said \"one more game\"", "Lucky lost to a chicken", "Lucky blamed lag. It wasn't lag.",
+			"Lucky still owes Mighty coins", "Lucky thinks I'm cute. Correct." };
 	private static int buddyLine = -1;
 	private static long buddyLineAt;
 	private static float buddyBubble;
@@ -618,7 +627,9 @@ public final class TitleMenu {
 	private static void bubble(long now, float in) {
 		boolean show = buddyHover > 0.5f && buddyStart == 0;
 		if (show && buddyLine < 0) {
-			buddyLine = (int) ((now / 7) % BUDDY_LINES.length);
+			int next = (int) ((now / 7) % BUDDY_LINES.length);
+			buddyLine = next == lastLine ? (next + 1) % BUDDY_LINES.length : next;
+			lastLine = buddyLine;
 			buddyLineAt = now;
 		}
 		if (!show && buddyHover < 0.05f) {
@@ -634,14 +645,44 @@ public final class TitleMenu {
 		int n = animations() ? (int) Math.min(line.length(), (now - buddyLineAt) / 28) : line.length();
 		float sc = 0.75f;
 		int tw = (int) Math.ceil(font.getStringWidth(line) * sc);
-		int bw = tw + 10, bh = 13;
-		int bx = budX - bw + 4, by = budY - bh - 2;
-		int a = (int) (0xE0 * buddyBubble * in);
-		Ui.round(bx, by, bw, bh, a << 24 | 0x0B1016);
-		Ui.rect(bx + bw - 12, by + bh, 4, 2, a << 24 | 0x0B1016);
-		Ui.rect(bx + bw - 11, by + bh + 2, 2, 1, a << 24 | 0x0B1016);
-		Ui.rect(bx + 1, by + bh - 1, bw - 2, 1, ((int) (0xC0 * buddyBubble * in)) << 24 | (Ui.accent() & 0xFFFFFF));
-		text(font, line.substring(0, Math.max(0, n)), bx + 5, by + 3.5f, sc, ((int) (0xFF * buddyBubble * in)) << 24 | 0xFFFFFF);
+		int bw = tw + 12, bh = 14;
+		// pops up from the tail
+		float pop = 0.6f + 0.4f * ease(buddyBubble);
+		int bx = budX - bw + 10, by = budY - bh - 6;
+		int a = Math.round(0xFF * buddyBubble * in);
+		int edge = a << 24 | 0x15181C, fill = a << 24 | 0xFFFFFF, shade = (a * 0x30 / 0xFF) << 24;
+		GlStateManager.pushMatrix();
+		GlStateManager.translate(bx + bw - 8, by + bh + 4, 0);
+		GlStateManager.scale(pop, pop, 1f);
+		GlStateManager.translate(-(bx + bw - 8), -(by + bh + 4), 0);
+		// soft drop shadow
+		puffy(bx + 1, by + 2, bw, bh, shade);
+		// outline, then the white body, both rounded (two-pixel corners)
+		puffy(bx - 1, by - 1, bw + 2, bh + 2, edge);
+		puffy(bx, by, bw, bh, fill);
+		// the tail, pointing down-right at the mascot: a stepped triangle with an outline
+		int tx = bx + bw - 16;
+		for (int i = 0; i < 6; i++) {
+			int w = 8 - i; // narrows and leans right as it goes down
+			Ui.rect(tx + i, by + bh + i - 1, w + 2, 1, edge);
+			if (w > 1) {
+				Ui.rect(tx + i + 1, by + bh + i - 1, w - 1, 1, fill);
+			}
+		}
+		Ui.rect(tx + 6, by + bh + 5, 3, 1, edge);
+		text(font, line.substring(0, Math.max(0, n)), bx + 6, by + 4f, sc, a << 24 | 0x1C1F24);
+		GlStateManager.popMatrix();
+	}
+
+	private static int lastLine = -1;
+
+	/** A rounded rectangle with two-pixel corners, which reads as a soft cartoon bubble. */
+	private static void puffy(int x, int y, int w, int h, int c) {
+		Ui.rect(x + 2, y, w - 4, h, c);
+		Ui.rect(x + 1, y + 1, 1, h - 2, c);
+		Ui.rect(x + w - 2, y + 1, 1, h - 2, c);
+		Ui.rect(x, y + 2, 1, h - 4, c);
+		Ui.rect(x + w - 1, y + 2, 1, h - 4, c);
 	}
 
 	// ---- bottom line ----
@@ -857,7 +898,7 @@ public final class TitleMenu {
 			return true;
 		}
 		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
-		int pillW = font.getStringWidth("shop.plebmc.top") + 26;
+		int pillW = font.getStringWidth("Store") + 26;
 		boolean onPill = my >= showY + showH && my < showY + showH + 40
 				&& Math.abs(mx - (showX + showW / 2f)) < pillW / 2f;
 		if ((mx >= showX && mx < showX + showW && my >= showY && my < showY + showH) || onPill) {
