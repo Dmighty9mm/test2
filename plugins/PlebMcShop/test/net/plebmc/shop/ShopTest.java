@@ -32,6 +32,9 @@ public class ShopTest {
         final Set<UUID> unverified = new HashSet<>(); final List<UUID> protectedAsked = new ArrayList<>();
         public boolean staffVerified(UUID p) { return !unverified.contains(p); }
         public void protectStaff(UUID p) { protectedAsked.add(p); }
+        /** Joined but hasn't typed /login yet (nLogin). */
+        final Set<UUID> notLoggedIn = new HashSet<>();
+        public boolean authenticated(UUID p) { return !notLoggedIn.contains(p); }
     }
 
     static class P {
@@ -405,6 +408,21 @@ public class ShopTest {
         check(!core.isAdmin(web.id) && net.protectedAsked.contains(web.id), "unverified Owner gets no admin flag and the name gets locked");
         net.unverified.remove(web.id);
         check(core.isAdmin(web.id), "verified Owner is admin again");
+        // ---- nLogin: someone joined on the Owner's name but hasn't typed /login yet ----
+        net.notLoggedIn.add(web.id);
+        check(!core.isAdmin(web.id), "not logged in: no admin");
+        sleepCooldown();
+        long webCoins = web.coins();
+        core.fromClient(web.id, "{\"type\":\"admin\",\"action\":\"coins\",\"op\":\"set\",\"amount\":999999,\"player\":\"" + web.id + "\"}");
+        check(Boolean.FALSE.equals(web.last("admin").get("allowed")) && web.coins() == webCoins, "not logged in: admin action refused");
+        int sent = site.calls.size();
+        core.fromClient(web.id, "{\"type\":\"logout\"}");
+        check(site.calls.size() == sent, "not logged in: can't unlink the Owner's website account");
+        core.fromClient(web.id, "{\"type\":\"buy\",\"id\":\"halo\"}");
+        check(web.coins() == webCoins, "not logged in: can't spend the Owner's coins");
+        net.notLoggedIn.remove(web.id);
+        core.authChanged(web.id);
+        check(Boolean.TRUE.equals(web.last("account").get("admin")), "after /login the admin flag comes back");
         check(acc.get("groups").toString().equals("[Owner, Member]") && Boolean.TRUE.equals(acc.get("staff")), "groups by rank: " + acc.get("groups"));
         check(site.lastBody.contains("\"code\":\"ABC123\"") && site.lastBody.contains("\"username\":\"Webby\"") && site.lastBody.contains(Website.identifier(web.id)), "verify body: " + site.lastBody);
         // next join: logged in straight away, with a popup

@@ -112,14 +112,29 @@ Passwords never go through the game, and the API key never leaves the proxy.
 | `/plebshop give <player> <item>` / `remove` | Give or take an item for free |
 | `/plebshop equip <player> <hat\|trail\|cloak> <item\|none>` | Put something on a player |
 
-## Staff lock (cracked servers): do this first
+## Logins on a cracked server: do this first
+
+On an offline-mode server a name proves nothing: anyone can join with the Owner's name and
+gets the Owner's UUID, so the proxy needs a login plugin to know who is who.
+
+**With nLogin on the proxy (recommended, what plebmc.top runs):** nothing to set up. PlebioAPI
+asks nLogin whether each player has typed `/login` this session. Until they have, nothing on
+their account can change: no admin menu, no buying or equipping, no website link or unlink,
+and in-game `/plebshop` is refused. The admin door appears within 2 seconds of `/login`.
+Make sure staff names are registered in nLogin with strong passwords (an unregistered name
+can be registered by whoever joins with it first). The staff lock below is skipped when
+nLogin is installed.
+
+**Without nLogin:** use the staff lock.
+
+### Staff lock (only without nLogin)
 
 On an offline-mode (cracked) server the proxy can't check who someone is. Your UUID is made
 from your name, so anyone who types an Owner's name gets that Owner's UUID, which means
 their LuckPerms rank, their BungeeCord permissions, their plebmc.top link and the admin menu.
 The staff lock closes that: protected names need a password at login.
 
-1. In `plugins/EaglercraftXBungee/authservice.yml` on the proxy set
+1. Needs the older **EaglerXBungee** gateway (not EaglerXServer). In `plugins/EaglercraftXBungee/authservice.yml` on the proxy set
    ```yaml
    enable_authentication_system: true
    use_onboard_eaglerx_system: false

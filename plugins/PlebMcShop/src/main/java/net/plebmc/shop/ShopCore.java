@@ -71,12 +71,24 @@ final class ShopCore {
 		/** A player with staff powers but no password: lock their name until one is set. */
 		default void protectStaff(UUID player) {
 		}
+
+		/**
+		 * The player logged in to their account this session (nLogin /login), or
+		 * there's no login plugin. Until then nothing on their account can change:
+		 * on a cracked server anyone can join with any name.
+		 */
+		default boolean authenticated(UUID player) {
+			return true;
+		}
 	}
 
 	/** Re-reads config.yml (set by the proxy plugin; the admin menu's Reload uses it). */
 	Runnable reloader;
 
 	static final String ADMIN = "plebshop.admin";
+	/** Client messages that change the account (need a logged-in player). */
+	private static final java.util.Set<String> CHANGES = new java.util.HashSet<>(
+			Arrays.asList("buy", "equip", "link", "logout", "admin"));
 	private static final long ACTION_COOLDOWN_MS = 300;
 
 	private final Gson gson = new GsonBuilder().serializeNulls().create();
@@ -336,6 +348,19 @@ final class ShopCore {
 		}
 		String type = String.valueOf(m.get("type"));
 		boolean first = clients.add(p);
+		if (CHANGES.contains(type) && !net.authenticated(p)) {
+			// joined with this name but hasn't typed its password yet: could be anyone
+			notify(p, msg("login-first-title", "&cNot logged in"), msg("login-first-message", "Log in first (/login <password>)"));
+			if ("admin".equals(type)) {
+				Map<String, Object> r = new LinkedHashMap<>();
+				r.put("type", "admin");
+				r.put("allowed", false);
+				r.put("ok", false);
+				r.put("message", "Log in first (/login <password>).");
+				send(p, r);
+			}
+			return;
+		}
 		switch (type) {
 		case "open":
 			data(p);
@@ -375,6 +400,13 @@ final class ShopCore {
 			break;
 		default:
 			break;
+		}
+	}
+
+	/** The player just logged in (or out) with the login plugin: resend their account and admin flag. */
+	synchronized void authChanged(UUID p) {
+		if (lookedUp.contains(p) || !website.configured()) {
+			sendAccount(p, null, true);
 		}
 	}
 
@@ -640,6 +672,9 @@ final class ShopCore {
 	 */
 	synchronized boolean isAdmin(UUID p) {
 		if (!adminGroup(p)) {
+			return false;
+		}
+		if (!net.authenticated(p)) {
 			return false;
 		}
 		if (!net.staffVerified(p)) {

@@ -111,8 +111,13 @@ public final class BungeeShop extends Plugin implements Listener {
 		getProxy().getPluginManager().registerListener(this, this);
 		getProxy().getPluginManager().registerCommand(this, new AdminCommand());
 		eaglerAuth = registerEaglerAuth();
+		if (usingNLogin()) {
+			getLogger().info(findNLogin() ? "nLogin found: shop, account and admin actions need /login first"
+					: "nLogin found but not usable: account changes are locked");
+			getProxy().getScheduler().schedule(this, this::checkLogins, 2, 2, TimeUnit.SECONDS);
+		}
 		getProxy().getScheduler().schedule(this, staffLock::cleanup, 1, 1, TimeUnit.MINUTES);
-		if (staffLockOn()) {
+		if (staffLockOn() && !usingNLogin()) {
 			int n = staffLock.all().size();
 			getLogger().info("Staff lock: " + n + " protected name" + (n == 1 ? "" : "s")
 					+ (eaglerAuth ? "" : " (Eaglercraft password screen OFF: protected names can't join until you turn on"
@@ -145,6 +150,65 @@ public final class BungeeShop extends Plugin implements Listener {
 	}
 
 	// ==================== staff lock ====================
+
+	/** nLogin's API (com.nickuc.login.api.nLoginAPI), found by reflection; null when it isn't installed. */
+	private Object nlogin;
+	private java.lang.reflect.Method nloginIsAuthenticated;
+	/** Last login state we told the core about, per player. */
+	private final Map<UUID, Boolean> lastAuth = new ConcurrentHashMap<>();
+
+	private boolean findNLogin() {
+		if (getProxy().getPluginManager().getPlugin("nLogin") == null) {
+			return false;
+		}
+		try {
+			Class<?> api = Class.forName("com.nickuc.login.api.nLoginAPI", true,
+					getProxy().getPluginManager().getPlugin("nLogin").getClass().getClassLoader());
+			nlogin = api.getMethod("getApi").invoke(null);
+			nloginIsAuthenticated = api.getMethod("isAuthenticated", String.class);
+			return nlogin != null;
+		} catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
+			getLogger().warning("nLogin is installed but its API couldn't be used (" + e + "): account changes and the admin menu"
+					+ " stay locked for everyone until this is fixed");
+			nlogin = null;
+			return false;
+		}
+	}
+
+	/** Logged in with nLogin this session; true when there's no nLogin; false (locked) if nLogin can't be asked. */
+	private boolean authenticated(UUID player) {
+		boolean hasNLogin = getProxy().getPluginManager().getPlugin("nLogin") != null;
+		if (!hasNLogin) {
+			return true;
+		}
+		if (nlogin == null && !findNLogin()) {
+			return false;
+		}
+		ProxiedPlayer p = getProxy().getPlayer(player);
+		if (p == null) {
+			return false;
+		}
+		try {
+			return Boolean.TRUE.equals(nloginIsAuthenticated.invoke(nlogin, p.getName()));
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			return false;
+		}
+	}
+
+	/** Tells the core when someone logs in with nLogin, so their admin door appears right away. */
+	private void checkLogins() {
+		for (ProxiedPlayer p : getProxy().getPlayers()) {
+			boolean now = authenticated(p.getUniqueId());
+			Boolean before = lastAuth.put(p.getUniqueId(), now);
+			if (before != null && before != now) {
+				core.authChanged(p.getUniqueId());
+			}
+		}
+	}
+
+	private boolean usingNLogin() {
+		return getProxy().getPluginManager().getPlugin("nLogin") != null;
+	}
 
 	private boolean staffLockOn() {
 		return core != null && core.config.bool("staff-lock.enabled", true);
@@ -206,7 +270,7 @@ public final class BungeeShop extends Plugin implements Listener {
 	public void onLogin(LoginEvent e) {
 		PendingConnection c = e.getConnection();
 		String name = c.getName();
-		if (!staffLockOn() || e.isCancelled() || !staffLock.isProtected(name)) {
+		if (!staffLockOn() || usingNLogin() || e.isCancelled() || !staffLock.isProtected(name)) {
 			return;
 		}
 		StaffLock.Entry entry = staffLock.get(name);
@@ -266,6 +330,7 @@ public final class BungeeShop extends Plugin implements Listener {
 	public void onQuit(PlayerDisconnectEvent e) {
 		String server = lastServer.remove(e.getPlayer().getUniqueId());
 		staffVerified.remove(e.getPlayer().getUniqueId());
+		lastAuth.remove(e.getPlayer().getUniqueId());
 		core.quit(e.getPlayer().getUniqueId(), server);
 	}
 
@@ -359,13 +424,22 @@ public final class BungeeShop extends Plugin implements Listener {
 
 		@Override
 		public boolean staffVerified(UUID player) {
-			return !staffLockOn() || staffVerified.contains(player);
+			if (!staffLockOn()) {
+				return true;
+			}
+			// with nLogin, its /login password is the proof; without it, the staff lock password
+			return usingNLogin() ? BungeeShop.this.authenticated(player) : staffVerified.contains(player);
+		}
+
+		@Override
+		public boolean authenticated(UUID player) {
+			return BungeeShop.this.authenticated(player);
 		}
 
 		@Override
 		public void protectStaff(UUID player) {
 			ProxiedPlayer p = ProxyServer.getInstance().getPlayer(player);
-			if (p != null && staffLockOn() && staffLock.protect(p.getName())) {
+			if (p != null && staffLockOn() && !usingNLogin() && staffLock.protect(p.getName())) {
 				getLogger().warning("Staff lock: " + p.getName() + " has staff powers but no password, so the name is now locked."
 						+ " Set its password in this console: plebshop staff set " + p.getName() + " <password>");
 			}
@@ -425,8 +499,9 @@ public final class BungeeShop extends Plugin implements Listener {
 					&& !bnet.staffVerified(((ProxiedPlayer) sender).getUniqueId())) {
 				// BungeeCord permissions go by name, which a cracked player can just type
 				bnet.protectStaff(((ProxiedPlayer) sender).getUniqueId());
-				sender.sendMessage(TextComponent.fromLegacyText("\u00a7cYour name has no staff password yet, so /plebshop is off for it."
-						+ " Set one in the proxy console: plebshop staff set " + sender.getName() + " <password>, then rejoin."));
+				sender.sendMessage(TextComponent.fromLegacyText(usingNLogin() ? "\u00a7cLog in first (/login <password>)."
+						: "\u00a7cYour name has no staff password yet, so /plebshop is off for it."
+								+ " Set one in the proxy console: plebshop staff set " + sender.getName() + " <password>, then rejoin."));
 				return;
 			}
 			core.command(new ShopCore.Sender() {

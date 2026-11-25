@@ -105,6 +105,8 @@ admin-menu:
   groups: ['Owner']
   broadcast-title: '&b&lAnnouncement'
 
+# Logins: with nLogin on the proxy, account changes and the admin menu need /login first
+# (nothing to set). The staff lock below is only used without nLogin.
 # Staff lock: on a cracked (offline-mode) server anyone can type the Owner's name and
 # get the Owner's UUID, rank and website link. Protected names need a password at login
 # (the Eaglercraft password screen). Set them in the proxy console:
