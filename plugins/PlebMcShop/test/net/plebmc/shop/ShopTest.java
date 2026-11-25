@@ -201,6 +201,36 @@ public class ShopTest {
         check(Math.abs(minY - 7.6f) < 0.01f && maxAbsX < 6f, "auto placement: " + minY + " " + maxAbsX);
     }
 
+    /** Shop collections (Regular / Partners), partner creators, and old trail items being left out. */
+    static void collections(File dir, Logger log) throws Exception {
+        net = new FakeNet();
+        core = new ShopCore(net, new Store(new File(dir, "col-players.yml"), log),
+                cfg("  red_cloak:", "  p_cloak: {name: P, category: cloak, color: '#FF00FF', collection: Partners, creator: ' Streamer ', price: 5}\n"
+                        + "  lost_hat: {name: L, category: hat, render: cap, collection: nope, price: 5}\n"
+                        + "  old_trail: {name: T, category: trail, render: flame, price: 5}\n  red_cloak:"), log);
+        Catalog.Item pc = core.catalog.get("p_cloak");
+        check(pc != null && "partners".equals(pc.collection) && "Streamer".equals(pc.creator), "partner item: collection and creator");
+        check("regular".equals(core.catalog.get("lost_hat").collection) && core.catalog.warnings().toString().contains("nope"),
+                "unknown collection falls back to regular with a warning");
+        check(core.catalog.get("old_trail") == null && core.catalog.warnings().toString().contains("trails were removed"),
+                "trail items are left out: " + core.catalog.warnings());
+        P p = join("Partnered", "lobby", true);
+        PluginChannels.reset();
+        for (String m : p.raw) Cosmetics.handle(m);
+        check(Cosmetics.collections().size() == 2 && "partners".equals(Cosmetics.collections().get(1).id)
+                && Cosmetics.collections().get(1).color == 0xFFFF7AC6, "client reads the collections");
+        Cosmetics.Item ci = Cosmetics.item("p_cloak");
+        check(ci != null && "partners".equals(ci.collection) && "Streamer".equals(ci.creator)
+                && Cosmetics.catalog(Cosmetics.CLOAK, "partners").size() == 1
+                && Cosmetics.catalog(Cosmetics.CLOAK, "regular").size() == 6, "client splits the shop by collection");
+        // the equipped cloak survives a restart (it used to be dropped on load)
+        cmd("give", "Partnered", "red_cloak");
+        cmd("equip", "Partnered", "cloak", "red_cloak");
+        core.saveIfDirty();
+        Store again = new Store(new File(dir, "col-players.yml"), log);
+        check("red_cloak".equals(again.get(p.id).equipped.get("cloak")), "equipped cloak saved and loaded");
+    }
+
     static List<String> admin = new ArrayList<>();
     static void cmd(String... args) {
         core.command(new ShopCore.Sender() {
@@ -234,7 +264,16 @@ public class ShopTest {
                 "questCategories: " + cats);
         Map<?, ?> withCatalog = null;
         for (Map<?, ?> m : mighty.got) if (m.containsKey("catalog")) withCatalog = m;
-        check(withCatalog != null && ((List<?>) withCatalog.get("catalog")).size() == 21, "catalog has 21 items");
+        check(withCatalog != null && ((List<?>) withCatalog.get("catalog")).size() == 24, "catalog has 24 items");
+        List<?> cols = (List<?>) withCatalog.get("collections");
+        check(cols != null && cols.size() == 2 && "regular".equals(((Map<?, ?>) cols.get(0)).get("id"))
+                && "Partners".equals(((Map<?, ?>) cols.get(1)).get("name")), "collections sent: " + cols);
+        boolean noTrails = true;
+        for (Object o : (List<?>) withCatalog.get("catalog")) {
+            Map<?, ?> im = (Map<?, ?>) o;
+            noTrails &= !"trail".equals(im.get("category")) && "regular".equals(im.get("collection"));
+        }
+        check(noTrails, "no trails in the shop, everything in Regular by default");
         check(mighty.coins() == 50, "day 1 login reward: " + mighty.coins());
         check(String.valueOf(mighty.last("notify").get("message")).contains("+50 PlebMc Coins"), "login popup");
         check(mighty.done("login") && "general".equals(mighty.quest("login").get("category")) && ((Number) mighty.quest("login").get("streak")).intValue() == 1,
@@ -294,7 +333,7 @@ public class ShopTest {
         core.fromClient(mighty.id, "{\"type\":\"buy\",\"id\":\"halo\"}");
         check(mighty.coins() == 6500, "cooldown blocks a second action");
         sleepCooldown();
-        core.fromClient(mighty.id, "{\"type\":\"buy\",\"id\":\"rainbow\"}");
+        core.fromClient(mighty.id, "{\"type\":\"buy\",\"id\":\"diamond_crown\"}");
         check(Boolean.FALSE.equals(mighty.last("result").get("ok")), "not enough coins");
         sleepCooldown();
         core.fromClient(mighty.id, "{\"type\":\"buy\",\"id\":\"dropzone_crown\"}");
@@ -436,7 +475,7 @@ public class ShopTest {
         cmd("give", "Poor", "dropzone_crown");
         cmd("equip", "Poor", "hat", "dropzone_crown");
         check("dropzone_crown".equals(((Map<?, ?>) poor.last("state").get("equipped")).get("hat")), "admin give + equip");
-        check(core.tabComplete(new String[] { "equip", "Poor", "trail", "r" }).contains("rainbow"), "tab complete");
+        check(core.tabComplete(new String[] { "equip", "Poor", "cloak", "r" }).contains("red_cloak"), "tab complete");
         check(core.tabComplete(new String[] { "progress", "Mighty", "ch" }).contains("chat"), "tab complete chat");
         admin.clear();
         cmd("quests");
@@ -474,6 +513,7 @@ public class ShopTest {
         check(((Map<?, ?>) back.quest("login")).get("reward").equals(75.0), "streak day 2");
 
         cloaks(dir, log);
+        collections(dir, log);
 
         System.out.println(checks - failed + "/" + checks + " plugin checks passed");
         int q = QuestsTest.run();

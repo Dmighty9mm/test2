@@ -10,7 +10,7 @@ work on every server behind the proxy.
 - **Earning**: a daily login reward with a streak, coins for time online, and daily and
   weekly quests in **categories**: by default **General** (counts on every server) and
   **PlebNite** (counts only on PlebNite). The client shows All / General / PlebNite.
-- **Spending**: hats, trails and HD cloaks. Everyone on the PlebMc client sees each other's (per server).
+- **Spending**: hats and HD cloaks, in shop collections (Regular, Partners, ...). Everyone on the PlebMc client sees each other's (per server).
 - **plebmc.top login**: players log in to the client with their website (NamelessMC)
   account and see their website name and rank (Right Shift > Account), and log out.
 
@@ -110,7 +110,7 @@ Passwords never go through the game, and the API key never leaves the proxy.
 | `/plebshop balance <player>` / `info <player>` | Someone's coins (and what they own) |
 | `/plebshop progress <player> <type> [amount]` | Count quest progress on the server they're on |
 | `/plebshop give <player> <item>` / `remove` | Give or take an item for free |
-| `/plebshop equip <player> <hat\|trail\|cloak> <item\|none>` | Put something on a player |
+| `/plebshop equip <player> <hat\|cloak> <item\|none>` | Put something on a player |
 
 ## Admin menu in the client
 
@@ -123,9 +123,27 @@ checked again on the proxy, so a modified client can't use it. Turn it off with
 
 ## Items
 
-Each item in `items:` has a `category` (`hat`, `trail` or `cloak`), a `render` (the look the
+Each item in `items:` has a `category` (`hat` or `cloak`; trails were removed and are skipped with a warning), a `render` (the look the
 client draws; leave it out for cloaks), a `price` (`-1` = not for sale, give it by command), and optionally a
-`color` (`'#RRGGBB'`, tints a hat or colors a plain cloak), a `description` and a `permission` needed to buy it.
+`color` (`'#RRGGBB'`, tints a hat or colors a plain cloak), a `description`, a `permission` needed to buy it, a `collection` (shop tab, default `regular`) and a `creator` (shown as "by ...").
+
+### Collections (Regular, Partners)
+
+The shop's top tabs come from `collections:` in `config.yml`:
+
+```yaml
+collections:
+  regular: {name: 'Regular'}
+  partners: {name: 'Partners', icon: partner, color: '#FF7AC6'}
+```
+
+Put a partner's item in their tab with `collection: partners` (and `creator: 'TheirName'`):
+
+```yaml
+  partner_hat: {name: 'Partner Hat', category: hat, render: wizard, color: '#FF7AC6', price: 2000, collection: partners, creator: 'Steve'}
+```
+
+Add more collections the same way. An item naming a collection that isn't listed goes under `regular` with a warning.
 
 ### HD cloaks
 
@@ -163,8 +181,7 @@ top of the head is y 8), `scale: 1.2`, `offset: [0, -1, 0]` (pixels). Players do
 model once and keep it until the file changes. `king_crown.bbmodel` ships as an example (copied
 to `hats/` on first start); the line above is in the default config, commented out.
 
-Hats: `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns` (or `model:` above).
-Trails: `flame`, `hearts`, `notes`, `rainbow`, `cloud`, `portal`, `emerald`, `snow`.
+Hats: `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`, `cap`, `headphones`, `bunny`, `wizard`, `viking`, `cowboy`, `propeller`, `chef` (or `model:` above).
 
 Item and quest ids are what `players.yml` saves, so don't rename ones players already have.
 `hidden-in-worlds: [arena1, 'plebnite:arena2']` hides cosmetics in those worlds.

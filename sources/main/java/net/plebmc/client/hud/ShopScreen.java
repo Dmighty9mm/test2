@@ -21,6 +21,7 @@ import net.plebmc.client.cosmetics.Cosmetics;
 public final class ShopScreen extends PlebScreen {
 
 	private String category = Cosmetics.HAT;
+	private String collection = Cosmetics.collections().isEmpty() ? Cosmetics.REGULAR : Cosmetics.collections().get(0).id;
 	private int page;
 	private String selectedId;
 	private int seenVersion = -1;
@@ -41,12 +42,11 @@ public final class ShopScreen extends PlebScreen {
 	}
 
 	private List<Cosmetics.Item> items() {
-		return Cosmetics.catalog(category);
+		return Cosmetics.catalog(category, collection);
 	}
 
 	private static String categoryName(String c) {
-		return Cosmetics.HAT.equals(c) ? "Hats" : Cosmetics.TRAIL.equals(c) ? "Trails"
-				: Character.toUpperCase(c.charAt(0)) + c.substring(1) + "s";
+		return Cosmetics.HAT.equals(c) ? "Hats" : Character.toUpperCase(c.charAt(0)) + c.substring(1) + "s";
 	}
 
 	@Override
@@ -68,10 +68,34 @@ public final class ShopScreen extends PlebScreen {
 		gy = wy + 66;
 		gh = wy + wh - 8 - 44 - gy;
 
+		// collections (Regular, Partners, ...) as a switch in the header
+		if (Cosmetics.collection(collection) == null && !Cosmetics.collections().isEmpty()) {
+			collection = Cosmetics.collections().get(0).id;
+		}
+		int segW = 0;
+		for (Cosmetics.Collection col : Cosmetics.collections()) {
+			segW += Ui.width(col.name) + 13 + 14 + 2;
+		}
+		int sx = wx + ww - 28 - segW;
+		for (Cosmetics.Collection col : Cosmetics.collections()) {
+			int w = Ui.width(col.name) + 13 + 14;
+			Tab t = tab(col.name, Ui.hasIcon(col.icon) ? col.icon : "shop", col.color, sx, wy + 11, w, 16,
+					() -> collection.equals(col.id), () -> {
+						if (!collection.equals(col.id)) {
+							collection = col.id;
+							page = 0;
+							selectedId = null;
+							rebuild();
+						}
+					});
+			t.tip = col.description.isEmpty() ? col.name : col.description;
+			sx += w + 2;
+		}
+
 		// category tabs (every category the shop knows)
 		int tx = gx;
 		for (String c : Cosmetics.CATEGORIES) {
-			List<Cosmetics.Item> all = Cosmetics.catalog(c);
+			List<Cosmetics.Item> all = Cosmetics.catalog(c, collection);
 			int owned = 0;
 			for (Cosmetics.Item it : all) {
 				if (Cosmetics.owns(it.id)) {
@@ -203,7 +227,15 @@ public final class ShopScreen extends PlebScreen {
 				Ui.rect(x + w / 2 - 8, y + 2, 16, 20, 0xFF000000);
 				CloakLayer.thumb(it, x + w / 2 - 7, y + 3, 14, 18);
 			} else {
-				Ui.icon(Cosmetics.HAT.equals(it.category) ? "hat" : "trail", x + w / 2 - 9, y + 3, 2, tint);
+				// the hat itself, turning while you point at it
+				float spin = hover > 0.05f || sel ? (System.currentTimeMillis() % 7200L) / 20f : 0f;
+				CosmeticLayer.thumb(it, x + w / 2f, y + 11f, 1.8f, 35f + spin, System.currentTimeMillis() / 50f);
+			}
+			Cosmetics.Collection col = Cosmetics.collection(it.collection);
+			if (col != null && Cosmetics.collections().indexOf(col) > 0) {
+				int cc = col.color == 0 ? acc : col.color;
+				Ui.pill(col.name.toUpperCase().substring(0, Math.min(7, col.name.length())), x + w - Ui.pillWidth(
+						col.name.toUpperCase().substring(0, Math.min(7, col.name.length()))) - 2, y + 2, Ui.ON_ACCENT, cc);
 			}
 			if (trying) {
 				Ui.icon("eye", x + 4, y + 4, 1, acc);
@@ -260,12 +292,28 @@ public final class ShopScreen extends PlebScreen {
 			int scale = Math.max(20, Math.min(60, (pvh - 52) * 10 / 21));
 			drawModel(pvx + pvw / 2, pvy + pvh - 24, scale, yaw, this.mc.thePlayer);
 		} else {
-			Ui.centered("Join a world to", pvx + pvw / 2, pvy + pvh / 2 - 6, Ui.FAINT);
-			Ui.centered("see yourself here", pvx + pvw / 2, pvy + pvh / 2 + 4, Ui.FAINT);
+			Cosmetics.Item show = Cosmetics.item(selectedId);
+			if (show == null && Cosmetics.HAT.equals(category) && !items().isEmpty()) {
+				show = items().get(0);
+			}
+			if (show != null && Cosmetics.HAT.equals(show.category)) {
+				// no player out here: the hat on its own, big
+				float big = Math.max(3f, Math.min(5.5f, pvw / 22f));
+				CosmeticLayer.thumb(show, pvx + pvw / 2f, pvy + pvh / 2f, big, yaw + 60f + (System.currentTimeMillis() % 12000L) / 33.3f,
+						System.currentTimeMillis() / 50f);
+				Ui.centered(Ui.fit(show.name, pvw - 8), pvx + pvw / 2, pvy + pvh - 30, Ui.MUTED);
+			} else if (show != null && Cosmetics.CLOAK.equals(show.category)) {
+				int cw2 = Math.min(pvw - 30, 50), ch2 = cw2 * 8 / 5;
+				Ui.rect(pvx + pvw / 2 - cw2 / 2 - 1, pvy + pvh / 2 - ch2 / 2 - 1, cw2 + 2, ch2 + 2, 0xFF000000);
+				CloakLayer.thumb(show, pvx + pvw / 2 - cw2 / 2, pvy + pvh / 2 - ch2 / 2, cw2, ch2);
+			} else {
+				Ui.centered("Join a world to", pvx + pvw / 2, pvy + pvh / 2 - 6, Ui.FAINT);
+				Ui.centered("see yourself here", pvx + pvw / 2, pvy + pvh / 2 + 4, Ui.FAINT);
+			}
 		}
 		Ui.icon("drag", pvx + 6, pvy + pvh - 14, 1, Ui.FAINT);
 		Ui.text("Drag to spin", pvx + 18, pvy + pvh - 13, Ui.FAINT);
-		tooltipArea(pvx, pvy + 20, pvw, pvh - 40, "Drag to spin. Trails also show in the world around you while you try one on.");
+		tooltipArea(pvx, pvy + 20, pvw, pvh - 40, "Drag to spin");
 
 		// page counter
 		List<Cosmetics.Item> its = items();
@@ -278,7 +326,13 @@ public final class ShopScreen extends PlebScreen {
 
 		if (its.isEmpty()) {
 			Ui.icon(Ui.hasIcon(category) ? category : "shop", gx + gw / 2 - 13, gy + 20, 3, Ui.alpha(Ui.accent(), 0x80));
-			Ui.centered("No " + categoryName(category).toLowerCase() + " in the shop yet", gx + gw / 2, gy + 52, Ui.MUTED);
+			Cosmetics.Collection col = Cosmetics.collection(collection);
+			boolean partner = col != null && Cosmetics.collections().indexOf(col) > 0;
+			Ui.centered("No " + (partner ? "partner " : "") + categoryName(category).toLowerCase() + " yet",
+					gx + gw / 2, gy + 52, Ui.MUTED);
+			if (partner) {
+				Ui.centered("Cosmetics made with our partners show up here", gx + gw / 2, gy + 64, Ui.FAINT);
+			}
 		}
 
 		// details of the selected item
@@ -292,6 +346,9 @@ public final class ShopScreen extends PlebScreen {
 		} else if (sel != null && sel.category.equals(category)) {
 			Ui.text(Ui.fit(sel.name, gw - 180), gx + 6, ay + 7, Ui.TEXT);
 			String d = sel.description.isEmpty() ? categoryName(sel.category) : sel.description;
+			if (sel.creator != null) {
+				d = "by " + sel.creator + "  \u00b7  " + d;
+			}
 			Ui.text(Ui.fit(d, gw - 180), gx + 6, ay + 19, Ui.MUTED);
 		} else {
 			Ui.text("Pick something to try it on", gx + 6, ay + 7, Ui.TEXT);

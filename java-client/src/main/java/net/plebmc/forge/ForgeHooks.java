@@ -91,6 +91,13 @@ public final class ForgeHooks {
 	public void onGuiInit(GuiScreenEvent.InitGuiEvent.Post e) {
 		if (e.gui instanceof GuiMainMenu) {
 			PlebMenu.initMainMenu(e.gui, e.buttonList, e.gui.height / 4 + 48);
+			if (net.plebmc.client.hud.TitleMenu.active()) {
+				// the PlebClient title screen draws its own sidebar; the buttons stay for other mods but are hidden
+				for (net.minecraft.client.gui.GuiButton b : e.buttonList) {
+					b.visible = false;
+				}
+				net.plebmc.client.hud.TitleMenu.init(e.gui);
+			}
 		}
 	}
 

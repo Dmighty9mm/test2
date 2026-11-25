@@ -90,7 +90,7 @@ equip-on-buy: true
 # Players not on the PlebMc client get quest and login rewards as chat lines instead of popups.
 chat-for-other-clients: true
 
-# Worlds where nobody's hat or trail is shown: 'world' or 'server:world' (needs PlebMcBridge on that server).
+# Worlds where nobody's cosmetics are shown: 'world' or 'server:world' (needs PlebMcBridge on that server).
 hidden-in-worlds: []
 
 # /plebshop needs plebshop.admin.
@@ -124,12 +124,22 @@ messages:
   playtime-title: '&bThanks for playing'
   playtime-message: '+%coins% %currency%'
 
+# Shop collections: the tabs across the top of the client's shop. Every item is in one
+# (collection: partners), Regular when it doesn't say. Add as many as you like.
+#   icon:  a client icon name (shop, partner, star, gift, ...)
+#   color: the collection's accent in the client
+collections:
+  regular:  {name: 'Regular', icon: shop, description: 'Cosmetics from the PlebMc team'}
+  partners: {name: 'Partners', icon: partner, color: '#FF7AC6', description: 'Cosmetics made with PlebMc partners'}
+
 # The shop. Each item:
-#   category: hat, trail or cloak
+#   category: hat or cloak
 #   render:   the look the client draws
-#             hats:   tophat, crown, halo, partyhat, beanie, horns (or use model, below)
-#             trails: flame, hearts, notes, rainbow, cloud, portal, emerald, snow
+#             hats:   tophat, crown, halo, partyhat, beanie, horns, cap, headphones, bunny,
+#                     wizard, viking, cowboy, propeller, chef (or use model, below)
 #             cloaks: leave it out
+#   collection: optional, which shop tab it's in (a key from 'collections', default regular)
+#   creator:  optional, who made it ("by ..." in the shop), for partner cosmetics
 #   price:    coins (-1 = not for sale, give it with /plebshop give)
 #   color:    optional tint, like '#FFD700' (a cloak without a texture is this color)
 #   texture:  cloaks: a PNG in this plugin's folder, like 'cloaks/mycloak.png'.
@@ -164,16 +174,22 @@ items:
   dropzone_crown: {name: 'Drop Zone Crown', category: hat, render: crown, price: -1, color: '#4FC3F7', description: 'Season 1 Battle Pass reward'}
   # A hat from a Blockbench model (the sample model is copied to plugins/PlebioAPI/hats/):
   # king_crown: {name: 'King Crown', category: hat, model: 'hats/king_crown.bbmodel', price: 10000, description: 'A 3D crown'}
-
-  flame:   {name: 'Flame Trail', category: trail, render: flame, price: 2500, description: 'Fire at your feet'}
-  hearts:  {name: 'Heart Trail', category: trail, render: hearts, price: 1500, description: 'Hearts follow you'}
-  notes:   {name: 'Music Trail', category: trail, render: notes, price: 1500, description: 'Music notes as you walk'}
-  rainbow: {name: 'Rainbow Trail', category: trail, render: rainbow, price: 7500, description: 'A rainbow dust trail'}
-  cloud:   {name: 'Cloud Trail', category: trail, render: cloud, price: 1200, description: 'Puffs of cloud'}
-  portal:  {name: 'Ender Trail', category: trail, render: portal, price: 3500, description: 'Ender portal sparkles'}
-  emerald: {name: 'Emerald Trail', category: trail, render: emerald, price: 2000, description: 'Green sparkles'}
-  snow:    {name: 'Snow Trail', category: trail, render: snow, price: 2000, description: 'Snowflakes'}
+  cap:         {name: 'Snapback', category: hat, render: cap, price: 900, color: '#2D9CDB', description: 'A cap with the brim to the front'}
+  headphones:  {name: 'Headphones', category: hat, render: headphones, price: 2500, description: 'Hear the storm coming'}
+  bunny:       {name: 'Bunny Ears', category: hat, render: bunny, price: 1800, description: 'Two tall fluffy ears'}
+  wizard:      {name: 'Wizard Hat', category: hat, render: wizard, price: 4000, description: 'Pointy, starry and a bit magic'}
+  viking:      {name: 'Viking Helmet', category: hat, render: viking, price: 4500, description: 'Iron and horns'}
+  cowboy:      {name: 'Cowboy Hat', category: hat, render: cowboy, price: 2200, description: 'Yeehaw'}
+  propeller:   {name: 'Propeller Cap', category: hat, render: propeller, price: 3000, description: 'It spins'}
+  chef:        {name: 'Chef Hat', category: hat, render: chef, price: 1200, description: 'Cooking up wins'}
 
   plebmc_cloak: {name: 'PlebMc Cloak', category: cloak, texture: 'cloaks/plebmc.png', price: 6000, description: 'HD cloak with the PlebMc mark'}
   storm_cloak:  {name: 'Storm Cloak', category: cloak, texture: 'cloaks/storm.png', price: 9000, description: 'The storm, on your back (HD)'}
   red_cloak:    {name: 'Red Cloak', category: cloak, color: '#B71C1C', price: 1500, description: 'A plain red cloak'}
+  midnight_cloak: {name: 'Midnight Cloak', category: cloak, color: '#1A1F3A', price: 1500, description: 'A plain dark blue cloak'}
+  mint_cloak:   {name: 'Mint Cloak', category: cloak, color: '#3FD8B0', price: 1500, description: 'A plain mint cloak'}
+  gold_cloak:   {name: 'Gold Cloak', category: cloak, color: '#E8B923', price: 4000, description: 'A plain golden cloak'}
+
+  # Partner cosmetics go in the Partners tab. For example:
+  # streamer_cloak: {name: 'Streamer Cloak', category: cloak, texture: 'cloaks/streamer.png', collection: partners, creator: 'SomeStreamer', price: 5000, description: 'Made with SomeStreamer'}
+  # streamer_hat:   {name: 'Streamer Crown', category: hat, model: 'hats/streamer.bbmodel', collection: partners, creator: 'SomeStreamer', price: -1, description: 'Given out on stream'}

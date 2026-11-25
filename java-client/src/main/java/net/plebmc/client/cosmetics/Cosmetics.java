@@ -34,9 +34,12 @@ public final class Cosmetics {
 	public static final String CHANNEL = "plebmc:shop";
 
 	public static final String HAT = "hat";
+	/** Trails were taken out of the shop; trail items from a server are ignored. */
 	public static final String TRAIL = "trail";
 	public static final String CLOAK = "cloak";
-	public static final String[] CATEGORIES = { HAT, TRAIL, CLOAK };
+	public static final String[] CATEGORIES = { HAT, CLOAK };
+	/** The collection an item is in when the server doesn't say. */
+	public static final String REGULAR = "regular";
 
 	/** One shop item. {@link #render} is the look the client draws (see {@link #RENDERS}). */
 	public static final class Item {
@@ -55,6 +58,10 @@ public final class Cosmetics {
 		public int textureWidth;
 		/** Model hats ("render":"model"): the server's model id (a content hash); the texture is {@link #texture}. */
 		public String model;
+		/** The shop collection (tab) it's listed in: regular, partners, ... */
+		public String collection = REGULAR;
+		/** Partner items: who made it, or null. */
+		public String creator;
 
 		public Item(String id, String name, String category, String render, String description, int price,
 				int color) {
@@ -135,14 +142,38 @@ public final class Cosmetics {
 		}
 	}
 
+	/** A shop collection: a tab across the top of the shop (Regular, Partners). */
+	public static final class Collection {
+		public final String id;
+		public final String name;
+		/** An icon name the client knows, or "shop". */
+		public final String icon;
+		/** ARGB, or 0 for the accent color. */
+		public final int color;
+		public final String description;
+
+		public Collection(String id, String name, String icon, int color, String description) {
+			this.id = id;
+			this.name = name;
+			this.icon = icon;
+			this.color = color;
+			this.description = description;
+		}
+	}
+
+	/** Until the server sends its own. */
+	static final List<Collection> DEFAULT_COLLECTIONS = Collections.unmodifiableList(java.util.Arrays.asList(
+			new Collection(REGULAR, "Regular", "shop", 0, "Cosmetics from the PlebMc team"),
+			new Collection("partners", "Partners", "partner", 0xFFFF7AC6, "Cosmetics made with PlebMc partners")));
+
 	/** Receives coin/quest popups (set by the HUD; null in tests). */
 	public interface Toasts {
 		void show(String title, String message);
 	}
 
 	/** Every look this client knows how to draw. A catalog item with another render id is hidden. */
-	public static final String[] RENDERS = { "tophat", "crown", "halo", "partyhat", "beanie", "horns", "flame",
-			"hearts", "notes", "rainbow", "cloud", "portal", "emerald", "snow", "cloak", "model" };
+	public static final String[] RENDERS = { "tophat", "crown", "halo", "partyhat", "beanie", "horns", "cap",
+			"headphones", "bunny", "wizard", "viking", "cowboy", "propeller", "chef", "cloak", "model" };
 
 	/** A hat drawn from a model the server sends (a Blockbench model in the shop plugin's folder). */
 	public static final String MODEL = "model";
@@ -154,17 +185,18 @@ public final class Cosmetics {
 			new Item("partyhat", "Party Hat", HAT, "partyhat", "Striped cone hat", 300, -1),
 			new Item("beanie", "Beanie", HAT, "beanie", "Warm knitted beanie", 250, 0x3A7BD5),
 			new Item("horns", "Devil Horns", HAT, "horns", "Two red horns", 1000, -1),
-			new Item("flame", "Flame Trail", TRAIL, "flame", "Fire at your feet", 750, -1),
-			new Item("hearts", "Heart Trail", TRAIL, "hearts", "Hearts follow you", 600, -1),
-			new Item("notes", "Music Trail", TRAIL, "notes", "Music notes as you walk", 600, -1),
-			new Item("rainbow", "Rainbow Trail", TRAIL, "rainbow", "A rainbow dust trail", 2000, -1),
-			new Item("cloud", "Cloud Trail", TRAIL, "cloud", "Puffs of cloud", 400, -1),
-			new Item("portal", "Ender Trail", TRAIL, "portal", "Ender portal sparkles", 900, -1),
-			new Item("emerald", "Emerald Trail", TRAIL, "emerald", "Green sparkles", 800, -1),
-			new Item("snow", "Snow Trail", TRAIL, "snow", "Snowflakes", 500, -1),
+			new Item("cap", "Snapback", HAT, "cap", "A cap with the brim to the front", 900, 0x2D9CDB),
+			new Item("headphones", "Headphones", HAT, "headphones", "Hear the storm coming", 2500, -1),
+			new Item("bunny", "Bunny Ears", HAT, "bunny", "Two tall fluffy ears", 1800, -1),
+			new Item("wizard", "Wizard Hat", HAT, "wizard", "Pointy, starry and a bit magic", 4000, -1),
+			new Item("viking", "Viking Helmet", HAT, "viking", "Iron and horns", 4500, -1),
+			new Item("cowboy", "Cowboy Hat", HAT, "cowboy", "Yeehaw", 2200, -1),
+			new Item("propeller", "Propeller Cap", HAT, "propeller", "It spins", 3000, -1),
+			new Item("chef", "Chef Hat", HAT, "chef", "Cooking up wins", 1200, -1),
 			new Item("red_cloak", "Red Cloak", CLOAK, "cloak", "A plain red cloak", 1500, 0xB71C1C)));
 
 	private static List<Item> catalog = DEFAULT_CATALOG;
+	private static List<Collection> collections = DEFAULT_COLLECTIONS;
 	private static boolean serverCatalog;
 	private static long coins = -1;
 	private static String currency = "PlebMc Coins";
@@ -218,6 +250,7 @@ public final class Cosmetics {
 	/** Forget everything from the last server (disconnect or server switch). */
 	public static void reset() {
 		catalog = DEFAULT_CATALOG;
+		collections = DEFAULT_COLLECTIONS;
 		serverCatalog = false;
 		coins = -1;
 		currency = "PlebMc Coins";
@@ -428,6 +461,20 @@ public final class Cosmetics {
 			if (m.containsKey("loginStreak")) {
 				loginStreak = (int) Math.max(0, num(m.get("loginStreak"), 0));
 			}
+			if (m.get("collections") instanceof List) {
+				List<Collection> cs = new ArrayList<>();
+				for (Object e : (List<?>) m.get("collections")) {
+					if (e instanceof Map && ((Map<?, ?>) e).get("id") instanceof String) {
+						Map<?, ?> c = (Map<?, ?>) e;
+						String cid = ((String) c.get("id")).toLowerCase();
+						cs.add(new Collection(cid, str(c.get("name"), cid), str(c.get("icon"), "shop"),
+								parseColor(str(c.get("color"), "")), str(c.get("description"), "")));
+					}
+				}
+				if (!cs.isEmpty()) {
+					collections = Collections.unmodifiableList(cs);
+				}
+			}
 			if (m.get("catalog") instanceof List) {
 				List<Item> items = new ArrayList<>();
 				for (Object e : (List<?>) m.get("catalog")) {
@@ -501,7 +548,7 @@ public final class Cosmetics {
 		Map<?, ?> m = (Map<?, ?>) o;
 		String id = str(m.get("id"), null);
 		String cat = str(m.get("category"), null);
-		if (id == null || cat == null) {
+		if (id == null || cat == null || TRAIL.equals(cat)) {
 			return null;
 		}
 		String render = str(m.get("render"), CLOAK.equals(cat) ? "cloak" : id);
@@ -526,6 +573,9 @@ public final class Cosmetics {
 		Item it = new Item(id, str(m.get("name"), id), cat, render, str(m.get("description"), ""),
 				(int) Math.max(0, Math.min(Integer.MAX_VALUE, num(m.get("price"), 0))), color);
 		it.forSale = !Boolean.FALSE.equals(m.get("forSale"));
+		it.collection = str(m.get("collection"), REGULAR).toLowerCase();
+		String creator = str(m.get("creator"), null);
+		it.creator = creator == null || creator.trim().isEmpty() ? null : creator.trim();
 		String tex = str(m.get("texture"), null);
 		if (CLOAK.equals(cat) && tex != null && tex.matches("[0-9a-f]{8,64}")) {
 			it.texture = tex;
@@ -788,6 +838,35 @@ public final class Cosmetics {
 			}
 		}
 		return out;
+	}
+
+	/** The items of a category in one collection (anything with an unknown collection shows under the first). */
+	public static List<Item> catalog(String category, String collection) {
+		String first = collections.isEmpty() ? REGULAR : collections.get(0).id;
+		List<Item> out = new ArrayList<>();
+		for (Item it : catalog) {
+			if (!it.category.equals(category)) {
+				continue;
+			}
+			String c = collection(it.collection) != null ? it.collection : first;
+			if (c.equals(collection)) {
+				out.add(it);
+			}
+		}
+		return out;
+	}
+
+	public static List<Collection> collections() {
+		return collections;
+	}
+
+	public static Collection collection(String id) {
+		for (Collection c : collections) {
+			if (c.id.equals(id)) {
+				return c;
+			}
+		}
+		return null;
 	}
 
 	public static Item item(String id) {

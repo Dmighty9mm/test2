@@ -68,6 +68,36 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 
 	private static WorldRenderer wr;
 
+	/**
+	 * A hat on its own, for the shop: centered on (x, y) in GUI pixels,
+	 * {@code scale} GUI pixels per hat pixel, turned {@code yaw} degrees and
+	 * tipped toward the viewer.
+	 */
+	public static void thumb(Cosmetics.Item it, float x, float y, float scale, float yaw, float time) {
+		GlStateManager.pushMatrix();
+		GlStateManager.translate(x, y, 150f);
+		GlStateManager.scale(scale, scale, scale);
+		GlStateManager.rotate(-18f, 1f, 0f, 0f);
+		GlStateManager.rotate(yaw, 0f, 1f, 0f);
+		GlStateManager.translate(0f, 10.5f, 0f);
+		GlStateManager.clear(256);
+		GlStateManager.enableDepth();
+		GlStateManager.depthMask(true);
+		try {
+			if (Cosmetics.MODEL.equals(it.render)) {
+				model(it);
+			} else {
+				draw(it.render, it.color, time);
+			}
+		} finally {
+			GlStateManager.disableLighting();
+			GlStateManager.disableDepth();
+			GlStateManager.popMatrix();
+			GlStateManager.enableTexture2D();
+			GlStateManager.color(1f, 1f, 1f, 1f);
+		}
+	}
+
 	/** Draws one hat in head space (pixels, y down, origin at the neck). */
 	static void draw(String render, int tint, float time) {
 		if ("crown".equals(render) && texturedCrown()) {
@@ -98,6 +128,30 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 			break;
 		case "horns":
 			horns(tint < 0 ? 0xB3201E : tint);
+			break;
+		case "cap":
+			cap(tint < 0 ? 0x2D9CDB : tint);
+			break;
+		case "headphones":
+			headphones(tint < 0 ? 0x3FD8E6 : tint);
+			break;
+		case "bunny":
+			bunny(tint < 0 ? 0xF4F4F4 : tint);
+			break;
+		case "wizard":
+			wizard(tint < 0 ? 0x3B2A8C : tint);
+			break;
+		case "viking":
+			viking(tint < 0 ? 0x8A929B : tint);
+			break;
+		case "cowboy":
+			cowboy(tint < 0 ? 0x8B5A2B : tint);
+			break;
+		case "propeller":
+			propeller(time);
+			break;
+		case "chef":
+			chef(tint < 0 ? 0xFFFFFF : tint);
 			break;
 		default:
 			break;
@@ -331,10 +385,113 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 		}
 	}
 
+	// the front of the head is -z
+
+	private static void cap(int c) {
+		box(-4.3f, -9.4f, -4.3f, 4.3f, -7.6f, 4.3f, c);
+		box(-1.6f, -9.9f, -1.6f, 1.6f, -9.4f, 1.6f, shade(c, 0.85f)); // top
+		box(-4.1f, -7.9f, -8.2f, 4.1f, -7.3f, -4.3f, shade(c, 0.8f)); // brim
+		box(-1.2f, -9.0f, -4.5f, 1.2f, -8.0f, -4.3f, 0xFFFFFF); // logo
+	}
+
+	private static void headphones(int c) {
+		int band = 0x23272B;
+		box(-4.7f, -9.1f, -0.8f, 4.7f, -8.3f, 0.8f, band);
+		for (int s = -1; s <= 1; s += 2) {
+			float x = s * 4.5f;
+			box(Math.min(x, x + s * 0.4f), -8.3f, -0.8f, Math.max(x, x + s * 0.4f), -5.6f, 0.8f, band);
+			box(s < 0 ? -5.8f : 4.3f, -6.2f, -2.0f, s < 0 ? -4.3f : 5.8f, -2.4f, 2.0f, c);
+			box(s < 0 ? -6.1f : 5.8f, -5.6f, -1.4f, s < 0 ? -5.8f : 6.1f, -3.0f, 1.4f, shade(c, 0.7f));
+		}
+	}
+
+	private static void bunny(int c) {
+		int inner = 0xF7A1C4;
+		for (int s = -1; s <= 1; s += 2) {
+			float x = s * 2.0f;
+			box(x - 1.0f, -12.0f, -0.4f, x + 1.0f, -8.0f, 0.6f, c);
+			box(x + s * 0.4f - 0.9f, -15.5f, -0.4f, x + s * 0.4f + 0.9f, -12.0f, 0.6f, c);
+			box(x - 0.5f, -11.6f, -0.6f, x + 0.5f, -8.4f, -0.4f, inner);
+			box(x + s * 0.4f - 0.45f, -15.0f, -0.6f, x + s * 0.4f + 0.45f, -12.0f, -0.4f, inner);
+		}
+	}
+
+	private static void wizard(int c) {
+		box(-6.2f, -8.6f, -6.2f, 6.2f, -7.9f, 6.2f, c); // brim
+		int layers = 8;
+		for (int i = 0; i < layers; i++) {
+			float half = 3.9f - i * 0.45f;
+			float lean = i > 4 ? (i - 4) * 0.55f : 0f; // the tip flops back
+			float y1 = -8.6f - i * 1.15f;
+			box(-half, y1 - 1.15f, -half + lean, half, y1, half + lean, i == 1 ? 0xE8C547 : c);
+		}
+		int star = 0xFFE066;
+		box(-2.2f, -12.0f, -3.2f, -1.4f, -11.2f, -3.0f, star);
+		box(1.0f, -10.6f, -3.6f, 1.8f, -9.8f, -3.4f, star);
+		box(-0.6f, -14.0f, -2.4f, 0.2f, -13.2f, -2.2f, star);
+	}
+
+	private static void viking(int metal) {
+		int horn = 0xEDE4CC;
+		box(-4.6f, -9.4f, -4.6f, 4.6f, -6.2f, 4.6f, metal);
+		box(-3.4f, -10.2f, -3.4f, 3.4f, -9.4f, 3.4f, shade(metal, 1.1f));
+		box(-4.8f, -6.8f, -4.8f, 4.8f, -5.8f, 4.8f, 0x6B4A2B); // leather rim
+		box(-0.5f, -6.0f, -4.9f, 0.5f, -3.6f, -4.6f, metal); // nose guard
+		box(-0.4f, -10.3f, -3.6f, 0.4f, -6.2f, 3.6f, shade(metal, 0.8f)); // ridge
+		for (int s = -1; s <= 1; s += 2) {
+			box(s < 0 ? -6.4f : 4.6f, -8.6f, -0.8f, s < 0 ? -4.6f : 6.4f, -7.2f, 0.8f, horn);
+			box(s < 0 ? -7.4f : 6.0f, -10.6f, -0.6f, s < 0 ? -6.0f : 7.4f, -8.6f, 0.6f, horn);
+			box(s < 0 ? -7.8f : 6.8f, -12.0f, -0.4f, s < 0 ? -6.8f : 7.8f, -10.6f, 0.4f, shade(horn, 0.85f));
+		}
+	}
+
+	private static void cowboy(int c) {
+		int band = 0x3A2414;
+		box(-7.0f, -8.4f, -6.0f, 7.0f, -7.8f, 6.0f, c); // brim
+		box(-7.0f, -9.4f, -6.0f, -6.0f, -8.4f, 6.0f, c); // curled sides
+		box(6.0f, -9.4f, -6.0f, 7.0f, -8.4f, 6.0f, c);
+		box(-3.8f, -12.2f, -3.8f, 3.8f, -8.4f, 3.8f, c);
+		box(-3.9f, -9.4f, -3.9f, 3.9f, -8.4f, 3.9f, band);
+		box(-0.9f, -12.3f, -3.9f, 0.9f, -11.6f, 3.9f, shade(c, 0.75f)); // the dent
+	}
+
+	private static void propeller(float time) {
+		int[] q = { 0xE84A5F, 0xFFD166, 0x118AB2, 0x06D6A0 };
+		box(-4.4f, -9.3f, -4.4f, 0f, -7.6f, 0f, q[0]);
+		box(0f, -9.3f, -4.4f, 4.4f, -7.6f, 0f, q[1]);
+		box(0f, -9.3f, 0f, 4.4f, -7.6f, 4.4f, q[2]);
+		box(-4.4f, -9.3f, 0f, 0f, -7.6f, 4.4f, q[3]);
+		box(-4.6f, -7.9f, -4.6f, 4.6f, -7.3f, 4.6f, 0x2A2A2A); // band
+		box(-0.3f, -11.0f, -0.3f, 0.3f, -9.3f, 0.3f, 0x333333); // stem
+		double a = time * 0.6;
+		for (int b = 0; b < 2; b++) {
+			blade(a + b * Math.PI, -11.0f, 4.8f, 0.9f, b == 0 ? 0xE84A5F : 0x118AB2);
+		}
+	}
+
+	/** A flat spinning blade from the middle, at height y. */
+	private static void blade(double a, float y, float len, float half, int rgb) {
+		float r = ((rgb >> 16) & 0xFF) / 255f, g = ((rgb >> 8) & 0xFF) / 255f, b = (rgb & 0xFF) / 255f;
+		float ca = (float) Math.cos(a), sa = (float) Math.sin(a);
+		float px = -sa * half, pz = ca * half; // across the blade
+		float ex = ca * len, ez = sa * len; // along it
+		float y0 = y - 0.25f, y1 = y + 0.25f;
+		face(r, g, b, 1.0f, px, y0, pz, ex + px, y0, ez + pz, ex - px, y0, ez - pz, -px, y0, -pz);
+		face(r, g, b, 0.5f, -px, y1, -pz, ex - px, y1, ez - pz, ex + px, y1, ez + pz, px, y1, pz);
+	}
+
+	private static void chef(int c) {
+		box(-4.4f, -9.8f, -4.4f, 4.4f, -7.6f, 4.4f, shade(c, 0.95f)); // band
+		box(-5.2f, -13.8f, -5.2f, 5.2f, -9.8f, 5.2f, c);
+		box(-3.6f, -14.8f, -3.6f, 3.6f, -13.8f, 3.6f, c);
+		box(-5.4f, -12.6f, -1.6f, 5.4f, -10.6f, 1.6f, c); // puffs
+		box(-1.6f, -12.6f, -5.4f, 1.6f, -10.6f, 5.4f, c);
+	}
+
 	private static int shade(int rgb, float k) {
-		int r = (int) (((rgb >> 16) & 0xFF) * k);
-		int g = (int) (((rgb >> 8) & 0xFF) * k);
-		int b = (int) ((rgb & 0xFF) * k);
+		int r = Math.min(255, (int) (((rgb >> 16) & 0xFF) * k));
+		int g = Math.min(255, (int) (((rgb >> 8) & 0xFF) * k));
+		int b = Math.min(255, (int) ((rgb & 0xFF) * k));
 		return (r << 16) | (g << 8) | b;
 	}
 
