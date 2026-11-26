@@ -222,3 +222,7 @@ tr.link:hover td { background: var(--card2); }
 .rank-badge { width: 72px; height: 72px; border-radius: 18px; display: grid; place-items: center; background: rgba(245, 197, 66, .14); color: var(--gold); }
 .rank-badge svg { width: 36px; height: 36px; }
 .warnbox { border-color: rgba(255, 181, 71, .5); }
+/* Downloads page */
+.card.build > .row > svg { width: 30px; height: 30px; flex: none; color: var(--accent); }
+.card.build h2 { margin: 0; }
+.card.build p { margin: 10px 0 0; }

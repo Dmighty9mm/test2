@@ -302,6 +302,17 @@ class PanelLogic(unittest.TestCase):
         self.p.clear_announcement(admin)
         self.assertIsNone(self.p.public_info()["announcement"])
 
+    def test_download_links(self):
+        owner = self.p.create_account("Owner", "password1", "owner")
+        info = self.p.public_info()["downloads"]
+        self.assertEqual([d["kind"] for d in info], ["offline", "wasm", "forge-1.8.9"])
+        self.assertTrue(all(d["url"].startswith("https://gitflic.ru/") for d in info))
+        with self.assertRaises(app.ApiError):
+            self.p.set_downloads(owner, {"offline": "javascript:alert(1)"})
+        self.p.set_downloads(owner, {"offline": "https://example.com/p.html", "wasm": "", "forge-1.8.9": info[2]["url"]})
+        self.assertEqual([d["kind"] for d in self.p.public_info()["downloads"]], ["offline", "forge-1.8.9"])
+        self.assertEqual(self.p.public_info()["downloads"][0]["url"], "https://example.com/p.html")
+
     def test_client_update_checker(self):
         owner = self.p.create_account("Owner", "password1", "owner")
         r = self.p.client_version("2.0", "web")

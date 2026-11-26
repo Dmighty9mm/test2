@@ -206,7 +206,7 @@ function pager(container, load, render, opts = {}) {
 // ==================== shell ====================
 
 const NAV = [
-  ["General", [["home", "Home", "home"], ["leaderboard", "Leaderboard", "trophy"], ["shop", "Shop", "bag"]]],
+  ["General", [["home", "Home", "home"], ["downloads", "Downloads", "download"], ["leaderboard", "Leaderboard", "trophy"], ["shop", "Shop", "bag"]]],
   ["You", [["me", "My account", "user", true]]],
   ["Admin", [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["announce", "Announcements", "megaphone"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Client updates", "refresh"], ["audit", "Admin log", "list"]], "admin"],
 ];
@@ -266,7 +266,7 @@ async function homeView() {
         me ? h("a", { class: "btn primary", href: "#me" }, icon("user"), "My account") : h("a", { class: "btn primary", href: "#register" }, icon("plus"), "Create account"),
         me ? null : h("a", { class: "btn", href: "#login" }, "Sign in"),
         isAdmin() ? h("a", { class: "btn", href: "#makers" }, icon("hammer"), "Cosmetic makers") : null,
-        c.url ? h("a", { class: "btn", href: c.url, target: "_blank", rel: "noopener" }, icon("download"), "Get PlebClient" + (c.latest ? " " + c.latest : "")) : null))));
+        h("a", { class: "btn", href: "#downloads" }, icon("download"), "Get PlebClient")))));
   wrap.append(h("div", { class: "tiles" },
     tile("online", "Server", h("span", {}, h("span", { class: "dot" + (s.connected ? " on" : "") }), s.connected ? "Online" : "Offline"), s.connected ? fmt(s.online) + " playing now" : "The panel can't see the server right now"),
     tile("refresh", "Latest PlebClient", c.latest || "–", c.minimum ? "Oldest allowed: " + c.minimum : "Your client tells you when it's out of date"),
@@ -1093,7 +1093,40 @@ async function clientView() {
       } }, "Save"), out),
     card("Versions in use (last 7 days)", r.versions.length ? h("div", { class: "scroll" }, h("table", {},
       h("thead", {}, h("tr", {}, h("th", {}, "Version"), h("th", {}, "Platform"), h("th", { class: "num" }, "Starts"), h("th", {}, ""))), vbody))
-      : empty("refresh", "No client has checked in yet.")));
+      : empty("refresh", "No client has checked in yet.")),
+    downloadsCard(r.downloads, ro));
+}
+
+function downloadsCard(list, ro) {
+  const out = h("div");
+  const inputs = list.map((d) => h("input", { id: "dl-" + d.kind, type: "url", value: d.url, placeholder: "https://… (empty hides it)", disabled: ro, maxlength: 500 }));
+  return card("Downloads page links",
+    h("p", { class: "muted" }, "Where each Download button goes. The files stay where they're hosted; leave a box empty to hide that download."),
+    ...list.flatMap((d, i) => [h("label", { for: "dl-" + d.kind }, d.name), inputs[i]]),
+    h("div", { style: "height:14px" }),
+    ro ? h("p", { class: "muted" }, "Only owners can change these.") : h("button", { class: "primary", onclick: async () => {
+      const body = {};
+      list.forEach((d, i) => { body[d.kind] = inputs[i].value.trim(); });
+      try {
+        await api("admin/downloads", body);
+        info = await api("info");
+        message(out, "Saved.", true);
+      } catch (e) { message(out, e.message); }
+    } }, "Save"), out);
+}
+
+async function downloadsView() {
+  const list = info.downloads || [];
+  const rows = list.map((d) => h("div", { class: "card build" },
+    h("div", { class: "row", style: "width:100%" }, icon("download"),
+      h("div", {}, h("h2", {}, d.name)),
+      h("span", { class: "spacer" }),
+      h("a", { class: "btn primary", href: d.url, target: "_blank", rel: "noopener" }, icon("download"), "Download")),
+    h("p", { class: "muted" }, d.help)));
+  return h("div", {},
+    card("Get PlebClient", h("p", { class: "muted" }, "Pick how you want to play. The first time you start it, make your PlebMc account on the start screen.")),
+    h("div", { style: "height:18px" }),
+    rows.length ? h("div", { class: "grid g2" }, rows) : card(null, empty("download", "Nothing to download yet. Check back soon.")));
 }
 
 // ==================== admin: log ====================
@@ -1120,6 +1153,7 @@ async function auditView() {
 
 const VIEWS = {
   home: ["Home", homeView],
+  downloads: ["Downloads", downloadsView],
   leaderboard: ["Leaderboard", leaderboardView],
   shop: ["Shop", shopView],
   makers: ["Cosmetic makers", makersView, "admin"],

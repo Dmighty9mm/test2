@@ -65,6 +65,16 @@ COMMAND_ACTIONS = ("coins", "give", "remove", "equip", "kick", "signout")
 CATEGORIES = ("hat", "trail", "cloak", "wings")
 RANK_NAME = re.compile(r"[a-z0-9_-]{1,36}")
 PERM_NODE = re.compile(r"[A-Za-z0-9_.*-]{1,200}")
+# the Downloads page: links to where the builds are hosted (owners can change them
+# on Client updates). The panel never stores the files.
+DOWNLOADS = (
+    ("offline", "PlebClient (one HTML file)", "Open it in your browser and play, no install.",
+     "https://gitflic.ru/project/mightymcyt/plebmc-client/blob/raw?file=PlebClient_Offline.html"),
+    ("wasm", "PlebClient WASM", "The faster web version. Unzip it and open index.html (needs a recent Chrome or Edge).",
+     "https://gitflic.ru/project/mightymcyt/plebmc-client/blob/raw?file=PlebClient_WASM.zip"),
+    ("forge-1.8.9", "PlebClient for Forge 1.8.9", "Install Forge 1.8.9, then put the jar in your .minecraft/mods folder.",
+     "https://gitflic.ru/project/mightymcyt/plebmc-client/blob/raw?file=PlebClient-Forge-1.8.9.zip"),
+)
 
 
 def clean_ranks(r):
@@ -914,7 +924,25 @@ class Panel:
         st = self.server_status()
         return {"site": self.cfg.site_name, "openRegistration": self.cfg.open_registration,
                 "server": {"connected": st["connected"], "online": st["online"], "currency": st["currency"]},
-                "client": self.client_release(), "announcement": self.db.get_kv("announcement", None)}
+                "client": self.client_release(), "announcement": self.db.get_kv("announcement", None),
+                "downloads": [d for d in self.downloads() if d["url"]]}
+
+    # ---------- downloads (links only) ----------
+
+    def downloads(self):
+        links = self.db.get_kv("download_links", None) or {}
+        return [{"kind": k, "name": n, "help": h, "url": links.get(k, url)} for k, n, h, url in DOWNLOADS]
+
+    def set_downloads(self, actor, body):
+        links = {}
+        for k, n, _, _ in DOWNLOADS:
+            u = str(body.get(k) or "").strip()[:500]
+            if u and not re.match(r"^https://\S+$", u):
+                raise ApiError(400, "%s: links must start with https://" % n)
+            links[k] = u
+        self.db.set_kv("download_links", links)
+        self.audit(actor["name"], "downloads", ", ".join("%s %s" % (k, "set" if v else "off") for k, v in links.items()))
+        return {"ok": True, "downloads": self.downloads()}
 
     # ---------- player notes (admins) ----------
 
@@ -996,7 +1024,7 @@ class Panel:
         have = version_key(version)
         outdated = bool(r["latest"]) and VERSION_RE.match(version) is not None and have < version_key(r["latest"])
         required = bool(r["minimum"]) and VERSION_RE.match(version) is not None and have < version_key(r["minimum"])
-        return {"ok": True, "latest": r["latest"], "minimum": r["minimum"], "url": r["url"] or self.cfg.public_url,
+        return {"ok": True, "latest": r["latest"], "minimum": r["minimum"], "url": r["url"] or self.cfg.public_url + "/#downloads",
                 "message": r["message"], "outdated": outdated, "required": required}
 
     def client_versions(self):
@@ -1493,7 +1521,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, p.announce(actor, b))
         if method == "GET" and route == "admin/client":
             self.web_user(role="admin")
-            return self.send_json(200, {"ok": True, "client": p.client_release(), "versions": p.client_versions()})
+            return self.send_json(200, {"ok": True, "client": p.client_release(), "versions": p.client_versions(),
+                                        "downloads": p.downloads()})
+        if method == "POST" and route == "admin/downloads":
+            actor = self.web_user(role="owner")
+            return self.send_json(200, p.set_downloads(actor, self.body()))
         if method == "POST" and route == "admin/client":
             actor = self.web_user(role="owner")
             return self.send_json(200, p.set_client_release(actor, self.body()))
