@@ -493,7 +493,11 @@ class PanelHttp(unittest.TestCase):
         req = urllib.request.Request(self.base + "/")
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open(req, timeout=5) as r:
-            self.assertIn(b"PlebMc Panel", r.read())
+            page = r.read()
+            self.assertIn(b"PlebMc Panel", page)
+            # links carry a version, so an update is never mixed with a cached old app.js
+            self.assertRegex(page, rb'src="/static/app.js\?v=[1-9][0-9]+"')
+            self.assertRegex(page, rb'href="/static/style.css\?v=[1-9][0-9]+"')
             self.assertEqual(r.headers["X-Frame-Options"], "DENY")
         s, _, _ = self.call("/static/../app.py")
         self.assertEqual(s, 404)

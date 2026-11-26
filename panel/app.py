@@ -1122,6 +1122,22 @@ class Panel:
                               "result": c["result"], "by": c["by_name"], "at": c["created_at"]} for c in cmds]}
 
 
+_STATIC_REF = re.compile(rb'(src|href)="(/static/[A-Za-z0-9_./-]+\.(?:js|css|png))"')
+
+
+def versioned(html):
+    """Adds ?v=<file's change time> to /static/ links in a page, so browsers and caches
+    (Cloudflare, nginx) always fetch a new app.js or style.css after an update."""
+    def add(m):
+        path = os.path.normpath(os.path.join(STATIC, m.group(2)[len(b"/static/"):].decode()))
+        try:
+            v = int(os.path.getmtime(path)) if path.startswith(STATIC + os.sep) else 0
+        except OSError:
+            v = 0
+        return m.group(1) + b'="' + m.group(2) + b"?v=" + str(v).encode() + b'"'
+    return _STATIC_REF.sub(add, html)
+
+
 # ==================== HTTP ====================
 
 class Handler(BaseHTTPRequestHandler):
@@ -1270,6 +1286,8 @@ class Handler(BaseHTTPRequestHandler):
             raise ApiError(404, "Not found.")
         with open(f, "rb") as fh:
             data = fh.read()
+        if f.endswith(".html"):
+            data = versioned(data)
         self.send_response(200)
         self.send_header("Content-Type", (mimetypes.guess_type(f)[0] or "application/octet-stream") +
                          ("; charset=utf-8" if f.endswith((".html", ".js", ".css")) else ""))
