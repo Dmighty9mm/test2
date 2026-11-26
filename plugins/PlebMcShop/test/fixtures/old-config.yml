@@ -1,0 +1,56 @@
+# PlebioAPI (an older config, as a server had it)
+
+currency-name: 'Pleb Coins'
+
+# Log in with a plebmc.top account.
+website:
+  url: 'https://plebmc.top'
+  api-key: 'test-key'
+  integration: 'Minecraft'
+
+timezone: 'America/Chicago'
+
+login-rewards:
+  enabled: true
+  category: general
+  rewards: [50, 75, 100, 125, 150, 200, 300]
+  cooldown-hours: 20
+  streak-reset-hours: 48
+
+playtime:
+  enabled: true
+  every-minutes: 15
+  coins: 10
+  notify: true
+
+quests:
+  reset-hour: 0
+  daily-count: 3
+  weekly-count: 2
+  categories:
+    general:
+      name: 'General'
+      icon: general
+      color: '#3FD8E6'
+      servers: ['*']
+      daily:
+        general_play_30:  {name: 'Hang out for 30 minutes', description: 'Be online', type: play, goal: 30, reward: 60}
+      weekly:
+        login_5:          {name: 'Log in on 5 days', description: 'Claim 5 times', type: login, goal: 5, reward: 400}
+
+# Put an item on right after buying it.
+equip-on-buy: true
+
+chat-for-other-clients: true
+
+hidden-in-worlds: []
+
+# /plebshop needs plebshop.admin.
+
+messages:
+  prefix: '&8[&b&lPlebMc&8] &7'
+  bought: 'Bought %item%!'
+
+items:
+  tophat:      {name: 'Top Hat', category: hat, render: tophat, price: 1500, description: 'A classy black top hat'}
+  straw_hat:    {name: 'Straw Hat', category: hat, model: 'hats/straw-hat.bbmodel', scale: 1.5, offset: [0, -2, 0],  price: 1000, description: 'Classic woven sun hat' }

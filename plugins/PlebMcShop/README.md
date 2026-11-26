@@ -22,6 +22,11 @@ backend server (`plugins/PlebMcBridge`). The protocol is in `docs/PLEBMC.md`.
 
 ## Install
 
+Updating: just replace the jar and restart. New settings are added to your `config.yml` by
+themselves (with their comments), and new sample cloaks/hats are copied into the folder.
+Nothing you set or deleted is changed; the old file is kept as `config.yml.before-update-<time>`.
+Your items, collections and quests are never touched.
+
 1. **Proxy:** put `PlebioAPI.jar` in the BungeeCord `plugins/` folder and restart the proxy.
 2. **Backends:** put `PlebMcBridge.jar` in `plugins/` on the lobby and PlebNite servers
    (Spigot/Paper/Purpur 1.13+) and restart them.

@@ -96,6 +96,19 @@ public final class BungeeShop extends Plugin implements Listener {
 				try (InputStream in = getResourceAsStream("config.yml")) {
 					Files.copy(in, cfg.toPath());
 				}
+			} else {
+				// add settings this version is new to (never changes or removes yours)
+				try (InputStream in = getResourceAsStream("config.yml")) {
+					java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+					byte[] buf = new byte[8192];
+					int n;
+					while ((n = in.read(buf)) > 0) {
+						b.write(buf, 0, n);
+					}
+					ConfigUpdate.update(cfg, b.toByteArray(), getLogger());
+				} catch (IOException | RuntimeException e) {
+					getLogger().warning("Couldn't check config.yml for new settings: " + e);
+				}
 			}
 			// the sample cloak textures and hat model (never overwrites yours)
 			for (String c : new String[] { "cloaks/plebmc.png", "cloaks/storm.png", "cloaks/aurora.png", "cloaks/inferno.png", "cloaks/galaxy.png", "cloaks/rainbow_wave.png", "hats/king_crown.bbmodel" }) {

@@ -586,6 +586,7 @@ public class ShopTest {
         int q = QuestsTest.run();
         int sl = StaffLockTest.run(dir, log);
         int ac = AccountsTest.run(dir, log);
+        ConfigUpdateTest.run();
         System.exit(failed == 0 && q == 0 && sl == 0 && ac == 0 ? 0 : 1);
     }
 }
