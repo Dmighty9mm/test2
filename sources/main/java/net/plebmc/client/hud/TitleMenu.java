@@ -427,7 +427,7 @@ public final class TitleMenu {
 
 	// ---- the player showcase (opens the web store) ----
 
-	private static final String STORE_URL = "https://shop.plebmc.top";
+	private static final String STORE_URL = "https://store.plebmc.top";
 	private static net.minecraft.client.model.ModelPlayer steve, alex;
 	private static int showX, showY, showW, showH;
 	private static float showHover;
