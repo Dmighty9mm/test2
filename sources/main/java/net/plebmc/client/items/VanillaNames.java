@@ -35,7 +35,9 @@ public final class VanillaNames {
 				"music_disc_mall", "record_mellohi", "music_disc_mellohi", "record_stal", "music_disc_stal",
 				"record_strad", "music_disc_strad", "record_ward", "music_disc_ward", "record_11", "music_disc_11",
 				"record_wait", "music_disc_wait", "dye", "ink_sac", "golden_apple", "golden_apple",
-				"spawn_egg", "pig_spawn_egg" };
+				"spawn_egg", "pig_spawn_egg",
+				// ViaBackwards turns a 1.14+ crossbow into a bow for 1.8 (QualityArmory guns are crossbows)
+				"bow", "crossbow" };
 		for (int i = 0; i + 1 < reg.length; i += 2) {
 			MODERN_OF_18.put(reg[i], reg[i + 1]);
 		}

@@ -88,6 +88,12 @@ public final class ForgeHooks {
 		PlebEntities.renderGlow(e.partialTicks);
 	}
 
+	/** Video Settings opens the PlebClient one. */
+	@SubscribeEvent
+	public void onGuiOpen(net.minecraftforge.client.event.GuiOpenEvent e) {
+		e.gui = PlebClient.swapScreen(e.gui);
+	}
+
 	@SubscribeEvent
 	public void onGuiInit(GuiScreenEvent.InitGuiEvent.Post e) {
 		if (e.gui instanceof GuiMainMenu) {

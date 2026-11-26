@@ -952,7 +952,7 @@ public class PlatformInput {
 		WebGLBackBuffer.flipBuffer(w2, h2);
 		PlatformScreenRecord.captureFrameHook();
 		if(getVisibilityState(win.getDocument())) {
-			if(vsyncSupport && vsync) {
+			if(vsyncSupport && vsync && (fpsLimit <= 0 || fpsLimit > 1000)) {
 				syncTimer = 0.0;
 				asyncRequestAnimationFrame();
 			}else {

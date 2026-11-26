@@ -144,6 +144,20 @@ public final class SettingsScreen extends PlebScreen {
 			add(toggle("Click sounds", "Play a click in PlebMc menus", lx, y, lw, h, () -> pr.uiSounds,
 					saved(() -> pr.uiSounds = !pr.uiSounds)), clip);
 			y += step;
+			if (pr.hasSecret("konami")) {
+				add(toggle("Rainbow menus", "A secret you found: every highlight cycles through the colors", lx, y, lw, h,
+						() -> pr.rainbowAccent, saved(() -> pr.rainbowAccent = !pr.rainbowAccent)), clip);
+				y += step;
+			}
+			add(choice("Secrets found", secretHint(), lx, y, lw, h,
+					() -> pr.secretCount() + " of " + EasterEggs.IDS.length, () -> {
+						hint++;
+						rebuildLater = true;
+					}, () -> {
+						hint--;
+						rebuildLater = true;
+					}).tip(secretHint()), clip);
+			y += step;
 			break;
 		case 1: // Title screen
 			add(choice("Sidebar", "Open the sidebar when you point at it, keep it open, or show icons only", lx, y, lw, h,
@@ -215,6 +229,10 @@ public final class SettingsScreen extends PlebScreen {
 			y += 26;
 			break;
 		case 4: // Performance
+			Button video = button("Open video settings", lx, y, lw, 20, () -> this.mc.displayGuiScreen(new VideoOptionsScreen(this)));
+			video.style(Style.PRIMARY).icon("performance").tip = "Render distance, graphics and every performance option, Sodium style";
+			add(video, clip);
+			y += 26;
 			Mod boost = PlebClient.mods().fpsBoost;
 			Toggle tb = toggle("FPS Boost", boost.description(), lx, y, lw, h, () -> boost.isEnabled() && !boost.isBlockedByServer(),
 					saved(() -> boost.setEnabled(!boost.isEnabled())));
@@ -231,8 +249,12 @@ public final class SettingsScreen extends PlebScreen {
 					() -> ClientPrefs.OPENS[pr.shiftOpens], saved(() -> pr.shiftOpens = wrap(pr.shiftOpens + 1, ClientPrefs.OPENS.length)),
 					saved(() -> pr.shiftOpens = wrap(pr.shiftOpens - 1, ClientPrefs.OPENS.length))), clip);
 			y += step;
-			add(toggle("RGB text colors", "Show hex colors and gradients from newer servers instead of the 16 old colors",
-					lx, y, lw, h, () -> pr.rgbText, saved(() -> pr.rgbText = !pr.rgbText)), clip);
+			Toggle rgb = toggle("RGB text colors", this.mc.theWorld == null ? "Show hex colors and gradients from newer servers instead of the 16 old colors"
+					: PlebClient.rgbServer ? "On this server: true colors are coming through"
+							: "This server isn't sending true colors (it needs the PlebColors plugin)",
+					lx, y, lw, h, () -> pr.rgbText, saved(() -> pr.rgbText = !pr.rgbText));
+			rgb.tip = "Gradients need the PlebColors plugin (with ProtocolLib) on the game server. Without it, the server rounds them to the 16 old colors before they reach you.";
+			add(rgb, clip);
 			y += step;
 			add(toggle("Clean holograms", "Hide \"Armor Stand\" labels and armor stand bodies on server holograms", lx,
 					y, lw, h, () -> pr.cleanHolograms, saved(() -> pr.cleanHolograms = !pr.cleanHolograms)), clip);
@@ -257,6 +279,22 @@ public final class SettingsScreen extends PlebScreen {
 	}
 
 	private boolean rebuildLater;
+	private static int hint;
+
+	/** A hint for one secret not found yet (the arrows step through them). */
+	private static String secretHint() {
+		ClientPrefs pr = p();
+		java.util.List<String> left = new java.util.ArrayList<>();
+		for (int i = 0; i < EasterEggs.IDS.length; i++) {
+			if (!pr.hasSecret(EasterEggs.IDS[i])) {
+				left.add(EasterEggs.HINTS[i]);
+			}
+		}
+		if (left.isEmpty()) {
+			return "You found every one. Legend.";
+		}
+		return "Hint: " + left.get(wrap(hint, left.size()));
+	}
 
 	private void add(W w, int[] clip) {
 		w.clip = clip;

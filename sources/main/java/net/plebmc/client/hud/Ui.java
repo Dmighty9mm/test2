@@ -44,7 +44,8 @@ public final class Ui {
 
 	/** The accent color the player picked (PlebMc cyan by default). */
 	public static int accent() {
-		return ClientPrefs.get().accentColor();
+		ClientPrefs p = ClientPrefs.get();
+		return p.rainbowAccent ? EasterEggs.rainbow() : p.accentColor();
 	}
 
 	/** Color between a and b (t 0..1), alpha included. */

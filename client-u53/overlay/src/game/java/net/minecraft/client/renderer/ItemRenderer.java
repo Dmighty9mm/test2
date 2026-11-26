@@ -341,7 +341,10 @@ public class ItemRenderer {
 					break;
 				case BOW:
 					this.transformFirstPersonItem(f, 0.0F);
-					this.func_178098_a(partialTicks, entityplayersp);
+					if (!net.plebmc.client.itemrender.PlebItems.isCustom(this.itemToRender)) {
+						// a gun on a crossbow (a bow on 1.8) doesn't pull back like a bow
+						this.func_178098_a(partialTicks, entityplayersp);
+					}
 				}
 			} else {
 				this.func_178105_d(f1);

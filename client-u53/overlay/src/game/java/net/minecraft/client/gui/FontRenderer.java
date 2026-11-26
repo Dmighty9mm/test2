@@ -541,7 +541,7 @@ public class FontRenderer implements IResourceManagerReloadListener {
 			GlStateManager.color(this.red, this.blue, this.green, this.alpha);
 			this.posX = x;
 			this.posY = y;
-			this.renderStringAtPos(text, dropShadow);
+			this.renderStringAtPos(net.plebmc.client.text.ModernText.fold(text), dropShadow);
 		}
 		return (int) this.posX;
 	}
@@ -588,6 +588,7 @@ public class FontRenderer implements IResourceManagerReloadListener {
 	 * Returns the width of this character as rendered.
 	 */
 	public int getCharWidth(char character) {
+		character = net.plebmc.client.text.ModernText.fold(character);
 		if (character == 167) {
 			return -1;
 		} else if (character == 32) {

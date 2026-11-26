@@ -177,6 +177,7 @@ public final class TitleMenu {
 		ClientPrefs pr = ClientPrefs.get();
 		// text writes depth here: without this the quads drawn over it would have holes
 		GlStateManager.disableDepth();
+		EasterEggs.beginTitle(w, h);
 
 		if (pr.titleBackground == 0) {
 			wallpaper(w, h, mx, my);
@@ -202,6 +203,7 @@ public final class TitleMenu {
 		if (pr.titleParticles > 0 && animations()) {
 			particles(w, h, now, pr.titleParticles, slideIn);
 		}
+		EasterEggs.titleExtras(w, h, now);
 		showcase(x0, w, h, mx, my, t, acc, slideIn);
 		coinsChip(w, mx, my, acc, slideIn);
 		footer(x0, w, h, mx, my, splash, acc, slideIn, pr);
@@ -238,6 +240,8 @@ public final class TitleMenu {
 			// keep pendingAt so init() knows to fade back in
 			TitleActions.run(s, id);
 		}
+		EasterEggs.endTitle();
+		EasterEggs.overlay(w, h);
 		GlStateManager.color(1f, 1f, 1f, 1f);
 		GlStateManager.enableTexture2D();
 		GlStateManager.enableDepth();
@@ -711,7 +715,11 @@ public final class TitleMenu {
 		GlStateManager.enableTexture2D();
 		GlStateManager.enableBlend();
 		GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
-		GlStateManager.color(1f, 1f, 1f, in);
+		if (EasterEggs.goldenBuddy()) {
+			GlStateManager.color(1f, 0.84f, 0.25f, in);
+		} else {
+			GlStateManager.color(1f, 1f, 1f, in);
+		}
 		WorldRenderer r = Tessellator.getInstance().getWorldRenderer();
 		r.begin(7, DefaultVertexFormats.POSITION_TEX);
 		r.pos(x, y + s, 0).tex(u0, v1).endVertex();
@@ -1070,6 +1078,7 @@ public final class TitleMenu {
 				buddyStart = System.currentTimeMillis();
 				buddyBack = 0;
 			}
+			EasterEggs.buddyClicked();
 			return true;
 		}
 		if (mx >= coinX && mx < coinX + coinW && my >= coinY && my < coinY + coinH) {
@@ -1092,6 +1101,7 @@ public final class TitleMenu {
 
 	/** Keys: up/down move through the sidebar, Enter opens, Escape clears, 1-9 open an entry. */
 	public static boolean key(GuiScreen s, char c, int key) {
+		EasterEggs.titleKey(c, key);
 		String[][] it = TitleActions.ITEMS;
 		if (key == 200 || key == 208) { // up / down
 			int dir = key == 200 ? -1 : 1;

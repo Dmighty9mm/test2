@@ -4,11 +4,14 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.culling.ICamera;
 import net.minecraft.client.renderer.entity.Render;
 import net.minecraft.entity.Entity;
 import net.plebmc.client.hud.PlebEntities;
+import net.plebmc.client.hud.PlebPerf;
 
 /** Apollo colored fire: tints the fire on burning players. */
 @Mixin(Render.class)
@@ -27,6 +30,15 @@ public abstract class MixinRender {
 			PlebEntities.nametagBadge(entity, str, half, "deadmau5".equals(str) ? -10 : 0);
 		} catch (Throwable t) {
 			// just the name
+		}
+	}
+
+	/** Entity distance from the Video Settings screen (players are always drawn). */
+	@Inject(method = "shouldRender", at = @At("HEAD"), cancellable = true)
+	private void plebmc$entityDistance(Entity entity, ICamera camera, double camX, double camY, double camZ,
+			CallbackInfoReturnable<Boolean> cir) {
+		if (PlebPerf.cullEntity(entity, camX, camY, camZ)) {
+			cir.setReturnValue(false);
 		}
 	}
 

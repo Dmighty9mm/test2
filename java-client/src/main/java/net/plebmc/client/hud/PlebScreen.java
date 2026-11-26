@@ -315,6 +315,139 @@ public abstract class PlebScreen extends GuiScreen {
 		}
 	}
 
+	/** A value on a track: "Name ....... value [=====o----]". Drag or click to set it. */
+	public class Slider extends W {
+		public String label;
+		public String sub;
+		/** The value now, 0..1. */
+		public java.util.function.DoubleSupplier get;
+		/** Takes a new value 0..1 (while dragging when {@link #live}, else on release). */
+		public java.util.function.DoubleConsumer set;
+		/** The text for a value 0..1. */
+		public java.util.function.DoubleFunction<String> text;
+		/** Steps between 0 and 1 (0 = smooth). */
+		public int steps;
+		public boolean live = true;
+		double drag = -1;
+
+		Slider(String label, String sub, java.util.function.DoubleSupplier get, java.util.function.DoubleConsumer set,
+				java.util.function.DoubleFunction<String> text, int steps) {
+			this.label = label;
+			this.sub = sub;
+			this.get = get;
+			this.set = set;
+			this.text = text;
+			this.steps = steps;
+		}
+
+		int trackW() {
+			return Math.max(40, Math.min(110, w * 2 / 5));
+		}
+
+		int trackX() {
+			return x + w - trackW() - 8;
+		}
+
+		double at(int mx) {
+			double v = (mx - trackX()) / (double) Math.max(1, trackW());
+			v = Math.max(0, Math.min(1, v));
+			return steps > 0 ? Math.round(v * steps) / (double) steps : v;
+		}
+
+		double value() {
+			return drag >= 0 ? drag : Math.max(0, Math.min(1, get.getAsDouble()));
+		}
+
+		@Override
+		void draw(int mx, int my) {
+			Ui.round(x, y, w, h, Ui.mix(Ui.RAISED, Ui.HOVER, drag >= 0 ? 1f : hover));
+			double v = value();
+			String vt = text.apply(v);
+			int tw = trackW(), tx = trackX();
+			int ty = sub == null ? y + (h - 8) / 2 : y + (h - 18) / 2;
+			int vw = Ui.width(vt);
+			int room = tx - 10 - vw - (x + 8);
+			Ui.text(Ui.fit(label, Math.max(20, room)), x + 8, ty, enabled ? Ui.TEXT : Ui.FAINT);
+			if (sub != null) {
+				Ui.text(Ui.fit(sub, Math.max(20, room)), x + 8, ty + 10, Ui.FAINT);
+			}
+			Ui.text(vt, tx - 8 - vw, y + (h - 8) / 2, enabled ? Ui.accent() : Ui.FAINT);
+			int cy = y + h / 2;
+			Ui.round(tx, cy - 2, tw, 4, 0xFF2A333C);
+			int fx = Math.round((float) (tw * v));
+			if (fx > 0) {
+				Ui.round(tx, cy - 2, fx, 4, enabled ? Ui.accent() : 0xFF59636B);
+			}
+			int kx = tx + fx - 3;
+			Ui.round(kx, cy - 5, 6, 10, enabled ? Ui.mix(0xFFE6EEF2, 0xFFFFFFFF, hover) : 0xFF59636B);
+		}
+
+		@Override
+		void click(int mx, int my, int button) {
+			if (button != 0) {
+				return;
+			}
+			dragging = this;
+			drag = at(mx);
+			if (live) {
+				set.accept(drag);
+			}
+		}
+
+		void dragTo(int mx) {
+			double v = at(mx);
+			if (v != drag) {
+				drag = v;
+				if (live) {
+					set.accept(v);
+				}
+			}
+		}
+
+		void release() {
+			if (drag >= 0) {
+				double v = drag;
+				drag = -1;
+				set.accept(v);
+				PlebScreen.this.click();
+			}
+		}
+
+		@Override
+		boolean clickSound() {
+			return false;
+		}
+	}
+
+	/** The slider being dragged. */
+	private Slider dragging;
+
+	protected Slider slider(String label, String sub, int x, int y, int w, int h, java.util.function.DoubleSupplier get,
+			java.util.function.DoubleConsumer set, java.util.function.DoubleFunction<String> text, int steps) {
+		Slider s = new Slider(label, sub, get, set, text, steps);
+		s.at(x, y, w, h);
+		widgets.add(s);
+		return s;
+	}
+
+	@Override
+	protected void mouseClickMove(int mx, int my, int button, long held) {
+		super.mouseClickMove(mx, my, button, held);
+		if (dragging != null) {
+			dragging.dragTo(mx);
+		}
+	}
+
+	@Override
+	protected void mouseReleased(int mx, int my, int state) {
+		super.mouseReleased(mx, my, state);
+		if (dragging != null) {
+			Slider s = dragging;
+			dragging = null;
+			s.release();
+		}
+	}
+
 	protected Button button(String label, int x, int y, int w, int h, Runnable action) {
 		Button b = new Button(label, action);
 		b.at(x, y, w, h);
@@ -457,6 +590,12 @@ public abstract class PlebScreen extends GuiScreen {
 		if (tooltip != null) {
 			drawTooltip(tooltip, mx, my);
 		}
+		EasterEggs.overlay(this.width, this.height);
+	}
+
+	/** The widget under the mouse, or null. */
+	protected W hovered() {
+		return hit(mouseX, mouseY);
 	}
 
 	/** Drawn above the widgets (popups, drag previews). */

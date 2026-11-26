@@ -42,12 +42,18 @@ public abstract class MixinFontRenderer {
 
 	@ModifyVariable(method = "renderString", at = @At("HEAD"), argsOnly = true, ordinal = 0)
 	private String plebmc$nickDraw(String text) {
-		return PlebClient.filterText(text);
+		return net.plebmc.client.text.ModernText.fold(PlebClient.filterText(text));
 	}
 
 	@ModifyVariable(method = "getStringWidth", at = @At("HEAD"), argsOnly = true, ordinal = 0)
 	private String plebmc$nickWidth(String text) {
-		return PlebClient.filterText(text);
+		return net.plebmc.client.text.ModernText.fold(PlebClient.filterText(text));
+	}
+
+	/** Newer small caps letters measure (and draw) as the font's capitals. */
+	@ModifyVariable(method = "getCharWidth", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private char plebmc$modernWidth(char c) {
+		return net.plebmc.client.text.ModernText.fold(c);
 	}
 
 	/**

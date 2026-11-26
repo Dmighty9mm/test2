@@ -105,11 +105,18 @@ public final class PlebColors extends JavaPlugin implements Listener {
 				// not in this ProtocolLib / Minecraft version
 			}
 		}
+		try {
+			// answers PlebClient on its channel, so the client can show the colors are working
+			Bukkit.getMessenger().registerOutgoingPluginChannel(this, CHANNEL);
+		} catch (Throwable t) {
+			getLogger().warning("PlebColors: can't answer on " + CHANNEL + ": " + t);
+		}
 		Bukkit.getPluginManager().registerEvents(this, this);
 		ProtocolLibrary.getProtocolManager().addPacketListener(new Rewriter(types));
 		for (Player p : Bukkit.getOnlinePlayers()) {
 			if (p.getListeningPluginChannels().contains(CHANNEL)) {
 				rgbPlayers.add(p.getUniqueId());
+				hello(p);
 			}
 		}
 		getLogger().info("PlebColors: keeping hex colors for PlebClient players (" + types.size() + " packet types)");
@@ -148,7 +155,21 @@ public final class PlebColors extends JavaPlugin implements Listener {
 			return;
 		}
 		// one tick later, so the registration is done before we resend
-		Bukkit.getScheduler().runTaskLater(this, () -> catchUp(p), 1L);
+		Bukkit.getScheduler().runTaskLater(this, () -> {
+			hello(p);
+			catchUp(p);
+		}, 1L);
+	}
+
+	/** Tells the client hex colors are on for it ("1" plus this plugin's version). */
+	private void hello(Player p) {
+		try {
+			if (p.isOnline()) {
+				p.sendPluginMessage(this, CHANNEL, "1 PlebColors".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			}
+		} catch (Throwable t) {
+			// an older client just ignores it
+		}
 	}
 
 	/** Sends again what this player got before we knew it was PlebClient. */

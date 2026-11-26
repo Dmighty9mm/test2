@@ -66,6 +66,9 @@ public abstract class Render<T extends Entity> {
 		if (DeferredStateManager.isEnableShadowRender()) {
 			return true;
 		}
+		if (net.plebmc.client.hud.PlebPerf.cullEntity(livingEntity, camX, camY, camZ)) {
+			return false;
+		}
 		AxisAlignedBB axisalignedbb = livingEntity.getEntityBoundingBox();
 		if (axisalignedbb.func_181656_b() || axisalignedbb.getAverageEdgeLength() == 0.0D) {
 			axisalignedbb = new AxisAlignedBB(livingEntity.posX - 2.0D, livingEntity.posY - 2.0D,

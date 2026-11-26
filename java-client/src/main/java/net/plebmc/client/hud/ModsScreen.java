@@ -208,6 +208,7 @@ public final class ModsScreen extends PlebScreen {
 	protected void typed() {
 		if (search.getText().trim().equalsIgnoreCase(SECRET)) {
 			search.setText("");
+			EasterEggs.found("fpslarp", "FPS Larp unlocked", "Big numbers, zero effort");
 			this.mc.displayGuiScreen(new FpsLarpScreen(this));
 			return;
 		}

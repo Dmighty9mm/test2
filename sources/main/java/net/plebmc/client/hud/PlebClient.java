@@ -103,6 +103,7 @@ public final class PlebClient {
 			PluginChannels.register("plebmc:rgb", new PluginChannels.Handler() {
 				@Override
 				public void onMessage(String channel, byte[] data) {
+					rgbServer = true; // PlebColors answered: this server sends true colors
 				}
 			});
 			// saved PlebMc account sign-ins (tokens, never passwords) live in the browser's storage
@@ -319,6 +320,7 @@ public final class PlebClient {
 
 	/** Disconnect or world unload: drop all per-connection state. */
 	public static void onLeave() {
+		rgbServer = false;
 		ItemNbtWatch.reset();
 		if (mc != null && PluginChannels.isJoined()) {
 			PluginChannels.reset();
@@ -328,10 +330,14 @@ public final class PlebClient {
 	// ==================== input ====================
 
 	/** A key press in game with no screen open; true = consumed here. */
+	/** The server's PlebColors plugin said it sends hex colors and gradients to this client. */
+	static boolean rgbServer;
+
 	public static boolean onKeyDown(int key) {
 		if (mc == null || mc.currentScreen != null || mc.theWorld == null) {
 			return false;
 		}
+		EasterEggs.gameKey(key);
 		if (key == KEY_RSHIFT) {
 			mc.displayGuiScreen(shiftScreen());
 			return true;
@@ -384,6 +390,29 @@ public final class PlebClient {
 	}
 
 	/** EntityRenderer: may the built-in zoom key (C) zoom right now? */
+	/**
+	 * Minecraft.displayGuiScreen: swaps Minecraft's video settings for the
+	 * PlebClient one (unless the player turned that off or asked for the old one).
+	 */
+	public static net.minecraft.client.gui.GuiScreen swapScreen(net.minecraft.client.gui.GuiScreen s) {
+		if (mc == null || !VideoCompat.isVanilla(s)) {
+			return s;
+		}
+		if (VideoOptionsScreen.openVanilla) {
+			VideoOptionsScreen.openVanilla = false;
+			return s;
+		}
+		if (!ClientPrefs.get().videoMenu) {
+			return s;
+		}
+		try {
+			return new VideoOptionsScreen(mc.currentScreen);
+		} catch (Throwable t) {
+			LOG.warn("video settings failed: " + t);
+			return s;
+		}
+	}
+
 	public static boolean zoomAllowed(boolean keyDown) {
 		return keyDown && mods.zoom.isActive();
 	}
@@ -512,6 +541,9 @@ public final class PlebClient {
 		}
 		try {
 			VoteAlert.render(guiW, guiH);
+			if (!(mc.currentScreen instanceof PlebScreen)) {
+				EasterEggs.overlay(guiW, guiH);
+			}
 		} catch (Throwable t) {
 			LOG.warn("vote alert failed: " + t);
 		}

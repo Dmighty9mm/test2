@@ -320,12 +320,37 @@
         const { out, ms } = await loadGif(files[0]);
         if (out.length > 1) { S.source = 'frames'; S.art = out; S.artMs = ms; }
         else { S.source = 'still'; S.art = out; S.artMs = []; }
-      } else if (files.length === 1) { S.source = 'still'; S.art = [await loadImage(files[0])]; S.artMs = []; }
+      } else if (files.length === 1) {
+        const im = await loadImage(files[0]), ready = asCapeTexture(im);
+        if (ready) {
+          // already a cape texture (front, back and edges laid out): use it as it is instead of squeezing it onto the back
+          S.source = 'sheet'; S.sheet = [ready]; S.art = []; S.artMs = [];
+          markEffects(); syncMotion(); rebuild();
+          toast('That image is already a cape texture, so it is used as it is. To put a picture on the back instead, use one that is not 2:1.', 'ok');
+          return;
+        }
+        S.source = 'still'; S.art = [im]; S.artMs = [];
+      }
       else { S.source = 'frames'; S.art = []; for (const f of files.slice(0, MAX_FRAMES)) S.art.push(await loadImage(f)); S.artMs = []; }
       if (!$('toast').classList.contains('warn')) toast(S.source === 'frames' ? `${S.art.length} frames loaded.` : 'Image loaded. Pick an overlay in step 2 to animate it.', 'ok');
       S.sheet = [];
       markEffects(); syncMotion(); schedule();
     } catch (e) { toast('Could not read that file: ' + (e && e.message || e), 'err'); }
+  }
+  /**
+   * A canvas in the 64x32 cape layout when the image already is a cape texture: a full 2:1 sheet
+   * (64x32, 128x64 ...) or just the cape part (22x17, or any size that shape). Otherwise null.
+   */
+  function asCapeTexture(im) {
+    const w = im.width, h = im.height;
+    if (w >= 64 && w % 64 === 0 && h * 2 === w) {
+      const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(im, 0, 0); return c;
+    }
+    if (w >= 22 && Math.abs(w / h - 22 / 17) < 0.02) {
+      const u = Math.max(1, Math.round(w / 22)), c = document.createElement('canvas'); c.width = 64 * u; c.height = 32 * u;
+      const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(im, 0, 0, 22 * u, 17 * u); return c;
+    }
+    return null;
   }
   const drop = $('drop');
   drop.addEventListener('click', () => $('file').click());

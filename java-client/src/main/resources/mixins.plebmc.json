@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_8",
   "client": [
     "MixinArmorStandRenderer",
+    "MixinEffectRenderer",
     "MixinEntityPlayerSP",
     "MixinEntityRenderer",
     "MixinEnumChatFormatting",
@@ -27,6 +28,7 @@
     "MixinRenderPlayer",
     "MixinRenderTNTPrimed",
     "MixinRendererLivingEntity",
-    "MixinS3FPacketCustomPayload"
+    "MixinS3FPacketCustomPayload",
+    "MixinTileEntityRendererDispatcher"
   ]
 }

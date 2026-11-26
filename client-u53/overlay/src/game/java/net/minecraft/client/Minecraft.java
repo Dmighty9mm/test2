@@ -742,6 +742,7 @@ public class Minecraft implements IThreadListener {
 	 * screen.
 	 */
 	public void displayGuiScreen(GuiScreen guiScreenIn) {
+		guiScreenIn = net.plebmc.client.hud.PlebClient.swapScreen(guiScreenIn);
 		if (this.currentScreen != null) {
 			this.currentScreen.onGuiClosed();
 		}
@@ -933,7 +934,8 @@ public class Minecraft implements IThreadListener {
 		} else {
 			this.gameSettings.enableVsync = false;
 		}
-		if (!this.gameSettings.enableVsync && this.isFramerateLimitBelowMax()) {
+		if ((!this.gameSettings.enableVsync || net.plebmc.client.hud.PlebPerf.idleCapped())
+				&& this.isFramerateLimitBelowMax()) {
 			Display.update(this.getLimitFramerate());
 		} else {
 			Display.update(0);
@@ -967,7 +969,8 @@ public class Minecraft implements IThreadListener {
 	}
 
 	public int getLimitFramerate() {
-		return this.theWorld == null && this.currentScreen != null ? 30 : this.gameSettings.limitFramerate;
+		return net.plebmc.client.hud.PlebPerf.frameLimit(this.gameSettings.limitFramerate,
+				this.theWorld == null && this.currentScreen != null, Display.isActive());
 	}
 
 	public boolean isFramerateLimitBelowMax() {

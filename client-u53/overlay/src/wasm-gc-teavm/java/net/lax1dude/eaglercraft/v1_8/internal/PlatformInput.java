@@ -669,7 +669,7 @@ public class PlatformInput {
 			PlatformScreenRecord.captureFrameHook();
 		}
 		
-		updatePlatformAndSleep(fpsLimit, vsync && vsyncSupport, finish);
+		updatePlatformAndSleep(fpsLimit, vsync && vsyncSupport && (fpsLimit <= 0 || fpsLimit > 1000), finish);
 		PlatformRuntime.pollJSEventsAfterSleep();
 	}
 

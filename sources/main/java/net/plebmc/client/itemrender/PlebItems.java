@@ -229,6 +229,22 @@ public final class PlebItems {
 		}
 	}
 
+	/**
+	 * True when this stack draws a custom model (a gun on a crossbow, say), so
+	 * the bow's pull-back animation and pulling models stay off it.
+	 */
+	public static boolean isCustom(ItemStack stack) {
+		if (stack == null || stack.getTagCompound() == null || !enabled()) {
+			return false;
+		}
+		try {
+			Hit h = hit(stack, Minecraft.getMinecraft().getRenderItem().getItemModelMesher().getModelManager());
+			return h != null && h.model != null;
+		} catch (Throwable t) {
+			return false;
+		}
+	}
+
 	/** LayerArmorBase: netherite armor (Via turns it into diamond armor) gets its own texture. */
 	public static ResourceLocation armorTexture(ItemStack stack, boolean legs, ResourceLocation normal) {
 		if (stack == null || stack.getTagCompound() == null || !enabled()) {

@@ -110,6 +110,83 @@ public final class ClientPrefs {
 	/** Hide "Armor Stand" labels and stray armor stand bodies on holograms. */
 	public boolean cleanHolograms = true;
 
+	// ---- video and performance ----
+	/** Video Settings opens the PlebClient video screen (pages, sliders, descriptions) instead of Minecraft's list. */
+	public boolean videoMenu = true;
+	public static final String[] ENTITY_DISTANCES = { "Unlimited", "96 blocks", "64 blocks", "48 blocks", "32 blocks" };
+	static final int[] ENTITY_BLOCKS = { 0, 96, 64, 48, 32 };
+	/** Mobs, items and other entities past this aren't drawn (players always are). */
+	public int entityDistance;
+	public static final String[] BLOCK_ENTITY_DISTANCES = { "Unlimited", "48 blocks", "32 blocks", "24 blocks", "16 blocks" };
+	static final int[] BLOCK_ENTITY_BLOCKS = { 0, 48, 32, 24, 16 };
+	/** Chests, signs, banners and heads past this aren't drawn (beacons always are). */
+	public int blockEntityDistance;
+	public static final String[] PARTICLE_CAPS = { "4000 (vanilla)", "2000", "1000", "400", "100" };
+	static final int[] PARTICLE_COUNTS = { 4000, 2000, 1000, 400, 100 };
+	/** Most particles of one kind alive at once; extra ones push out the oldest. */
+	public int maxParticles;
+	public static final String[] MENU_FPS = { "30 (vanilla)", "60", "Same as in game" };
+	/** Frame cap on the title screen and menus outside a world. */
+	public int menuFps;
+	public static final String[] IDLE_FPS = { "Off", "30", "15", "5" };
+	static final int[] IDLE_FPS_VALUES = { 0, 30, 15, 5 };
+	/** Frame cap while the game window isn't focused. */
+	public int idleFps = 1;
+
+	/** Entity draw distance in blocks (0 = unlimited). */
+	public int entityBlocks() {
+		return ENTITY_BLOCKS[clamp(entityDistance, ENTITY_BLOCKS.length)];
+	}
+
+	/** Block entity draw distance in blocks (0 = unlimited). */
+	public int blockEntityBlocks() {
+		return BLOCK_ENTITY_BLOCKS[clamp(blockEntityDistance, BLOCK_ENTITY_BLOCKS.length)];
+	}
+
+	public int particleCap() {
+		return PARTICLE_COUNTS[clamp(maxParticles, PARTICLE_COUNTS.length)];
+	}
+
+	/** The frame cap for menus outside a world, given the in-game cap. */
+	public int menuFpsCap(int game) {
+		switch (clamp(menuFps, MENU_FPS.length)) {
+		case 1:
+			return Math.min(game, 60);
+		case 2:
+			return game;
+		default:
+			return 30;
+		}
+	}
+
+	/** The frame cap while the window isn't focused (0 = none). */
+	public int idleFpsCap() {
+		return IDLE_FPS_VALUES[clamp(idleFps, IDLE_FPS_VALUES.length)];
+	}
+
+	// ---- secrets ----
+	/** The menus cycle through every accent color (a secret). */
+	public boolean rainbowAccent;
+	/** Ids of the easter eggs found, comma separated. */
+	public String secrets = "";
+
+	public boolean hasSecret(String id) {
+		return ("," + secrets + ",").contains("," + id + ",");
+	}
+
+	/** Records a found easter egg; true the first time. */
+	public boolean addSecret(String id) {
+		if (id == null || id.isEmpty() || id.contains(",") || hasSecret(id)) {
+			return false;
+		}
+		secrets = secrets.isEmpty() ? id : secrets + "," + id;
+		return true;
+	}
+
+	public int secretCount() {
+		return secrets.isEmpty() ? 0 : secrets.split(",").length;
+	}
+
 	// ---- developer ----
 	/** Shows Apollo debug in the launcher. */
 	public boolean developer;
@@ -162,6 +239,13 @@ public final class ClientPrefs {
 		rgbText = d.rgbText;
 		cleanHolograms = d.cleanHolograms;
 		developer = d.developer;
+		videoMenu = d.videoMenu;
+		entityDistance = d.entityDistance;
+		blockEntityDistance = d.blockEntityDistance;
+		maxParticles = d.maxParticles;
+		menuFps = d.menuFps;
+		idleFps = d.idleFps;
+		rainbowAccent = d.rainbowAccent;
 		itemNbtLog = d.itemNbtLog;
 		customItemModels = d.customItemModels;
 	}
@@ -205,6 +289,15 @@ public final class ClientPrefs {
 		rgbText = ProtoValues.asBool(m.get("rgbText"), rgbText);
 		cleanHolograms = ProtoValues.asBool(m.get("cleanHolograms"), cleanHolograms);
 		developer = ProtoValues.asBool(m.get("developer"), developer);
+		videoMenu = ProtoValues.asBool(m.get("videoMenu"), videoMenu);
+		entityDistance = idx(m.get("entityDistance"), entityDistance, ENTITY_DISTANCES.length);
+		blockEntityDistance = idx(m.get("blockEntityDistance"), blockEntityDistance, BLOCK_ENTITY_DISTANCES.length);
+		maxParticles = idx(m.get("maxParticles"), maxParticles, PARTICLE_CAPS.length);
+		menuFps = idx(m.get("menuFps"), menuFps, MENU_FPS.length);
+		idleFps = idx(m.get("idleFps"), idleFps, IDLE_FPS.length);
+		rainbowAccent = ProtoValues.asBool(m.get("rainbow"), rainbowAccent);
+		Object sec = m.get("secrets");
+		secrets = sec instanceof String && ((String) sec).matches("[a-z0-9,]{0,200}") ? (String) sec : secrets;
 		itemNbtLog = ProtoValues.asBool(m.get("itemNbtLog"), itemNbtLog);
 		customItemModels = ProtoValues.asBool(m.get("customItems"), customItemModels);
 	}
@@ -235,6 +328,14 @@ public final class ClientPrefs {
 		m.put("rgbText", rgbText);
 		m.put("cleanHolograms", cleanHolograms);
 		m.put("developer", developer);
+		m.put("videoMenu", videoMenu);
+		m.put("entityDistance", (double) entityDistance);
+		m.put("blockEntityDistance", (double) blockEntityDistance);
+		m.put("maxParticles", (double) maxParticles);
+		m.put("menuFps", (double) menuFps);
+		m.put("idleFps", (double) idleFps);
+		m.put("rainbow", rainbowAccent);
+		m.put("secrets", secrets);
 		m.put("itemNbtLog", itemNbtLog);
 		m.put("customItems", customItemModels);
 		return Json.write(m);
