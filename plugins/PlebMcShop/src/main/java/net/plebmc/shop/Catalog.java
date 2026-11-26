@@ -14,7 +14,9 @@ final class Catalog {
 	/** Trails were taken out of the shop; trail items in an old config are skipped with a warning. */
 	static final String TRAIL = "trail";
 	static final String CLOAK = "cloak";
-	static final List<String> CATEGORIES = Collections.unmodifiableList(java.util.Arrays.asList(HAT, CLOAK));
+	/** Wings on the back: built-in ones, or a Blockbench model of the right wing (the client mirrors and flaps it). */
+	static final String WINGS = "wings";
+	static final List<String> CATEGORIES = Collections.unmodifiableList(java.util.Arrays.asList(HAT, CLOAK, WINGS));
 
 	/** Shop collections (tabs in the client's shop): PlebMc by default, Partners for partner-made cosmetics. */
 	static final String MAIN = "plebmc";
@@ -67,7 +69,10 @@ final class Catalog {
 	static final List<String> HAT_RENDERS = Collections.unmodifiableList(java.util.Arrays.asList("tophat", "crown",
 			"halo", "partyhat", "beanie", "horns", "cap", "headphones", "bunny", "wizard", "viking", "cowboy",
 			"propeller", "chef"));
-	/** A hat drawn from a model file (Blockbench) in the plugin folder. */
+	/** Built-in wings the PlebMc client can draw. */
+	static final List<String> WING_RENDERS = Collections.unmodifiableList(java.util.Arrays.asList("angel", "demon",
+			"dragon", "butterfly", "bat"));
+	/** A hat or wings drawn from a model file (Blockbench) in the plugin folder. */
 	static final String MODEL = "model";
 
 	static final class Item {
@@ -182,17 +187,18 @@ final class Catalog {
 				continue;
 			}
 			if (!isCategory(category)) {
-				warnings.add("item " + id + ": category must be hat or cloak");
+				warnings.add("item " + id + ": category must be hat, cloak or wings");
 				continue;
 			}
-			if (modelPath != null && !HAT.equals(category)) {
-				warnings.add("item " + id + ": only hats can use a model, ignoring it");
+			if (modelPath != null && CLOAK.equals(category)) {
+				warnings.add("item " + id + ": only hats and wings can use a model, ignoring it");
 				modelPath = null;
 			}
 			if (modelPath != null) {
 				render = MODEL;
 			}
-			List<String> renders = HAT.equals(category) ? HAT_RENDERS : Collections.singletonList(CLOAK);
+			List<String> renders = HAT.equals(category) ? HAT_RENDERS : WINGS.equals(category) ? WING_RENDERS
+					: Collections.singletonList(CLOAK);
 			if (!renders.contains(render) && !(MODEL.equals(render) && modelPath != null)) {
 				warnings.add("item " + id + ": unknown " + category + " render '" + render + "' (use one of " + renders
 						+ ")");
@@ -349,7 +355,7 @@ final class Catalog {
 				return "model " + path + " is bigger than 8 MB";
 			}
 			HatModel.Placement place = new HatModel.Placement();
-			place.mode = s.str("position", "auto");
+			place.mode = s.str("position", WINGS.equals(it.category) ? "model" : "auto");
 			place.scale = (float) s.dbl("scale", 1.0);
 			List<String> off = s.list("offset");
 			if (off.size() == 3) {

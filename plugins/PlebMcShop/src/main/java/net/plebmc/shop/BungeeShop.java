@@ -546,6 +546,15 @@ public final class BungeeShop extends Plugin implements Listener {
 		}
 		case "signout":
 			return signin.signOutName(target) ? "signed out in game" : "not online";
+		case "coinsall": {
+			long n;
+			try {
+				n = args.isEmpty() ? -1 : Long.parseLong(args.get(0));
+			} catch (NumberFormatException e) {
+				n = -1;
+			}
+			return n <= 0 ? "!bad amount" : "gave " + n + " to " + core.giveOnline(n) + " players online";
+		}
 		case "broadcast":
 			return args.isEmpty() ? "!empty message" : "sent to " + core.announce(args.get(0)) + " players";
 		case "additem": {

@@ -252,7 +252,7 @@ public class ShopTest {
                 "questCategories: " + cats);
         Map<?, ?> withCatalog = null;
         for (Map<?, ?> m : mighty.got) if (m.containsKey("catalog")) withCatalog = m;
-        check(withCatalog != null && ((List<?>) withCatalog.get("catalog")).size() == 28, "catalog has 28 items");
+        check(withCatalog != null && ((List<?>) withCatalog.get("catalog")).size() == 34, "catalog has 34 items (6 wings)");
         List<?> cols = (List<?>) withCatalog.get("collections");
         check(cols != null && cols.size() == 2 && "plebmc".equals(((Map<?, ?>) cols.get(0)).get("id"))
                 && "Partners".equals(((Map<?, ?>) cols.get(1)).get("name")), "collections sent: " + cols);
@@ -362,7 +362,8 @@ public class ShopTest {
         sleepCooldown();
         core.fromClient(mighty.id, "{\"type\":\"equip\",\"category\":\"hat\",\"id\":null}");
         Map<?, ?> pm = (Map<?, ?>) poor.last("players").get("players");
-        check(pm.containsKey(mighty.id.toString()) && pm.get(mighty.id.toString()) == null, "take off sends null");
+        Map<?, ?> off = (Map<?, ?>) pm.get(mighty.id.toString());
+        check(off != null && !off.containsKey("hat") && "1".equals(off.get("pleb")), "take off clears the hat, keeps the Pleb head mark");
         sleepCooldown();
         core.fromClient(poor.id, "{\"type\":\"equip\",\"category\":\"hat\",\"id\":\"horns\"}");
         check(Boolean.FALSE.equals(poor.last("result").get("ok")), "can't equip what you don't own");
@@ -491,7 +492,14 @@ public class ShopTest {
         check(core.tabComplete(new String[] { "progress", "Mighty", "ch" }).contains("chat"), "tab complete chat");
         admin.clear();
         cmd("quests");
-        check(admin.size() == 1 + 17 && admin.get(1).contains("general"), "quests command lists categories");
+        check(admin.size() >= 1 + 17 && admin.get(1).contains("general") && admin.stream().anyMatch(l -> l.contains("counts for quests")), "quests command lists categories and servers");
+        long poorBefore = poor.coins();
+        admin.clear();
+        cmd("coins", "online", "250");
+        check(poor.coins() == poorBefore + 250 && admin.get(0).contains("players online"), "coins online gives everyone online: " + admin);
+        admin.clear();
+        cmd("coins", "online", "-5");
+        check(poor.coins() == poorBefore + 250 && admin.get(0).contains("Usage"), "coins online needs a positive amount");
         admin.clear();
         core.command(new ShopCore.Sender() {
             public void reply(String line) { admin.add(line); }
@@ -503,7 +511,8 @@ public class ShopTest {
         core.load(cfg("hidden-in-worlds: []", "hidden-in-worlds: ['lobby:arena1']"));
         core.world(poor.id, "arena1");
         pm = (Map<?, ?>) mighty.last("players").get("players");
-        check(pm.containsKey(poor.id.toString()) && pm.get(poor.id.toString()) == null, "hidden in lobby:arena1");
+        Map<?, ?> hid = (Map<?, ?>) pm.get(poor.id.toString());
+        check(hid != null && hid.size() == 1 && "1".equals(hid.get("pleb")), "hidden in lobby:arena1 (only the Pleb head mark)");
         core.world(poor.id, "spawn");
         pm = (Map<?, ?>) mighty.last("players").get("players");
         check(pm.get(poor.id.toString()) != null, "shown again outside");

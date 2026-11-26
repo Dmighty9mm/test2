@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -46,15 +47,46 @@ final class Quests {
 			this.servers = servers;
 		}
 
-		/** True for '*' (every server) or a listed server. A null server (the login) only matches '*'. */
+		/**
+		 * True for '*' (every server) or a listed server. A listed name also covers
+		 * servers named after it ('plebnite' covers plebnite-1, PlebNite2, plebnite_eu),
+		 * and '*' inside a name is a wildcard ('pn*'). A null server (the login) only matches '*'.
+		 */
 		boolean covers(String server) {
 			for (String s : servers) {
-				if (s.equals("*") || (server != null && s.equalsIgnoreCase(server))) {
+				if (s.equals("*")) {
+					return true;
+				}
+				if (server != null && matches(s.trim().toLowerCase(Locale.ROOT), server.toLowerCase(Locale.ROOT))) {
 					return true;
 				}
 			}
 			return false;
 		}
+	}
+
+	/** 'plebnite' matches plebnite, plebnite-1, plebnite2 (not plebnitefoo); '*' is a wildcard. */
+	static boolean matches(String pattern, String server) {
+		if (pattern.isEmpty()) {
+			return false;
+		}
+		if (pattern.contains("*")) {
+			StringBuilder re = new StringBuilder();
+			for (String part : pattern.split("\\*", -1)) {
+				re.append(java.util.regex.Pattern.quote(part)).append(".*");
+			}
+			re.setLength(re.length() - 2);
+			return server.matches(re.toString());
+		}
+		if (server.equals(pattern)) {
+			return true;
+		}
+		// a numbered or suffixed copy: plebnite-1, plebnite_2, plebnite3, plebnite.eu
+		if (server.startsWith(pattern)) {
+			char c = server.charAt(pattern.length());
+			return !Character.isLetter(c);
+		}
+		return false;
 	}
 
 	static final class Quest {

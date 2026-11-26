@@ -129,6 +129,13 @@ public class QuestsTest {
         long paid = 0;
         for (int i = 0; i < 45; i++) paid += q.minute(m);
         check(paid == 30 && m.coins == 30, "10 coins per 15 minutes: " + paid);
+        // server names: copies of a listed server count too, other names don't
+        check(Quests.matches("plebnite", "plebnite"), "exact server name");
+        check(Quests.matches("plebnite", "plebnite-1") && Quests.matches("plebnite", "plebnite2") && Quests.matches("plebnite", "plebnite_eu"),
+                "numbered copies count");
+        check(!Quests.matches("plebnite", "plebnitefoo") && !Quests.matches("plebnite", "lobby"), "other servers don't");
+        check(Quests.matches("pn*", "pn-game3") && !Quests.matches("pn*", "lobby"), "wildcards");
+        check(!Quests.matches("", "lobby"), "empty pattern");
         System.out.println(checks - failed + "/" + checks + " quest checks passed");
         return failed;
     }

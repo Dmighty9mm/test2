@@ -288,7 +288,14 @@ final class ShopCore {
 
 	/** Quest progress from a backend server (the bridge plugin) or a command. */
 	synchronized void progress(UUID p, String server, String type, long amount) {
+		if (server != null && !"play".equals(type) && !"chat".equals(type)) {
+			bridgeSeen.put(server.toLowerCase(Locale.ROOT), net.now());
+		}
 		if (server == null || !quests.counts(server)) {
+			if (server != null && uncoveredWarned.add(server.toLowerCase(Locale.ROOT)) && log != null) {
+				log.warning("Quest events from server '" + server + "' don't count: no quest category lists it. Add '" + server
+						+ "' to quests.categories.<category>.servers in config.yml and run /pleb reload.");
+			}
 			return; // a server no quest category covers: nothing counts there
 		}
 		if (!earns(p)) {
@@ -304,6 +311,9 @@ final class ShopCore {
 	}
 
 	private final Map<UUID, Long> lastChat = new HashMap<>();
+	/** When each server last sent a quest event (kill, match, win...) through PlebMcBridge or /plebquest. */
+	final Map<String, Long> bridgeSeen = new java.util.TreeMap<>();
+	private final java.util.Set<String> uncoveredWarned = new java.util.HashSet<>();
 
 	/** A chat message (not a command). Counts for "chat" quests at most once every 10 seconds, so spam doesn't. */
 	synchronized void chat(UUID p) {
@@ -372,6 +382,9 @@ final class ShopCore {
 		}
 		String type = String.valueOf(m.get("type"));
 		boolean first = clients.add(p);
+		if (first) {
+			broadcastSlots(p); // everyone here now sees the Pleb head by this player's name
+		}
 		if ("signin".equals(type) || "signout".equals(type)) {
 			// PlebMc account sign-in (SignIn); answered off-thread
 			if (signin != null) {
@@ -890,10 +903,10 @@ final class ShopCore {
 	}
 
 	private Object visibleSlots(UUID p) {
-		if (hidden(p)) {
-			return null;
+		Map<String, Object> s = hidden(p) ? new LinkedHashMap<>() : slots(store.peek(p));
+		if (clients.contains(p)) {
+			s.put("pleb", "1"); // plays on PlebClient: others draw the Pleb head by their name
 		}
-		Map<String, Object> s = slots(store.peek(p));
 		return s.isEmpty() ? null : s;
 	}
 
@@ -943,6 +956,31 @@ final class ShopCore {
 	}
 
 	/** An announcement to everyone online (a popup on the PlebMc client, chat elsewhere). Returns how many got it. */
+	/**
+	 * Gives coins to everyone online right now (who can earn: PlebMc client players when
+	 * plebclient-only is on). Returns how many got them.
+	 */
+	synchronized int giveOnline(long n) {
+		int got = 0;
+		for (UUID o : net.online()) {
+			if (!earns(o)) {
+				continue;
+			}
+			Store.Data d = store.get(o);
+			d.coins += n;
+			got++;
+			if (clients.contains(o)) {
+				notify(o, color(config.str("admin-menu.gift-title", "&6&lGift")), "+" + fmt(n) + " " + currency + " for everyone online!");
+				sendState(o, false);
+			} else {
+				net.chat(o, prefix + color("&e+" + fmt(n) + " " + currency + " for everyone online!"));
+			}
+		}
+		store.changed();
+		store.save();
+		return got;
+	}
+
 	synchronized int announce(String text) {
 		text = text.length() > 200 ? text.substring(0, 200) : text;
 		String title = color(config.str("admin-menu.broadcast-title", "&b&lAnnouncement"));
@@ -977,8 +1015,8 @@ final class ShopCore {
 		if (id == null || !ITEM_ID.matcher(id).matches()) {
 			return "!bad item id";
 		}
-		if (!"hat".equals(category) && !"cloak".equals(category)) {
-			return "!only hats and cloaks can be published";
+		if (!Catalog.isCategory(category)) {
+			return "!only hats, cloaks and wings can be published";
 		}
 		if (catalog.get(id) != null) {
 			return "!the shop already has " + id;
@@ -989,7 +1027,8 @@ final class ShopCore {
 		if (file == null || file.length == 0 || file.length > 8 << 20) {
 			return "!the file is empty or over 8 MB";
 		}
-		String rel = "cloak".equals(category) ? "cloaks/" + id + ".png" : "hats/" + id + ".bbmodel";
+		String rel = "cloak".equals(category) ? "cloaks/" + id + ".png"
+				: "wings".equals(category) ? "wings/" + id + ".bbmodel" : "hats/" + id + ".bbmodel";
 		java.io.File out = new java.io.File(folder, rel);
 		java.io.File cfgFile = new java.io.File(folder, "config.yml");
 		if (out.exists()) {
@@ -1161,6 +1200,22 @@ final class ShopCore {
 				s.reply(color("&7- &f" + q.id + " &8(" + q.category + " " + q.period + ", " + q.type + " x" + q.goal
 						+ ") &e+" + fmt(q.reward)));
 			}
+			// where quests count, and whether backends are sending events
+			java.util.Set<String> servers = new java.util.TreeSet<>(bridgeSeen.keySet());
+			for (UUID o : net.online()) {
+				if (net.server(o) != null) {
+					servers.add(net.server(o).toLowerCase(Locale.ROOT));
+				}
+			}
+			for (String sv : servers) {
+				Long seen = bridgeSeen.get(sv);
+				s.reply(color("&7Server &f" + sv + "&7: " + (quests.counts(sv) ? "&acounts for quests" : "&cin no quest category")
+						+ "&7, " + (seen == null ? "&eno kill/match/win events yet (is PlebMcBridge on it?)"
+								: "last event " + Math.max(0, (now - seen) / 1000) + "s ago")));
+			}
+			if (config.bool("plebclient-only", true)) {
+				s.reply(color("&7Only players on the PlebMc client earn (plebclient-only: true)."));
+			}
 			return;
 		}
 		case "give":
@@ -1194,7 +1249,7 @@ final class ShopCore {
 		}
 		case "equip": {
 			if (a.length < 4) {
-				s.reply(prefix + color("&cUsage: /" + label + " equip <player> <hat|cloak> <item|none>"));
+				s.reply(prefix + color("&cUsage: /" + label + " equip <player> <hat|cloak|wings> <item|none>"));
 				return;
 			}
 			UUID id = resolve(a[1]);
@@ -1236,7 +1291,7 @@ final class ShopCore {
 			s.reply(prefix + a[1] + color(": &e" + fmt(d.coins) + " &7") + currency + color(", login streak &f" + d.streak));
 			if (sub.equals("info")) {
 				s.reply(color("&7Owned: &f" + (d.owned.isEmpty() ? "nothing" : String.join(", ", d.owned))));
-				s.reply(color("&7Hat: &f" + d.equipped.getOrDefault(Catalog.HAT, "none") + "  &7Cloak: &f"
+				s.reply(color("&7Hat: &f" + d.equipped.getOrDefault(Catalog.HAT, "none") + "  &7Wings: &f" + d.equipped.getOrDefault(Catalog.WINGS, "none") + "  &7Cloak: &f"
 						+ d.equipped.getOrDefault(Catalog.CLOAK, "none")));
 				s.reply(color("&7Quests done: &f" + (d.done.isEmpty() ? "none" : String.join(", ", d.done))));
 				String r = role(id);
@@ -1263,8 +1318,23 @@ final class ShopCore {
 				s.reply(prefix + color("&aWiped " + currency + " for " + n + " players. Everyone is at 0 now."));
 				return;
 			}
+			if (a.length >= 3 && ("online".equalsIgnoreCase(a[1]) || "giveall".equalsIgnoreCase(a[1]))) {
+				long n;
+				try {
+					n = Long.parseLong(a[2]);
+				} catch (NumberFormatException e) {
+					n = -1;
+				}
+				if (n <= 0 || n > 1_000_000_000L) {
+					s.reply(prefix + color("&cUsage: /" + label + " coins online <amount>"));
+					return;
+				}
+				s.reply(prefix + color("&aGave " + fmt(n) + " " + currency + " to " + giveOnline(n) + " players online."));
+				return;
+			}
 			if (a.length < 4) {
-				s.reply(prefix + color("&cUsage: /" + label + " coins <give|take|set> <player> <amount>"));
+				s.reply(prefix + color("&cUsage: /" + label + " coins <give|take|set> <player> <amount>  or  /" + label
+						+ " coins online <amount>"));
 				return;
 			}
 			UUID id = resolve(a[2]);
@@ -1326,7 +1396,7 @@ final class ShopCore {
 		}
 		default:
 			s.reply(prefix + color("&fPlebMc Coins, quests and cosmetics"));
-			for (String line : Arrays.asList("reload", "quests", "list", "coins <give|take|set> <player> <amount>", "coins wipe confirm",
+			for (String line : Arrays.asList("reload", "quests", "list", "coins <give|take|set> <player> <amount>", "coins online <amount>", "coins wipe confirm",
 					"balance <player>", "info <player>", "progress <player> <type> [amount]", "give <player> <item>",
 					"remove <player> <item>", "equip <player> <hat|cloak> <item|none>")) {
 				s.reply(color("&7/" + label + " " + line));
@@ -1382,7 +1452,7 @@ final class ShopCore {
 			options = Arrays.asList("reload", "quests", "list", "coins", "balance", "info", "progress", "give", "remove",
 					"equip");
 		} else if (a.length == 2 && a[0].equalsIgnoreCase("coins")) {
-			options = Arrays.asList("give", "take", "set");
+			options = Arrays.asList("give", "take", "set", "online", "wipe");
 		} else if (a.length == 2 || (a.length == 3 && a[0].equalsIgnoreCase("coins"))) {
 			options = new ArrayList<>();
 			for (UUID o : net.online()) {

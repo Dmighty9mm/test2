@@ -116,7 +116,43 @@ final class ConfigUpdate {
 			}
 		}
 
-		// 2. whole sections that are missing
+		// 2. new built-in items (wings) go into your items once; 'added-item-packs' (added
+		// below as a new section) remembers it so deleted ones don't come back
+		int items = findTop(my, "items");
+		if (items >= 0 && findTop(my, "added-item-packs") < 0) {
+			Set<String> have = new LinkedHashSet<>();
+			int end = sectionEnd(my, items);
+			for (int i = items + 1; i < end; i++) {
+				Matcher m = CHILD.matcher(my.get(i));
+				if (m.matches()) {
+					have.add(m.group(1));
+				}
+			}
+			List<String> insert = new ArrayList<>();
+			for (Block d : def) {
+				if (!"items".equals(d.key)) {
+					continue;
+				}
+				for (Block c : blocks(d.lines.subList(indexOfKey(d.lines, d.key) + 1, d.lines.size()), CHILD, 2)) {
+					String line = c.lines.get(c.lines.size() - 1);
+					for (String l : c.lines) {
+						if (CHILD.matcher(l).matches()) {
+							line = l;
+						}
+					}
+					if (!have.contains(c.key) && line.contains("category: wings")) {
+						insert.add(line);
+						added.add("items." + c.key);
+					}
+				}
+			}
+			if (!insert.isEmpty()) {
+				insert.add(0, "");
+				my.addAll(end, insert);
+			}
+		}
+
+		// 3. whole sections that are missing
 		List<String> tail = new ArrayList<>();
 		for (Block d : def) {
 			if (findTop(my, d.key) < 0) {

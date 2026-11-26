@@ -160,10 +160,11 @@ collections:
   partners: {name: 'Partners', icon: partner, color: '#FF7AC6', description: 'Cosmetics made with PlebMc partners'}
 
 # The shop. Each item:
-#   category: hat or cloak
+#   category: hat, cloak or wings
 #   render:   the look the client draws
 #             hats:   tophat, crown, halo, partyhat, beanie, horns, cap, headphones, bunny,
 #                     wizard, viking, cowboy, propeller, chef (or use model, below)
+#             wings:  angel, demon, dragon, butterfly, bat (or use model, below)
 #             cloaks: leave it out
 #   collection: optional, which shop tab it's in (a key from 'collections', default plebmc)
 #   creator:  optional, who made it ("by ..." in the shop), for partner cosmetics
@@ -180,7 +181,7 @@ collections:
 #             the cape layout, e.g. 256x128, so 16 frames = 256x2048), up to 64 frames,
 #             8 MB. 'frametime' is milliseconds per frame (default 100). The PlebMc
 #             Cloak Maker (tools/cloak-maker in the client repo) builds these for you.
-#   model:    hats: a 3D model in this plugin's folder, like 'hats/myhat.bbmodel'. Save it
+#   model:    hats and wings: a 3D model in this plugin's folder, like 'hats/myhat.bbmodel'. Save it
 #             from Blockbench (File > Save Model) with its texture painted in, drop it in
 #             the hats folder, add an item and run /pleb reload. Players download it
 #             once, just like cloak textures. A Java block/item model .json works too
@@ -188,6 +189,10 @@ collections:
 #             position: auto (default) centers it on the head and stands it on top;
 #                       model keeps Blockbench's coordinates (0,0,0 = bottom middle of
 #                       the head, the top of the head is y 8)
+#             Wings (in 'wings/'): build the right wing only (x 0 and up), the client
+#                       mirrors it. y goes up from the waist (the shoulders are y 12),
+#                       z 0 is the back and +z sticks out behind. The panel's Cosmetic
+#                       Maker builds these for you.
 #             scale:    bigger or smaller, like 1.2 (default 1)
 #             offset:   [x, y, z] in pixels after placing, like [0, -1, 0] to sink it 1 pixel
 #   permission: optional, needed to buy it
@@ -225,6 +230,17 @@ items:
   mint_cloak:   {name: 'Mint Cloak', category: cloak, color: '#3FD8B0', price: 1500, description: 'A plain mint cloak'}
   gold_cloak:   {name: 'Gold Cloak', category: cloak, color: '#E8B923', price: 4000, description: 'A plain golden cloak'}
 
+  angel_wings:  {name: 'Angel Wings', category: wings, render: angel, price: 8000, description: 'White feathered wings'}
+  golden_wings: {name: 'Golden Wings', category: wings, render: angel, color: '#E8B923', price: 15000, description: 'Feathers of pure gold'}
+  demon_wings:  {name: 'Demon Wings', category: wings, render: demon, price: 8000, description: 'Dark red and spiky'}
+  dragon_wings: {name: 'Dragon Wings', category: wings, render: dragon, price: 12000, description: 'Scaled wings with claws'}
+  butterfly_wings: {name: 'Butterfly Wings', category: wings, render: butterfly, price: 6000, description: 'Bright and fluttery'}
+  bat_wings:    {name: 'Bat Wings', category: wings, render: bat, price: 5000, description: 'For night owls (and bats)'}
+
   # Partner cosmetics go in the Partners tab. For example:
   # streamer_cloak: {name: 'Streamer Cloak', category: cloak, texture: 'cloaks/streamer.png', collection: partners, creator: 'SomeStreamer', price: 5000, description: 'Made with SomeStreamer'}
   # streamer_hat:   {name: 'Streamer Crown', category: hat, model: 'hats/streamer.bbmodel', collection: partners, creator: 'SomeStreamer', price: -1, description: 'Given out on stream'}
+
+# Item packs a PlebioAPI update already added to your items (so ones you delete
+# don't come back). Leave this alone.
+added-item-packs: [wings]

@@ -38,7 +38,13 @@ public class ConfigUpdateTest {
 		check(r.added.contains("messages.not-enough") && c.section("messages").str("not-enough", null) != null,
 				"missing messages filled in");
 		check("Bought %item%!".equals(c.section("messages").str("bought", "")), "your message kept");
-		check(c.section("items").keys().size() == 2, "items untouched (no default items come back): " + c.section("items").keys());
+		java.util.List<String> keys = new java.util.ArrayList<>(c.section("items").keys());
+		check(keys.size() == 8 && keys.contains("angel_wings") && keys.contains("bat_wings") && !keys.contains("halo"),
+				"only the new wings are added to your items (no default hats come back): " + keys);
+		check("wings".equals(c.section("items").section("dragon_wings").str("category", "")), "wings items load");
+		check(r.text.contains("added-item-packs"), "the wings pack is remembered");
+		String noWings = r.text.replaceAll("(?m)^  [a-z_]+_wings:.*\\n", "");
+		check(ConfigUpdate.merge(noWings, def).added.isEmpty(), "wings you delete don't come back");
 		check(c.section("quests").section("categories").keys().size() == 1, "quests untouched");
 		check(r.text.contains("# Turn on with a PlebMc Panel") || r.text.contains("accounts:"), "comments come with the new settings");
 		check(ConfigUpdate.merge(r.text, def).added.isEmpty(), "running it again adds nothing");
