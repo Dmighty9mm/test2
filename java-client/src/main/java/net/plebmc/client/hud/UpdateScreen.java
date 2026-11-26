@@ -62,10 +62,10 @@ public final class UpdateScreen extends PlebScreen {
 		Ui.window(wx, wy, ww, wh);
 		boolean req = UpdateCheck.required;
 		header(wx, wy, ww, req ? "lock" : "bell", req ? "Update required" : "Update available",
-				ClientInfo.NAME + " " + UpdateCheck.latest + " is out", false);
+				"A new " + ClientInfo.NAME + " is out", false);
 		int x = wx + 14, w = ww - 28;
 		int y = wy + 44;
-		Ui.text("You have " + ClientInfo.NAME + " " + ClientInfo.VERSION + ".", x, y, Ui.MUTED);
+		Ui.text("Your " + ClientInfo.NAME + " is out of date.", x, y, Ui.MUTED);
 		y += 14;
 		String m = UpdateCheck.message;
 		if (m == null || m.isEmpty()) {

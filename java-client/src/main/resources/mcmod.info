@@ -1,6 +1,6 @@
 [{
   "modid": "${modid}",
-  "name": "PlebMc",
+  "name": "PlebClient",
   "description": "The PlebMc client for Java Edition: PlebNite mods, HUD, shop, quests and cosmetics.",
   "version": "${version}",
   "mcversion": "1.8.9",
