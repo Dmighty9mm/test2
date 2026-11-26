@@ -29,7 +29,7 @@ final class ConfigUpdate {
 
 	/** Sections whose missing keys are filled in one by one. */
 	static final Set<String> MERGE_INSIDE = new HashSet<>(Arrays.asList("website", "login-rewards", "playtime",
-			"admin-menu", "staff-lock", "accounts", "messages"));
+			"admin-menu", "staff-lock", "accounts", "messages", "voting"));
 
 	private static final Pattern TOP = Pattern.compile("^([A-Za-z0-9_.-]+):.*$");
 	private static final Pattern CHILD = Pattern.compile("^  ([A-Za-z0-9_.-]+):.*$");

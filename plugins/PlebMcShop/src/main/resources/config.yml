@@ -241,6 +241,24 @@ items:
   # streamer_cloak: {name: 'Streamer Cloak', category: cloak, texture: 'cloaks/streamer.png', collection: partners, creator: 'SomeStreamer', price: 5000, description: 'Made with SomeStreamer'}
   # streamer_hat:   {name: 'Streamer Crown', category: hat, model: 'hats/streamer.bbmodel', collection: partners, creator: 'SomeStreamer', price: -1, description: 'Given out on stream'}
 
+# Votes on server lists (eaglercraftservers.com and others) pay coins. The client's
+# Vote button and /vote open 'url'. Server lists tell PlebioAPI about votes over
+# Votifier: run 'pleb votifier' in the proxy console for the port, token and public
+# key to paste into the server list's Votifier settings, and open that TCP port.
+# Already running NuVotifier? Set votifier.enabled: false and have NuVotifier run
+# 'pleb vote {username}' for each vote. One vote per player is paid every 5 minutes at most.
+voting:
+  enabled: true
+  reward: 100
+  url: 'https://eaglercraftservers.com/server/plebmc'
+  announce: true
+  announce-message: '&b%player% &7voted for PlebMc and got &e%amount% %currency%&7! Vote too: &f/vote'
+  title: '&a&lThanks for voting'
+  votifier:
+    enabled: true
+    host: 0.0.0.0
+    port: 8192
+
 # Item packs a PlebioAPI update already added to your items (so ones you delete
 # don't come back). Leave this alone.
 added-item-packs: [wings]

@@ -38,6 +38,13 @@ public class ShopTest {
         public boolean authenticated(UUID p) { return !notLoggedIn.contains(p); }
     }
 
+    static java.util.Map<String, String> kv(String k1, String v1, String k2, String v2) {
+        java.util.Map<String, String> m = new java.util.LinkedHashMap<>();
+        m.put(k1, v1);
+        m.put(k2, v2);
+        return m;
+    }
+
     static class P {
         final String name; final UUID id; String server; final Set<String> perms = new HashSet<>();
         final List<Map<?, ?>> got = new ArrayList<>(); final List<String> raw = new ArrayList<>(); final List<String> chat = new ArrayList<>();
@@ -243,7 +250,7 @@ public class ShopTest {
 
         // ---- joining the lobby: daily login reward ----
         P mighty = join("Mighty", "lobby", true);
-        P java = join("JavaGuy", "lobby", false);
+        P javaGuy = join("JavaGuy", "lobby", false);
         Map<?, ?> st = mighty.last("state");
         check(st != null && "PlebMc Coins".equals(st.get("currency")), "state sent");
         List<?> cats = (List<?>) st.get("questCategories");
@@ -271,8 +278,8 @@ public class ShopTest {
         check(loginRows == 1, "exactly one login row: " + loginRows);
         check(mighty.progress("login_5") == 1, "weekly login quest counted");
         check(mighty.progress("general_join_3") == 1 && "general".equals(mighty.quest("general_join_3").get("category")), "joining the lobby counts for General");
-        check(java.got.isEmpty() && java.chat.isEmpty() && core.store.get(java.id).coins == 0,
-                "other clients earn nothing (PlebClient only): " + java.chat);
+        check(javaGuy.got.isEmpty() && javaGuy.chat.isEmpty() && core.store.get(javaGuy.id).coins == 0,
+                "other clients earn nothing (PlebClient only): " + javaGuy.chat);
         // the PlebMc client's hello can come after the proxy's connect: the login reward waits for it
         P late = new P("LateHello");
         late.server = "lobby";
@@ -303,13 +310,13 @@ public class ShopTest {
         cmd("progress", "Mighty", "win");
         check(mighty.done("win_1") && mighty.coins() == before + 150, "win via /plebshop progress on the player's server");
         // minutes count as "play" in every category covering the server you're on
-        java.server = "lobby";
+        javaGuy.server = "lobby";
         for (int i = 0; i < 15; i++) core.minute();
         check(mighty.progress("play_30") == 15 && mighty.progress("general_play_30") == 15, "playtime on plebnite: both");
         move(mighty, "lobby");
         for (int i = 0; i < 5; i++) core.minute();
         check(mighty.progress("play_30") == 15 && mighty.progress("general_play_30") == 20, "playtime in the lobby: General only");
-        check(core.store.get(java.id).progress.isEmpty() && core.store.get(java.id).coins == 0, "other clients: no quest progress or playtime coins");
+        check(core.store.get(javaGuy.id).progress.isEmpty() && core.store.get(javaGuy.id).coins == 0, "other clients: no quest progress or playtime coins");
         core.progress(mighty.id, "survival", "kill", 5);
         check(mighty.progress("kills_8") == 6, "kills elsewhere don't count for PlebNite");
         // chat: at most one every 10 seconds
@@ -500,6 +507,61 @@ public class ShopTest {
         admin.clear();
         cmd("coins", "online", "-5");
         check(poor.coins() == poorBefore + 250 && admin.get(0).contains("Usage"), "coins online needs a positive amount");
+
+        // ---- voting ----
+        long beforeVote = poor.coins();
+        check(core.vote("poor", "eaglercraftservers.com").startsWith("gave") && poor.coins() == beforeVote + 100, "a vote pays 100");
+        check(core.vote("Poor", "eaglercraftservers.com").contains("already") && poor.coins() == beforeVote + 100, "a repeated vote isn't paid twice");
+        check("voteUrl reward".length() > 0 && poor.last("state") != null && "https://eaglercraftservers.com/server/plebmc".equals(poor.last("state").get("voteUrl"))
+                && ((Number) poor.last("state").get("voteReward")).longValue() == 100, "the client gets the vote link and reward");
+        check(core.vote("NewKid", "eaglercraftservers.com").contains("hasn't joined"), "a vote before joining waits");
+        P kid = join("NewKid", "lobby", true);
+        check(kid.coins() >= 100, "paid when they join: " + kid.coins());
+        admin.clear();
+        cmd("vote", "Mighty");
+        check(admin.get(0).contains("gave"), "pleb vote <player>: " + admin);
+        // the Votifier listener, both protocols
+        try {
+            java.io.File vd = java.nio.file.Files.createTempDirectory("votifier").toFile();
+            java.util.List<String> votes = new java.util.ArrayList<>();
+            Votifier v = new Votifier(vd, java.util.logging.Logger.getLogger("t"), (u, svc) -> votes.add(u + "@" + svc));
+            v.loadKeys();
+            check(new java.io.File(vd, "public.key").isFile() && v.token().length() >= 20, "keys and token made");
+            v.v1(v.encryptV1("TestList", "Steve"));
+            String payload = "{\"serviceName\":\"TestList\",\"username\":\"Alex\",\"address\":\"1.2.3.4\",\"timestamp\":1,\"challenge\":\"abc\"}";
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new javax.crypto.spec.SecretKeySpec(v.token().getBytes("UTF-8"), "HmacSHA256"));
+            String sig = java.util.Base64.getEncoder().encodeToString(mac.doFinal(payload.getBytes("UTF-8")));
+            v.v2Message(new com.google.gson.Gson().toJson(kv("payload", payload, "signature", sig)), "abc");
+            boolean refused = false;
+            try {
+                v.v2Message(new com.google.gson.Gson().toJson(kv("payload", payload, "signature", "AAAA")), "abc");
+            } catch (Exception e) {
+                refused = true;
+            }
+            check(votes.equals(java.util.Arrays.asList("Steve@TestList", "Alex@TestList")) && refused, "Votifier v1 and v2 (bad signature refused): " + votes);
+            // over a real socket (v2)
+            v.start("127.0.0.1", 0);
+            try (java.net.Socket so = new java.net.Socket("127.0.0.1", v.port())) {
+                java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(so.getInputStream(), "UTF-8"));
+                String hello = br.readLine();
+                String ch = hello.split(" ")[2];
+                String pl = payload.replace("abc", ch).replace("Alex", "Sock");
+                String body = new com.google.gson.Gson().toJson(kv("payload", pl, "signature",
+                        java.util.Base64.getEncoder().encodeToString(mac.doFinal(pl.getBytes("UTF-8")))));
+                java.io.DataOutputStream out = new java.io.DataOutputStream(so.getOutputStream());
+                out.writeShort(0x733A);
+                out.writeShort(body.length());
+                out.write(body.getBytes("UTF-8"));
+                out.flush();
+                String reply = br.readLine();
+                check(hello.startsWith("VOTIFIER 2 ") && reply.contains("\"ok\"") && votes.contains("Sock@TestList"), "Votifier over a socket: " + reply);
+            }
+            v.stop();
+        } catch (Exception e) {
+            e.printStackTrace();
+            check(false, "votifier: " + e);
+        }
         admin.clear();
         core.command(new ShopCore.Sender() {
             public void reply(String line) { admin.add(line); }

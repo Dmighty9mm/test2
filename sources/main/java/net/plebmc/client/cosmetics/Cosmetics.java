@@ -547,6 +547,12 @@ public final class Cosmetics {
 			if (m.get("currency") instanceof String) {
 				currency = (String) m.get("currency");
 			}
+			if (m.get("voteUrl") instanceof String && ((String) m.get("voteUrl")).startsWith("https://")) {
+				voteUrl = (String) m.get("voteUrl");
+			}
+			if (m.containsKey("voteReward")) {
+				voteReward = Math.max(0, num(m.get("voteReward"), voteReward));
+			}
 			if (m.get("questCategories") instanceof List) {
 				List<QuestCategory> cs = new ArrayList<>();
 				for (Object e : (List<?>) m.get("questCategories")) {
@@ -1220,6 +1226,20 @@ public final class Cosmetics {
 		}
 		Map<String, String> slots = others.get(uuid);
 		return slots != null && slots.containsKey("pleb");
+	}
+
+	/** Where players vote for PlebMc (the server can change it; votes pay coins). */
+	public static final String VOTE_URL = "https://eaglercraftservers.com/server/plebmc";
+	private static String voteUrl = VOTE_URL;
+	private static long voteReward = 100;
+
+	public static String voteUrl() {
+		return voteUrl;
+	}
+
+	/** Coins a vote pays (0 when the server doesn't pay for votes). */
+	public static long voteReward() {
+		return voteReward;
 	}
 
 	/** True when nobody needs cosmetics drawn (skips all per-player work). */

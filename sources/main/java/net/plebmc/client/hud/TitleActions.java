@@ -36,6 +36,7 @@ final class TitleActions {
 			{ "options", "Options", "nav_options", "Video, controls and sound" },
 			{ "profile", "Edit Profile", "nav_profile", "Your name and skin" },
 			{ "-" },
+			{ "vote", "Vote", "nav_vote", "Vote for PlebMc every day: +100 coins" },
 			{ "discord", "Discord", "nav_discord", "Join the PlebMc Discord" },
 			{ "language", "Language", "nav_language", "Change the game language" } };
 
@@ -71,6 +72,9 @@ final class TitleActions {
 			break;
 		case "discord":
 			EagRuntime.openLink(PlebMenu.DISCORD);
+			break;
+		case "vote":
+			EagRuntime.openLink(net.plebmc.client.cosmetics.Cosmetics.voteUrl());
 			break;
 		case "language":
 			mc.displayGuiScreen(new GuiLanguage(menu, mc.gameSettings, mc.getLanguageManager()));

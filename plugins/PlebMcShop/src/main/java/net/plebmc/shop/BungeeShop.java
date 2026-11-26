@@ -138,6 +138,7 @@ public final class BungeeShop extends Plugin implements Listener {
 			};
 			core.signin = signin;
 			configureAccounts();
+			startVotifier();
 		} catch (IOException e) {
 			getLogger().severe("Could not load config.yml: " + e);
 			return;
@@ -146,6 +147,7 @@ public final class BungeeShop extends Plugin implements Listener {
 		getProxy().getPluginManager().registerListener(this, this);
 		getProxy().getPluginManager().registerCommand(this, new AdminCommand());
 		getProxy().getPluginManager().registerCommand(this, new AdminLoginCommand());
+		getProxy().getPluginManager().registerCommand(this, new VoteCommand());
 		if (adminPasswordRequired() && adminPasswords.all().isEmpty()) {
 			getLogger().warning("Admin menu is OFF for everyone until you set an admin password in this console:"
 					+ " pleb adminpass set <name> <password>  (then in game: /login, then /adminlogin <password>)");
@@ -178,6 +180,9 @@ public final class BungeeShop extends Plugin implements Listener {
 
 	@Override
 	public void onDisable() {
+		if (votifier != null) {
+			votifier.stop();
+		}
 		if (core != null) {
 			core.save();
 		}
@@ -187,6 +192,7 @@ public final class BungeeShop extends Plugin implements Listener {
 		try {
 			core.load(Cfg.load(new File(getDataFolder(), "config.yml")));
 			configureAccounts();
+			startVotifier();
 		} catch (IOException e) {
 			getLogger().severe("Could not reload config.yml: " + e);
 		}
@@ -287,6 +293,78 @@ public final class BungeeShop extends Plugin implements Listener {
 	}
 
 	/** /adminlogin <password>: unlocks the admin menu for this session. Handled on the proxy, never reaches a server. */
+	// ==================== voting ====================
+
+	private Votifier votifier;
+	private String votifierAt = "";
+
+	/** Starts (or restarts after a config change) the Votifier listener for server-list votes. */
+	private void startVotifier() {
+		Cfg c = core.config;
+		boolean on = c.bool("voting.enabled", true) && c.bool("voting.votifier.enabled", true);
+		String host = c.str("voting.votifier.host", "0.0.0.0");
+		int port = c.integer("voting.votifier.port", 8192);
+		String at = on ? host + ":" + port : "";
+		if (at.equals(votifierAt)) {
+			return;
+		}
+		if (votifier != null) {
+			votifier.stop();
+		}
+		votifierAt = at;
+		if (!on) {
+			return;
+		}
+		try {
+			if (votifier == null) {
+				votifier = new Votifier(new File(getDataFolder(), "votifier"), getLogger(),
+						(user, service) -> getLogger().info(core.vote(user, service)));
+				votifier.loadKeys();
+			}
+			votifier.start(host, port);
+			getLogger().info("Votifier listening on port " + port + " for server-list votes (" + core.voteReward + " "
+					+ "coins a vote). Run 'pleb votifier' in this console for the key and token to give the server list.");
+		} catch (IOException e) {
+			votifierAt = "";
+			getLogger().warning("Votifier couldn't start on port " + port + ": " + e.getMessage()
+					+ ". If NuVotifier is installed, turn voting.votifier off and set NuVotifier to run 'pleb vote {username}'"
+					+ " on each vote, or pick another voting.votifier.port.");
+		}
+	}
+
+	/** /pleb votifier (console): what to paste into a server list's Votifier settings. */
+	@SuppressWarnings("deprecation")
+	private void votifierCommand(CommandSender sender) {
+		if (sender instanceof ProxiedPlayer) {
+			sender.sendMessage(TextComponent.fromLegacyText("\u00a7cRun 'pleb votifier' in the proxy console (it shows a secret token)."));
+			return;
+		}
+		if (votifier == null || votifier.port() < 0) {
+			sender.sendMessage(TextComponent.fromLegacyText("Votifier is off (voting.votifier in config.yml) or couldn't start, see above."));
+			return;
+		}
+		sender.sendMessage(TextComponent.fromLegacyText("Votifier settings for the server list (eaglercraftservers.com etc):"));
+		sender.sendMessage(TextComponent.fromLegacyText("  Host: your proxy's public IP or domain (like play.plebmc.top)   Port: " + votifier.port()));
+		sender.sendMessage(TextComponent.fromLegacyText("  Token (NuVotifier v2): " + votifier.token()));
+		sender.sendMessage(TextComponent.fromLegacyText("  Public key (Votifier v1): " + votifier.publicKey()));
+		sender.sendMessage(TextComponent.fromLegacyText("  Open TCP port " + votifier.port() + " in your firewall. Test it with: pleb vote <player>"));
+	}
+
+	/** /vote: the link to vote for the server. */
+	private final class VoteCommand extends Command {
+		VoteCommand() {
+			super("vote", null);
+		}
+
+		@Override
+		public void execute(CommandSender sender, String[] args) {
+			String url = core.voteUrl;
+			TextComponent t = new TextComponent("\u00a7b\u00a7lVote for PlebMc \u00a77(+" + core.voteReward + " " + "coins a day): \u00a7f\u00a7n" + url);
+			t.setClickEvent(new net.md_5.bungee.api.chat.ClickEvent(net.md_5.bungee.api.chat.ClickEvent.Action.OPEN_URL, url));
+			sender.sendMessage(t);
+		}
+	}
+
 	private final class AdminLoginCommand extends Command {
 		AdminLoginCommand() {
 			super("adminlogin", null, "alogin");
@@ -806,6 +884,10 @@ public final class BungeeShop extends Plugin implements Listener {
 			}
 			if (args.length > 0 && "staff".equalsIgnoreCase(args[0])) {
 				staffCommand(sender, args);
+				return;
+			}
+			if (args.length > 0 && "votifier".equalsIgnoreCase(args[0])) {
+				votifierCommand(sender);
 				return;
 			}
 			if (sender instanceof ProxiedPlayer && sender.hasPermission(ShopCore.ADMIN)

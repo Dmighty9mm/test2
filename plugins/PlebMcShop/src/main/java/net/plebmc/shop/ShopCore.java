@@ -141,6 +141,8 @@ final class ShopCore {
 			log.warning(w);
 		}
 		currency = cfg.str("currency-name", "PlebMc Coins");
+		voteReward = cfg.bool("voting.enabled", true) ? Math.max(0, (long) cfg.dbl("voting.reward", 100)) : 0;
+		voteUrl = cfg.str("voting.url", "https://eaglercraftservers.com/server/plebmc");
 		prefix = color(cfg.str("messages.prefix", "&8[&b&lPlebMc&8] &7"));
 		hiddenWorlds.clear();
 		for (String w : cfg.list("hidden-in-worlds")) {
@@ -201,6 +203,13 @@ final class ShopCore {
 		Store.Data d = data(p);
 		long now = net.now();
 		worlds.remove(p);
+		String nm = net.name(p);
+		if (firstJoin && nm != null && pendingVotes.containsKey(nm.toLowerCase(Locale.ROOT))) {
+			int n = pendingVotes.remove(nm.toLowerCase(Locale.ROOT));
+			for (int i = 0; i < n; i++) {
+				payVote(p, "a vote from before you joined");
+			}
+		}
 		if (firstJoin) {
 			if (earns(p)) {
 				loginReward(p);
@@ -850,6 +859,8 @@ final class ShopCore {
 		m.put("type", "state");
 		m.put("coins", d.coins);
 		m.put("currency", currency);
+		m.put("voteUrl", voteUrl);
+		m.put("voteReward", voteReward);
 		List<String> owned = new ArrayList<>();
 		for (String id : d.owned) {
 			if (catalog.get(id) != null) {
@@ -979,6 +990,67 @@ final class ShopCore {
 		store.changed();
 		store.save();
 		return got;
+	}
+
+	// ==================== voting ====================
+
+	long voteReward = 100;
+	String voteUrl = "https://eaglercraftservers.com/server/plebmc";
+	/** Votes for names that haven't joined yet (paid when they join). */
+	private final Map<String, Integer> pendingVotes = new HashMap<>();
+	/** The last vote per name, so a server list sending one vote twice doesn't pay twice. */
+	private final Map<String, Long> lastVote = new HashMap<>();
+
+	/**
+	 * Someone voted for the server on a server list (Votifier or /pleb vote).
+	 * Pays the vote reward; returns what happened.
+	 */
+	synchronized String vote(String name, String service) {
+		if (voteReward <= 0) {
+			return "voting rewards are off (voting.enabled / voting.reward)";
+		}
+		String key = name.toLowerCase(Locale.ROOT);
+		long now = net.now();
+		Long last = lastVote.get(key);
+		if (last != null && now - last < 5 * 60_000L) {
+			return name + " already got a vote reward in the last 5 minutes (ignored)";
+		}
+		lastVote.put(key, now);
+		UUID p = resolve(name);
+		if (p == null) {
+			pendingVotes.merge(key, 1, Integer::sum);
+			log.info("Vote from " + service + " for " + name + ": they haven't joined yet, paid when they do");
+			return name + " hasn't joined yet: paid when they join";
+		}
+		payVote(p, service);
+		String who = net.name(p) != null ? net.name(p) : store.get(p).name;
+		log.info("Vote from " + service + ": +" + fmt(voteReward) + " " + currency + " to " + who);
+		if (config.bool("voting.announce", true)) {
+			String line = color(config.str("voting.announce-message", "&b%player% &7voted for PlebMc and got &e%amount% %currency%&7! Vote too: &f/vote")
+					.replace("%player%", who).replace("%amount%", fmt(voteReward)).replace("%currency%", currency));
+			for (UUID o : net.online()) {
+				if (!o.equals(p)) {
+					net.chat(o, prefix + line);
+				}
+			}
+		}
+		return "gave " + who + " " + fmt(voteReward) + " " + currency;
+	}
+
+	private void payVote(UUID p, String service) {
+		Store.Data d = store.get(p);
+		d.coins += voteReward;
+		store.changed();
+		store.save();
+		if (net.online().contains(p)) {
+			String text = "+" + fmt(voteReward) + " " + currency + " for voting. Thanks!";
+			if (clients.contains(p)) {
+				notify(p, color(config.str("voting.title", "&a&lThanks for voting")), text);
+				sendState(p, false);
+			} else {
+				net.chat(p, prefix + color("&a" + text));
+			}
+		}
 	}
 
 	synchronized int announce(String text) {
@@ -1193,6 +1265,14 @@ final class ShopCore {
 						+ (it.notForSale() ? "not for sale" : fmt(it.price))));
 			}
 			return;
+		case "vote": {
+			if (a.length != 2) {
+				s.reply(prefix + "Usage: /pleb vote <player>  (gives the vote reward, like a vote from a server list)");
+				return;
+			}
+			s.reply(prefix + vote(a[1], "command"));
+			return;
+		}
 		case "quests": {
 			long now = net.now();
 			s.reply(prefix + "Quests for " + quests.dayKey(now) + " (" + quests.weekKey(now) + "):");
@@ -1398,7 +1478,7 @@ final class ShopCore {
 			s.reply(prefix + color("&fPlebMc Coins, quests and cosmetics"));
 			for (String line : Arrays.asList("reload", "quests", "list", "coins <give|take|set> <player> <amount>", "coins online <amount>", "coins wipe confirm",
 					"balance <player>", "info <player>", "progress <player> <type> [amount]", "give <player> <item>",
-					"remove <player> <item>", "equip <player> <hat|cloak> <item|none>")) {
+					"remove <player> <item>", "equip <player> <hat|cloak|wings> <item|none>", "vote <player>", "votifier")) {
 				s.reply(color("&7/" + label + " " + line));
 			}
 		}
@@ -1450,7 +1530,7 @@ final class ShopCore {
 		List<String> options;
 		if (a.length == 1) {
 			options = Arrays.asList("reload", "quests", "list", "coins", "balance", "info", "progress", "give", "remove",
-					"equip");
+					"equip", "vote", "votifier");
 		} else if (a.length == 2 && a[0].equalsIgnoreCase("coins")) {
 			options = Arrays.asList("give", "take", "set", "online", "wipe");
 		} else if (a.length == 2 || (a.length == 3 && a[0].equalsIgnoreCase("coins"))) {

@@ -62,6 +62,12 @@ public final class QuestsScreen extends PlebScreen {
 			category = null;
 		}
 
+		// voting pays coins too
+		long reward = Cosmetics.voteReward();
+		Button vote = button(reward > 0 ? "Vote +" + reward : "Vote", rx, wy + wh - 28, rw, 18,
+				() -> TitleActions.openLink(Cosmetics.voteUrl()));
+		vote.style(Style.PRIMARY).icon("gift").tip("Vote for PlebMc once a day" + (reward > 0 ? " and get " + reward + " " + Cosmetics.currency() : ""));
+
 		listX = rx + rw + 10;
 		listY = wy + 44;
 		listW = wx + ww - 10 - listX;

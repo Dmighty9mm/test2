@@ -37,6 +37,7 @@ final class TitleActions {
 			{ "options", "Options", "nav_options", "Video, controls and sound" },
 			{ "forgemods", "Forge Mods", "nav_forge", "The Forge mod list" },
 			{ "-" },
+			{ "vote", "Vote", "nav_vote", "Vote for PlebMc every day: +100 coins" },
 			{ "discord", "Discord", "nav_discord", "Join the PlebMc Discord" },
 			{ "quit", "Quit", "nav_quit", "Close the game" } };
 
@@ -77,6 +78,9 @@ final class TitleActions {
 			break;
 		case "discord":
 			EagRuntime.openLink(PlebMenu.DISCORD);
+			break;
+		case "vote":
+			EagRuntime.openLink(net.plebmc.client.cosmetics.Cosmetics.voteUrl());
 			break;
 		case "language":
 			mc.displayGuiScreen(new GuiLanguage(menu, mc.gameSettings, mc.getLanguageManager()));
