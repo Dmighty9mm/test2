@@ -32,7 +32,7 @@ Your items, collections and quests are never touched.
 3. **Wins (PlebNite):** in `plugins/BattleRoyaleX/config.yml`, under
    `Executed-Commands > Player-Win`, add `- plebquest %player% win`, then `/brx reload`.
 4. **Accounts:** set up the PlebMc Panel and fill in `accounts:` (see below).
-5. Edit `plugins/PlebioAPI/config.yml` on the proxy if you like, then `/plebshop reload`.
+5. Edit `plugins/PlebioAPI/config.yml` on the proxy if you like, then `/pleb reload`.
 
 ## Quest categories
 
@@ -91,17 +91,19 @@ they already had are kept; set `plebclient-only: false` to let everyone earn aga
 
 ## Commands on the proxy (`plebshop.admin`)
 
+The command is `/pleb` (the old `/plebshop` and `/pmshop` still work). The permission keeps its name, `plebshop.admin`, so your permission setup doesn't change.
+
 | Command | What |
 | --- | --- |
-| `/plebshop reload` | Reload config.yml and resend the shop to everyone |
-| `/plebshop quests` | Today's and this week's quests in every category |
-| `/plebshop list` | Items, prices and looks |
-| `/plebshop coins <give\|take\|set> <player> <amount>` | Change someone's PlebMc Coins |
-| `/plebshop coins wipe confirm` | Sets **every** player's coins to 0 (cosmetics stay). Saves `players.yml.before-wipe-<time>` first |
-| `/plebshop balance <player>` / `info <player>` | Someone's coins (and what they own) |
-| `/plebshop progress <player> <type> [amount]` | Count quest progress on the server they're on |
-| `/plebshop give <player> <item>` / `remove` | Give or take an item for free |
-| `/plebshop equip <player> <hat\|cloak> <item\|none>` | Put something on a player |
+| `/pleb reload` | Reload config.yml and resend the shop to everyone |
+| `/pleb quests` | Today's and this week's quests in every category |
+| `/pleb list` | Items, prices and looks |
+| `/pleb coins <give\|take\|set> <player> <amount>` | Change someone's PlebMc Coins |
+| `/pleb coins wipe confirm` | Sets **every** player's coins to 0 (cosmetics stay). Saves `players.yml.before-wipe-<time>` first |
+| `/pleb balance <player>` / `info <player>` | Someone's coins (and what they own) |
+| `/pleb progress <player> <type> [amount]` | Count quest progress on the server they're on |
+| `/pleb give <player> <item>` / `remove` | Give or take an item for free |
+| `/pleb equip <player> <hat\|cloak> <item\|none>` | Put something on a player |
 
 ## PlebMc accounts (recommended): stop players spending each other's coins
 
@@ -135,7 +137,7 @@ gets the Owner's UUID, so the proxy needs a login plugin to know who is who.
 **With nLogin on the proxy (recommended, what plebmc.top runs):** nothing to set up. PlebioAPI
 asks nLogin whether each player has typed `/login` this session. Until they have, nothing on
 their account can change: no admin menu, no buying or equipping,
-and in-game `/plebshop` is refused. The admin door appears within 2 seconds of `/login`.
+and in-game `/pleb` is refused. The admin door appears within 2 seconds of `/login`.
 Make sure staff names are registered in nLogin with strong passwords (an unregistered name
 can be registered by whoever joins with it first). The staff lock below is skipped when
 nLogin is installed.
@@ -144,7 +146,7 @@ nLogin is installed.
 the proxy console can set, typed in chat each session after `/login`:
 
 ```
-plebshop adminpass set <YourName> <a different password>     (proxy console)
+pleb adminpass set <YourName> <a different password>     (proxy console)
 /adminlogin <that password>                                    (in game, after /login)
 ```
 
@@ -173,10 +175,10 @@ The staff lock closes that: protected names need a password at login.
 2. Put the new `PlebioAPI.jar` in `plugins/` and restart the proxy.
 3. In the **proxy console** (not in game), protect every staff name:
    ```
-   plebshop staff set <YourName> <password>
-   plebshop staff list
+   pleb staff set <YourName> <password>
+   pleb staff list
    ```
-   `plebshop staff remove <name>` unprotects one, `plebshop staff add <name>` locks one
+   `pleb staff remove <name>` unprotects one, `pleb staff add <name>` locks one
    until it has a password. Passwords are at least 8 characters and saved salted and hashed
    in `plugins/PlebioAPI/staff-lock.yml`.
 4. Join as that name: the client shows a password screen. Type the password; Eaglercraft
@@ -189,7 +191,7 @@ What it does:
   case, so `owner` can't get around `Owner`. 5 wrong passwords from one address lock it out
   for 10 minutes. Without the password the proxy refuses the login before any server sees it.
 - Java players (Forge, vanilla) can't use a protected name unless the proxy is in online mode.
-- The admin menu and in-game `/plebshop` also need a name that gave its password at this
+- The admin menu and in-game `/pleb` also need a name that gave its password at this
   login. If an admin-role name or a `plebshop.admin` player shows up unprotected,
   that name is locked on the spot (logged in the console) until you set its password.
 - Turn it off with `staff-lock.enabled: false` (not recommended on a cracked server).
@@ -235,7 +237,7 @@ Put a PNG in the plugin folder (for example `plugins/PlebioAPI/cloaks/mycloak.pn
   my_cloak: {name: 'My Cloak', category: cloak, texture: 'cloaks/mycloak.png', price: 5000, description: 'HD cloak'}
 ```
 
-then `/plebshop reload`. The image uses the normal Minecraft cape layout: 64x32, or any
+then `/pleb reload`. The image uses the normal Minecraft cape layout: 64x32, or any
 multiple of it for more detail (128x64, 256x128, **512x256**, 1024x512, up to 4096x2048,
 4 MB max). The art people see on your back is the 10x16 box at (1,1) of the 64x32 layout
 (at 512x256: the 80x128 box starting at (8,8)); the inside is the box at (12,1), the edges
@@ -274,7 +276,7 @@ Make a hat in Blockbench, paint its texture, **File > Save Model** (`.bbmodel`),
   king_crown: {name: 'King Crown', category: hat, model: 'hats/king_crown.bbmodel', price: 10000, description: 'A 3D crown'}
 ```
 
-then `/plebshop reload`. The texture is read from inside the `.bbmodel`. A Java block/item
+then `/pleb reload`. The texture is read from inside the `.bbmodel`. A Java block/item
 model `.json` works too (add `texture: 'hats/myhat.png'`). Rotated cubes and groups are fine.
 By default the model is centered on the head and stood on top of it; to place it yourself:
 `position: model` (keep Blockbench's coordinates: 0,0,0 is the bottom middle of the head, the

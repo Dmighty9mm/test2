@@ -2,14 +2,15 @@ package net.plebmc.client.cosmetics;
 
 import java.util.Map;
 
-import net.plebmc.client.mods.ClientInfo;
-
 /**
  * Asks the account panel at start-up whether a newer PlebClient is out. The
  * owner sets the latest and the oldest allowed version on the panel; an older
  * client is told to update, and one below the minimum can't be played.
  */
 public final class UpdateCheck {
+
+	/** The version of this build. Raise it for each release and set "Latest version" on the panel to match. */
+	public static final String VERSION = "2.0";
 
 	/** The panel answered. */
 	public static volatile boolean known;
@@ -35,7 +36,7 @@ public final class UpdateCheck {
 		}
 		asked = true;
 		Map<String, Object> b = new java.util.LinkedHashMap<>();
-		b.put("version", ClientInfo.VERSION);
+		b.put("version", VERSION);
 		b.put("platform", platform == null ? "unknown" : platform);
 		ClientSession.post("version", b, (status, r) -> apply(r));
 	}

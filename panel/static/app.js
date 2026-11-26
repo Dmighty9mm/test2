@@ -1,10 +1,17 @@
 "use strict";
-// PlebMc Panel front end. Plain JS, no build step. All text goes in with textContent (no innerHTML).
+// PlebMc Panel front end. Plain JS, no build step. Text always goes in with textContent (no innerHTML).
+// Long lists (players, leaderboard, designs, the log) load one page at a time with "Show more",
+// so a big network never makes the browser load everyone at once.
 
 const app = document.getElementById("app");
 const nav = document.getElementById("nav");
+const who = document.getElementById("who");
+const titleEl = document.getElementById("title");
 let me = null;
-let info = { site: "PlebMc", server: {} };
+let info = { site: "PlebMc", server: {}, client: {} };
+let catalogCache = null;
+
+// ==================== helpers ====================
 
 function h(tag, attrs, ...kids) {
   const el = document.createElement(tag);
@@ -21,6 +28,48 @@ function h(tag, attrs, ...kids) {
   return el;
 }
 
+const ICONS = {
+  home: "M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10",
+  trophy: "M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4zM17 5h3v2a3 3 0 01-3 3M7 5H4v2a3 3 0 003 3",
+  bag: "M6 7h12l1 14H5L6 7zM9 7V5a3 3 0 016 0v2",
+  image: "M4 4h16v16H4zM4 16l5-5 4 4 3-3 4 4M15 9h.01",
+  hammer: "M14 4l6 6-3 3-6-6 3-3zM11 7l-8 8 3 3 8-8",
+  user: "M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0",
+  grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+  users: "M9 11a4 4 0 100-8 4 4 0 000 8zM2 21a7 7 0 0114 0M16 3.5a4 4 0 010 7.5M18 14a7 7 0 014 7",
+  megaphone: "M3 11v2a1 1 0 001 1h2l5 4V6L6 10H4a1 1 0 00-1 1zM15 8a5 5 0 010 8M18 5a9 9 0 010 14",
+  upload: "M12 16V4M7 9l5-5 5 5M4 16v4h16v-4",
+  refresh: "M20 11a8 8 0 00-14.9-3M4 4v4h4M4 13a8 8 0 0014.9 3M20 20v-4h-4",
+  list: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
+  heart: "M12 21s-7-4.5-9.5-9A5.5 5.5 0 0112 6a5.5 5.5 0 019.5 6c-2.5 4.5-9.5 9-9.5 9z",
+  logout: "M9 21H5V3h4M16 17l5-5-5-5M21 12H9",
+  coin: "M12 21a9 9 0 100-18 9 9 0 000 18zM9 9h4.5a1.5 1.5 0 010 3H10.5a1.5 1.5 0 000 3H15M12 7v2M12 15v2",
+  bell: "M6 16V11a6 6 0 0112 0v5l2 2H4l2-2zM10 21h4",
+  plus: "M12 5v14M5 12h14",
+  trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13",
+  online: "M5 12.5a10 10 0 0114 0M8.5 16a5 5 0 017 0M12 19.5h.01M2 9a14 14 0 0120 0",
+  shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z",
+  hat: "M4 17h16M7 17V9a5 5 0 0110 0v8M9 6h6",
+  cloak: "M8 3h8l3 18H5L8 3zM10 3v4M14 3v4",
+  download: "M12 4v12M7 11l5 5 5-5M4 20h16",
+  note: "M5 4h14v16H5zM9 8h6M9 12h6M9 16h3",
+  edit: "M4 20h4L20 8l-4-4L4 16v4z",
+};
+function icon(name) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.8");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  p.setAttribute("d", ICONS[name] || ICONS.list);
+  svg.append(p);
+  return svg;
+}
+
 async function api(path, body) {
   const opts = body === undefined ? {} : {
     method: "POST",
@@ -33,83 +82,351 @@ async function api(path, body) {
   } catch (e) {
     throw new Error("Can't reach the panel.");
   }
+  if (r.status === 413) throw new Error("That's too big for the panel's web server. Raise client_max_body_size in nginx (see the README).");
   const j = await r.json().catch(() => ({}));
-  if (!r.ok || j.ok === false) throw new Error(j.error || "Something went wrong.");
+  if (!r.ok || j.ok === false) throw new Error(j.error || "Something went wrong (" + r.status + ").");
   return j;
 }
 
-function fmt(n) { return n == null ? "–" : Number(n).toLocaleString(); }
-function when(t) { return t ? new Date(t * 1000).toLocaleString() : "never"; }
-function coinName() { return (info.server && info.server.currency) || "PlebMc Coins"; }
+const fmt = (n) => (n == null ? "–" : Number(n).toLocaleString());
+const when = (t) => (t ? new Date(t * 1000).toLocaleString() : "never");
+function ago(t) {
+  if (!t) return "never";
+  const s = Math.max(0, Date.now() / 1000 - t);
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.floor(s / 60) + " min ago";
+  if (s < 86400) return Math.floor(s / 3600) + " h ago";
+  if (s < 86400 * 30) return Math.floor(s / 86400) + " d ago";
+  return new Date(t * 1000).toLocaleDateString();
+}
+const coinName = () => (info.server && info.server.currency) || "PlebMc Coins";
+const isAdmin = () => me && (me.role === "admin" || me.role === "owner");
+const isOwner = () => me && me.role === "owner";
 function params() {
   const q = location.hash.split("?")[1] || "";
   return Object.fromEntries(new URLSearchParams(q));
 }
 function message(box, text, good) {
   box.replaceChildren();
-  if (text) box.append(h("div", { class: "msg " + (good ? "good" : "bad") }, text));
+  if (text) box.append(h("div", { class: "msg " + (good ? "good" : "bad"), role: "status" }, text));
+}
+let toastTimer;
+function toast(text, good = true) {
+  document.querySelectorAll(".toast").forEach((t) => t.remove());
+  const t = h("div", { class: "toast " + (good ? "good" : "bad"), role: "status" }, text);
+  document.body.append(t);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.remove(), 4000);
 }
 function field(label, attrs) {
-  const input = h("input", attrs);
+  const input = attrs.rows ? h("textarea", attrs) : h("input", attrs);
   return [h("label", { for: attrs.id }, label), input];
+}
+function select(id, options, value) {
+  return h("select", { id, name: id }, options.map(([v, t]) => h("option", { value: v, selected: v === value }, t)));
 }
 function rolePill(role) {
   return role && role !== "player" ? h("span", { class: "pill " + role }, role) : null;
 }
+// a little colored square with the first letter, so lists don't need images from other sites
+function initial(name) {
+  let hash = 0;
+  for (const c of String(name || "?")) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
+  const el = h("span", { class: "face", "aria-hidden": "true" }, String(name || "?").charAt(0).toUpperCase());
+  el.style.cssText = "display:inline-grid;place-items:center;font-weight:700;font-size:12px;color:#fff;background:hsl(" + (hash % 360) + " 45% 38%)";
+  return el;
+}
+function tile(iconName, label, value, sub) {
+  return h("div", { class: "tile" }, h("div", { class: "k" }, icon(iconName), label), h("div", { class: "v" }, value), sub ? h("div", { class: "s" }, sub) : null);
+}
+function empty(iconName, text) {
+  return h("div", { class: "empty" }, icon(iconName), text);
+}
+function card(title, ...kids) {
+  return h("div", { class: "card" }, title ? h("div", { class: "card-head" }, typeof title === "string" ? h("h2", {}, title) : title) : null, ...kids);
+}
+async function catalog() {
+  if (!catalogCache) catalogCache = (await api("shop")).catalog || [];
+  return catalogCache;
+}
 
-function setNav() {
+/**
+ * A list that loads one page at a time. load(offset) returns {items, total, more};
+ * render(item) makes a row. Returns the element to put on the page and a reset function.
+ */
+function pager(container, load, render, opts = {}) {
+  const more = h("div", { class: "more" });
+  let offset = 0;
+  let shown = 0;
+  let busy = false;
+  let token = 0;
+  const btn = h("button", { onclick: () => next() }, "Show more");
+  const count = h("small");
+  async function next() {
+    if (busy) return;
+    busy = true;
+    btn.disabled = true;
+    btn.textContent = "Loading…";
+    const my = token;
+    try {
+      const r = await load(offset);
+      if (my !== token) return;
+      for (const it of r.items) container.append(render(it));
+      offset = r.nextOffset != null ? r.nextOffset : offset + r.items.length;
+      shown += r.items.length;
+      if (!shown) container.append(opts.empty ? opts.empty() : empty("list", "Nothing here yet."));
+      more.replaceChildren();
+      count.textContent = r.total != null ? "Showing " + fmt(shown) + " of " + fmt(r.total) : "";
+      if (r.more) more.append(btn);
+      if (count.textContent) more.append(count);
+    } catch (e) {
+      more.replaceChildren(h("div", { class: "msg bad" }, e.message));
+    } finally {
+      busy = false;
+      btn.disabled = false;
+      btn.textContent = "Show more";
+    }
+  }
+  function reset() {
+    token++;
+    offset = 0;
+    shown = 0;
+    busy = false;
+    container.replaceChildren();
+    more.replaceChildren();
+    next();
+  }
+  return { more, reset, next };
+}
+
+// ==================== shell ====================
+
+const NAV = [
+  ["General", [["home", "Home", "home"], ["leaderboard", "Leaderboard", "trophy"], ["shop", "Shop", "bag"], ["gallery", "Gallery", "image"], ["makers", "Makers", "hammer"]]],
+  ["You", [["me", "My account", "user", true]]],
+  ["Admin", [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["announce", "Announcements", "megaphone"], ["publish", "Publish to shop", "upload"], ["client", "Client updates", "refresh"], ["audit", "Admin log", "list"]], "admin"],
+];
+
+function setNav(view) {
   nav.replaceChildren();
+  for (const [group, links, need] of NAV) {
+    if (need === "admin" && !isAdmin()) continue;
+    const g = h("div", { class: "navgroup" }, h("span", {}, group));
+    for (const [id, label, ic, signedIn] of links) {
+      if (signedIn && !me) continue;
+      g.append(h("a", { href: "#" + id, class: view === id || (view === "player" && id === "players") ? "on" : null }, icon(ic), label));
+    }
+    nav.append(g);
+  }
+  if (!me) nav.append(h("div", { class: "navgroup" }, h("span", {}, "Account"), h("a", { href: "#login", class: view === "login" ? "on" : null }, icon("user"), "Sign in"),
+    h("a", { href: "#register", class: view === "register" ? "on" : null }, icon("plus"), "Create account")));
+  who.replaceChildren();
   if (me) {
-    nav.append(h("a", { class: "btn", href: "#me" }, me.name));
-    if (me.role !== "player") nav.append(h("a", { class: "btn", href: "#admin" }, "Admin"));
-    nav.append(h("button", { onclick: logout }, "Sign out"));
+    who.append(h("a", { href: "#me", class: "who" }, initial(me.name), h("span", { class: "name" }, me.name, " "), rolePill(me.role)),
+      h("button", { class: "ghost small", onclick: logout, title: "Sign out" }, icon("logout")));
   } else {
-    nav.append(h("a", { class: "btn", href: "#login" }, "Sign in"), h("a", { class: "btn", href: "#register" }, "Create account"));
+    who.append(h("a", { class: "btn small", href: "#login" }, "Sign in"), h("a", { class: "btn primary small", href: "#register" }, "Create account"));
   }
 }
+
+const menuBtn = document.getElementById("menu");
+const side = document.getElementById("side");
+menuBtn.addEventListener("click", () => {
+  const open = side.classList.toggle("open");
+  menuBtn.setAttribute("aria-expanded", String(open));
+});
 
 async function logout() {
   await api("logout", {}).catch(() => {});
   me = null;
-  location.hash = "#login";
+  location.hash = "#home";
   route();
+}
+
+function announcementBanner() {
+  const a = info.announcement;
+  if (!a || !a.text) return null;
+  return h("div", { class: "banner" }, icon("megaphone"), h("span", {}, a.text), h("small", {}, ago(a.at)));
+}
+
+// ==================== home ====================
+
+async function homeView() {
+  const s = info.server || {};
+  const c = info.client || {};
+  const wrap = h("div");
+  wrap.append(announcementBanner() || "");
+  wrap.append(h("div", { class: "card hero" }, h("img", { src: "/static/logo.png", alt: "" }),
+    h("div", {}, h("h1", {}, info.site), h("p", { class: "muted" }, me ? "Welcome back, " + me.name + "." : "Your account, your coins and cosmetics, the leaderboard, and makers for hats and cloaks."),
+      h("div", { class: "row" },
+        me ? h("a", { class: "btn primary", href: "#me" }, icon("user"), "My account") : h("a", { class: "btn primary", href: "#register" }, icon("plus"), "Create account"),
+        me ? null : h("a", { class: "btn", href: "#login" }, "Sign in"),
+        h("a", { class: "btn", href: "#makers" }, icon("hammer"), "Make a hat or cloak"),
+        c.url ? h("a", { class: "btn", href: c.url, target: "_blank", rel: "noopener" }, icon("download"), "Get PlebClient" + (c.latest ? " " + c.latest : "")) : null))));
+  wrap.append(h("div", { class: "tiles" },
+    tile("online", "Server", h("span", {}, h("span", { class: "dot" + (s.connected ? " on" : "") }), s.connected ? "Online" : "Offline"), s.connected ? fmt(s.online) + " playing now" : "The panel can't see the server right now"),
+    tile("refresh", "Latest PlebClient", c.latest || "–", c.minimum ? "Oldest allowed: " + c.minimum : "Your client tells you when it's out of date"),
+    tile("coin", "Currency", coinName(), "Earn it by playing, spend it in the shop")));
+  const board = h("tbody");
+  wrap.append(card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "Richest players"), h("span", { class: "spacer" }), h("a", { href: "#leaderboard" }, "Full leaderboard")),
+    h("div", { class: "scroll" }, h("table", {}, h("tbody", {}, board)))));
+  api("leaderboard?limit=5").then((r) => {
+    if (!r.rows.length) board.append(h("tr", {}, h("td", { class: "muted" }, "Nobody yet.")));
+    for (const p of r.rows) board.append(leaderRow(p));
+  }).catch((e) => board.append(h("tr", {}, h("td", { class: "muted" }, e.message))));
+  return wrap;
+}
+
+function leaderRow(p) {
+  return h("tr", {}, h("td", { style: "width:40px" }, h("span", { class: "rank" + (p.rank <= 3 ? " r" + p.rank : "") }, p.rank)),
+    h("td", {}, initial(p.name), p.name), h("td", { class: "num" }, h("b", {}, fmt(p.coins)), " ", h("span", { class: "muted" }, coinName())),
+    h("td", { class: "num muted" }, fmt(p.items) + " items"), h("td", { class: "num muted" }, fmt(p.streak) + " day streak"));
+}
+
+async function leaderboardView() {
+  const body = h("tbody");
+  const p = pager(body, async (offset) => {
+    const r = await api("leaderboard?offset=" + offset + "&limit=50");
+    return { items: r.rows, total: r.total, more: r.more };
+  }, leaderRow, { empty: () => h("tr", {}, h("td", { class: "muted" }, "Nobody has coins yet.")) });
+  p.reset();
+  return card("Leaderboard", h("p", { class: "muted" }, "Everyone who joined, by " + coinName() + "."), h("div", { class: "scroll" }, h("table", {}, body)), p.more);
+}
+
+async function shopView() {
+  const items = await catalog();
+  const q = h("input", { placeholder: "Search the shop", "aria-label": "Search the shop" });
+  let cat = "all";
+  const cats = ["all", ...new Set(items.map((i) => i.category))];
+  const chips = h("div", { class: "chips" });
+  const grid = h("div", { class: "items" });
+  const draw = () => {
+    chips.replaceChildren(...cats.map((c) => h("button", { class: "chip", "aria-pressed": String(c === cat), onclick: () => { cat = c; draw(); } }, c === "all" ? "Everything" : c)));
+    const t = q.value.trim().toLowerCase();
+    const list = items.filter((i) => (cat === "all" || i.category === cat) && (!t || i.name.toLowerCase().includes(t) || i.id.includes(t)));
+    grid.replaceChildren(...list.map((i) => h("div", { class: "item" }, h("b", {}, i.name), h("small", {}, i.category),
+      h("span", { class: "price" }, i.price == null || i.price < 0 ? "Not for sale" : fmt(i.price) + " " + coinName()))));
+    if (!list.length) grid.append(empty("bag", items.length ? "Nothing matches." : "The shop shows up once the server connects."));
+  };
+  q.addEventListener("input", draw);
+  draw();
+  return card("Shop", h("p", { class: "muted" }, "Buy these in the PlebClient shop (Right Shift > Shop)."), h("div", { class: "row" }, q), h("div", { style: "height:10px" }), chips, h("div", { style: "height:14px" }), grid);
+}
+
+// ==================== designs ====================
+
+function toolUrl(kind, id) {
+  return "/static/tools/" + kind + ".html" + (id ? "?design=" + id : "");
+}
+
+function designCard(d, opts = {}) {
+  const pic = h("div", { class: "pic" }, d.thumb ? h("img", { src: d.thumb, alt: "" }) : icon(d.kind === "hat" ? "hat" : "cloak"));
+  const like = h("button", { class: "small like", "aria-pressed": String(!!d.liked), title: me ? "Like" : "Sign in to like",
+    onclick: async () => {
+      if (!me) { location.hash = "#login"; return; }
+      try {
+        await api("designs/like", { id: d.id });
+        d.liked = !d.liked;
+        d.likes += d.liked ? 1 : -1;
+        like.setAttribute("aria-pressed", String(d.liked));
+        like.lastChild.textContent = " " + d.likes;
+      } catch (e) { toast(e.message, false); }
+    } }, icon("heart"), " " + d.likes);
+  const actions = h("div", { class: "row" });
+  if (d.public) actions.append(like);
+  actions.append(h("a", { class: "btn small", href: toolUrl(d.kind, d.id) }, d.mine ? "Open" : "Remix"));
+  if (d.mine || (opts.admin && isAdmin())) {
+    actions.append(h("button", { class: "small danger", title: "Delete", onclick: async () => {
+      if (!confirm("Delete " + d.name + "?")) return;
+      try { await api("designs/delete", { id: d.id }); el.remove(); toast("Deleted."); } catch (e) { toast(e.message, false); }
+    } }, icon("trash")));
+  }
+  const el = h("div", { class: "design" }, pic, h("div", { class: "body" }, h("b", {}, d.name),
+    h("small", { class: "muted" }, d.kind + (d.author ? " by " + d.author : "") + " · " + ago(d.updated)),
+    h("div", { class: "row", style: "gap:6px" }, d.public ? h("span", { class: "pill good" }, "shared") : opts.mine ? h("span", { class: "pill" }, "private") : null,
+      d.published ? h("span", { class: "pill admin" }, "in shop") : null),
+    actions));
+  return el;
+}
+
+async function galleryView() {
+  const p0 = params();
+  let kind = p0.kind || "";
+  let sort = p0.sort || "top";
+  const grid = h("div", { class: "designs" });
+  const pg = pager(grid, async (offset) => {
+    const r = await api("designs/public?kind=" + kind + "&sort=" + sort + "&offset=" + offset);
+    return { items: r.designs, total: r.total, more: r.more };
+  }, (d) => designCard(d, { admin: true }), { empty: () => empty("image", "No shared designs yet. Make one and tick Share.") });
+  const chips = h("div", { class: "chips" });
+  const draw = () => {
+    chips.replaceChildren(
+      ...[["", "All"], ["hat", "Hats"], ["cloak", "Cloaks"]].map(([k, t]) => h("button", { class: "chip", "aria-pressed": String(k === kind), onclick: () => { kind = k; draw(); pg.reset(); } }, t)),
+      h("span", { style: "width:12px" }),
+      ...[["top", "Most liked"], ["new", "Newest"]].map(([k, t]) => h("button", { class: "chip", "aria-pressed": String(k === sort), onclick: () => { sort = k; draw(); pg.reset(); } }, t)));
+  };
+  draw();
+  pg.reset();
+  return h("div", {}, card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "Gallery"), h("span", { class: "spacer" }), h("a", { class: "btn primary small", href: "#makers" }, icon("hammer"), "Make your own")),
+    h("p", { class: "muted" }, "Hats and cloaks players made and shared. Like the ones you want in the shop, or open one to remix it."), chips, h("div", { style: "height:14px" }), grid, pg.more));
+}
+
+function makersView() {
+  return h("div", {},
+    h("div", { class: "tools" },
+      h("a", { class: "tool-card", href: toolUrl("hat") }, icon("hat"), h("h2", {}, "Hat Maker"),
+        h("span", { class: "muted" }, "Build a hat out of blocks right on a Minecraft head. Templates, mirror, recolor, undo, and a Blockbench export.")),
+      h("a", { class: "tool-card", href: toolUrl("cloak") }, icon("cloak"), h("h2", {}, "Cloak Maker"),
+        h("span", { class: "muted" }, "Turn a GIF, frames or a picture into an animated cloak, or use a generated effect. Live 3D preview."))),
+    h("div", { style: "height:18px" }),
+    card("What you can do with them",
+      h("ul", { class: "muted" },
+        h("li", {}, "Save designs to your account (up to 30) and keep editing later."),
+        h("li", {}, "Share them in the ", h("a", { href: "#gallery" }, "Gallery"), " where others can like and remix them."),
+        h("li", {}, "Admins can publish a design straight into the server's shop with a price."),
+        h("li", {}, "Download the files (.bbmodel or .png) to use anywhere."))));
 }
 
 // ==================== sign in / register ====================
 
 function loginView() {
   const out = h("div");
+  const btn = h("button", { class: "primary full", type: "submit" }, "Sign in");
   const form = h("form", { class: "card narrow", onsubmit: async (e) => {
     e.preventDefault();
     btn.disabled = true;
     try {
       const r = await api("login", { name: form.elements.namedItem("name").value.trim(), password: form.elements.namedItem("password").value });
       me = r.account;
-      location.hash = "#me";
+      const next = params().next || "#me";
+      // back to a maker page after signing in from it
+      if (next.startsWith("/static/tools/")) location.href = next;
+      else location.hash = next.startsWith("#") ? next : "#me";
     } catch (err) {
       message(out, err.message);
     }
     btn.disabled = false;
   } },
-  h("h1", {}, "Sign in"),
-  h("p", { class: "muted" }, "Use your Minecraft name and your " + info.site + " account password."),
+  h("div", { class: "center" }, h("img", { src: "/static/logo.png", alt: "", style: "width:64px;height:64px;image-rendering:pixelated" })),
+  h("h1", { class: "center" }, "Sign in"),
+  h("p", { class: "muted center" }, "Your Minecraft name and your " + info.site + " password."),
   field("Minecraft name", { id: "name", name: "name", autocomplete: "username", required: true, maxlength: 16 }),
   field("Password", { id: "password", name: "password", type: "password", autocomplete: "current-password", required: true }),
-  out);
-  const btn = h("button", { class: "primary full", type: "submit" }, "Sign in");
-  form.append(btn, h("p", { class: "muted center" }, "No account yet? ", h("a", { href: "#register" }, "Create one")));
+  out, btn, h("p", { class: "muted center", style: "margin-top:14px" }, "No account yet? ", h("a", { href: "#register" }, "Create one")));
   return form;
 }
 
 function registerView() {
   const p = params();
   const out = h("div");
+  const btn = h("button", { class: "primary full", type: "submit" }, "Create account");
   const form = h("form", { class: "card narrow", onsubmit: async (e) => {
     e.preventDefault();
     if (form.elements.namedItem("password").value !== form.elements.namedItem("password2").value) return message(out, "The passwords don't match.");
     btn.disabled = true;
     try {
-      const r = await api("register", { name: form.elements.namedItem("name").value.trim(), code: form.elements.namedItem("code") ? form.elements.namedItem("code").value : "", password: form.elements.namedItem("password").value });
+      const code = form.elements.namedItem("code");
+      const r = await api("register", { name: form.elements.namedItem("name").value.trim(), code: code ? code.value : "", password: form.elements.namedItem("password").value });
       me = r.account;
       location.hash = "#me";
     } catch (err) {
@@ -117,55 +434,66 @@ function registerView() {
     }
     btn.disabled = false;
   } },
-  h("h1", {}, "Create your account"),
-  info.openRegistration ? h("p", { class: "muted" }, "Pick the name you want to play as. Then sign in with it on the PlebClient start screen. (You can also create the account right there on the start screen.)") :
+  h("div", { class: "center" }, h("img", { src: "/static/logo.png", alt: "", style: "width:64px;height:64px;image-rendering:pixelated" })),
+  h("h1", { class: "center" }, "Create your account"),
+  info.openRegistration ? h("p", { class: "muted center" }, "Pick the name you play as, then sign in with it on the PlebClient start screen.") :
     h("div", {}, h("p", { class: "muted" }, "Your account belongs to the name you play with. To prove it's you:"),
-      h("ol", { class: "steps" }, h("li", {}, "Join the server with your name"), h("li", {}, "Type ", h("code", {}, "/account code"), " in chat"),
-        h("li", {}, "Type the code here (or click the link in chat)"))),
+      h("ol", { class: "muted" }, h("li", {}, "Join the server with your name"), h("li", {}, "Type ", h("code", {}, "/account code"), " in chat"), h("li", {}, "Type the code here"))),
   field("Minecraft name", { id: "name", name: "name", required: true, maxlength: 16, value: p.name || "", autocomplete: "username" }),
   info.openRegistration ? null : field("Code from the game", { id: "code", name: "code", required: true, value: p.code || "", placeholder: "ABCD-1234", autocomplete: "off" }),
   field("Password (8+ characters)", { id: "password", name: "password", type: "password", required: true, minlength: 8, autocomplete: "new-password" }),
   field("Password again", { id: "password2", name: "password2", type: "password", required: true, minlength: 8, autocomplete: "new-password" }),
-  out);
-  const btn = h("button", { class: "primary full", type: "submit" }, "Create account");
-  form.append(btn, h("p", { class: "muted center" }, "Or open the PlebClient: its start screen has Create account."));
+  out, btn, h("p", { class: "muted center", style: "margin-top:14px" }, "Already have one? ", h("a", { href: "#login" }, "Sign in")));
   return form;
 }
 
 // ==================== my account ====================
 
-function itemList(owned, equipped, catalog) {
-  const byId = Object.fromEntries((catalog || []).map((i) => [i.id, i]));
+function itemList(owned, equipped, cat) {
+  const byId = Object.fromEntries((cat || []).map((i) => [i.id, i]));
   const worn = new Set(Object.values(equipped || {}));
-  if (!owned || !owned.length) return h("p", { class: "muted" }, "No cosmetics yet. Buy them in the PlebMc client shop (Right Shift).");
+  if (!owned || !owned.length) return empty("bag", "No cosmetics yet. Buy them in the PlebClient shop (Right Shift).");
   return h("div", { class: "items" }, owned.map((id) => {
     const it = byId[id] || { name: id, category: "" };
-    return h("div", { class: "item" + (worn.has(id) ? " worn" : "") }, it.name, h("small", {}, it.category + (worn.has(id) ? " · wearing" : "")));
+    return h("div", { class: "item" + (worn.has(id) ? " worn" : "") }, h("b", {}, it.name), h("small", {}, it.category + (worn.has(id) ? " · wearing" : "")));
   }));
 }
 
 async function meView() {
   const r = await api("me");
-  if (!r.account) { location.hash = "#login"; return loginView(); }
+  if (!r.account) { location.hash = "#login?next=" + encodeURIComponent("#me"); return loginView(); }
   me = r.account;
-  setNav();
   const p = r.player;
   const wrap = h("div");
-  wrap.append(h("div", { class: "card" },
-    h("h1", {}, me.name, " ", rolePill(me.role)),
-    h("p", { class: "muted" }, r.online ? "Online now" : "Last signed in " + when(me.lastLogin)),
-    h("div", { class: "stats" },
-      h("div", { class: "stat" }, h("b", {}, fmt(p ? p.coins : 0)), h("span", {}, coinName())),
-      h("div", { class: "stat" }, h("b", {}, fmt(p ? p.owned.length : 0)), h("span", {}, "Cosmetics")),
-      h("div", { class: "stat" }, h("b", {}, fmt(p ? p.streak : 0)), h("span", {}, "Login streak")),
-      h("div", { class: "stat" }, h("b", {}, fmt(r.devices)), h("span", {}, "Remembered game clients"))),
-    p ? null : h("p", { class: "muted" }, "Join the server once and your coins show up here.")),
-  h("div", { class: "card" }, h("h2", {}, "Your cosmetics"), itemList(p && p.owned, p && p.equipped, r.catalog)),
-  h("div", { class: "card" }, h("h2", {}, "In game"),
-    h("p", { class: "muted" }, "The PlebClient asks you to sign in when it starts, and then you play as ", me.name,
-      ". Until you sign in, nobody on your name can spend your coins.")));
-  wrap.append(passwordCard(), signoutCard());
+  wrap.append(announcementBanner() || "");
+  wrap.append(h("div", { class: "card hero" }, initialBig(me.name),
+    h("div", {}, h("h1", {}, me.name, " ", rolePill(me.role)),
+      h("p", { class: "muted" }, h("span", { class: "dot" + (r.online ? " on" : "") }), r.online ? "Online now" : "Last signed in " + ago(me.lastLogin)),
+      p ? null : h("p", { class: "muted" }, "Join the server once and your coins show up here."))));
+  wrap.append(h("div", { class: "tiles" },
+    tile("coin", coinName(), fmt(p ? p.coins : 0)),
+    tile("bag", "Cosmetics", fmt(p ? p.owned.length : 0)),
+    tile("trophy", "Login streak", fmt(p ? p.streak : 0) + " days"),
+    tile("shield", "Remembered clients", fmt(r.devices))));
+  wrap.append(card("Your cosmetics", itemList(p && p.owned, p && p.equipped, r.catalog)));
+  const designs = h("div", { class: "designs" });
+  wrap.append(card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "My designs"), h("span", { class: "spacer" }),
+    h("a", { class: "btn small", href: toolUrl("hat") }, icon("hat"), "New hat"), h("a", { class: "btn small", href: toolUrl("cloak") }, icon("cloak"), "New cloak")), designs));
+  api("designs/mine").then((d) => {
+    if (!d.designs.length) designs.replaceWith(empty("image", "Nothing saved yet. Make a hat or cloak and press Save to my account."));
+    for (const x of d.designs) designs.append(designCard(x, { mine: true }));
+  }).catch((e) => message(designs, e.message));
+  wrap.append(h("div", { class: "grid g2" }, passwordCard(), signoutCard()));
   return wrap;
+}
+
+function initialBig(name) {
+  const el = initial(name);
+  el.style.width = el.style.height = "88px";
+  el.style.fontSize = "40px";
+  el.style.borderRadius = "20px";
+  el.style.margin = "0";
+  return el;
 }
 
 function passwordCard() {
@@ -179,11 +507,10 @@ function passwordCard() {
       message(out, "Password changed. Every game client was signed out.", true);
     } catch (err) { message(out, err.message); }
   } }, h("h2", {}, "Change password"),
-  h("div", { class: "row" },
-    h("div", {}, field("Current password", { id: "old", name: "old", type: "password", required: true, autocomplete: "current-password" })),
-    h("div", {}, field("New password", { id: "npw", name: "password", type: "password", required: true, minlength: 8, autocomplete: "new-password" })),
-    h("div", {}, field("New password again", { id: "npw2", name: "password2", type: "password", required: true, minlength: 8, autocomplete: "new-password" })),
-    h("button", { class: "primary", type: "submit" }, "Change")), out);
+  field("Current password", { id: "old", name: "old", type: "password", required: true, autocomplete: "current-password" }),
+  field("New password", { id: "npw", name: "password", type: "password", required: true, minlength: 8, autocomplete: "new-password" }),
+  field("New password again", { id: "npw2", name: "password2", type: "password", required: true, minlength: 8, autocomplete: "new-password" }),
+  h("div", { style: "height:14px" }), h("button", { class: "primary", type: "submit" }, "Change password"), out);
   return form;
 }
 
@@ -193,116 +520,162 @@ function signoutCard() {
     h("p", { class: "muted" }, "Forgets every remembered game client and signs you out in game. Use this if someone else might know your password."),
     h("button", { class: "danger", onclick: async () => {
       try { await api("me/signout", {}); message(out, "Done. Sign in again in game.", true); } catch (err) { message(out, err.message); }
-    } }, "Sign out everywhere"), out);
+    } }, icon("logout"), "Sign out everywhere"), out);
 }
 
-// ==================== admin ====================
+// ==================== admin: dashboard ====================
 
-async function adminView() {
-  if (!me || me.role === "player") { location.hash = "#me"; return meView(); }
+async function dashboardView() {
+  const d = await api("admin/dashboard");
+  const s = d.server;
   const wrap = h("div");
-  const list = h("div", { class: "scroll" });
+  if (!s.connected) wrap.append(h("div", { class: "banner update-bar" }, icon("online"), h("span", {}, "The proxy isn't connected (last sync " + ago(s.lastSync) + "). Check accounts: in PlebioAPI's config.yml.")));
+  wrap.append(h("div", { class: "tiles" },
+    tile("online", "Online now", fmt(s.online), s.connected ? "Last sync " + ago(s.lastSync) : "Proxy offline"),
+    tile("users", "Accounts", fmt(d.accounts), "+" + fmt(d.newDay) + " today · +" + fmt(d.newWeek) + " this week"),
+    tile("user", "Active players", fmt(d.activeDay), fmt(d.activeWeek) + " this week"),
+    tile("trophy", "Players seen", fmt(d.players), fmt(d.staff) + " staff · " + fmt(d.locked) + " locked"),
+    tile("coin", coinName() + " in circulation", fmt(d.coins), "Richest has " + fmt(d.richest)),
+    tile("image", "Designs saved", fmt(d.designs))));
+  const max = Math.max(1, ...d.signups.map((x) => x.count));
+  const bars = h("div", { class: "bars" }, d.signups.map((x) => {
+    const b = h("div", { title: new Date(x.day * 1000).toLocaleDateString() + ": " + x.count + " new" });
+    b.style.height = Math.max(2, (x.count / max) * 100) + "%";
+    return b;
+  }));
+  const labels = h("div", { class: "bar-labels" }, d.signups.map((x, i) => h("span", {}, i % 2 ? "" : new Date(x.day * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" }))));
+  const pmax = Math.max(1, ...d.popular.map((x) => x.owners));
+  const popular = d.popular.length ? h("div", { class: "list" }, d.popular.map((x) => {
+    const m = h("i");
+    m.style.width = (x.owners / pmax) * 100 + "%";
+    return h("div", { class: "li" }, h("span", {}, x.name, " ", h("small", { class: "muted" }, x.category)), h("b", {}, fmt(x.owners)), h("div", { class: "meter" }, m));
+  })) : empty("bag", "Nobody owns anything yet.");
+  const vtotal = d.clients.reduce((a, x) => a + x.n, 0) || 1;
+  const latest = (info.client || {}).latest;
+  const clients = d.clients.length ? h("div", { class: "list" }, d.clients.slice(0, 8).map((x) => {
+    const m = h("i");
+    m.style.width = (x.n / vtotal) * 100 + "%";
+    return h("div", { class: "li" }, h("span", {}, "PlebClient " + x.version, " ", h("small", { class: "muted" }, x.platform), " ",
+      latest && x.version !== latest ? h("span", { class: "pill warn" }, "outdated") : null), h("b", {}, fmt(x.n)), h("div", { class: "meter" }, m));
+  })) : empty("refresh", "No client has checked in yet (clients from this update on do).");
+  wrap.append(h("div", { class: "grid g2" },
+    card("New accounts, last 14 days", bars, labels),
+    card("Most owned cosmetics", popular)));
+  wrap.append(h("div", { style: "height:18px" }));
+  wrap.append(h("div", { class: "grid g2" },
+    card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "Clients in use (7 days)"), h("span", { class: "spacer" }), h("a", { href: "#client" }, "Update settings")), clients),
+    card("Quick actions", h("div", { class: "row" },
+      h("a", { class: "btn", href: "#players" }, icon("users"), "Players"),
+      h("a", { class: "btn", href: "#announce" }, icon("megaphone"), "Announce"),
+      h("a", { class: "btn", href: "#publish" }, icon("upload"), "Publish to shop"),
+      h("a", { class: "btn", href: "#gallery" }, icon("image"), "Gallery"),
+      h("a", { class: "btn", href: "#audit" }, icon("list"), "Admin log")))));
+  return wrap;
+}
+
+// ==================== admin: players ====================
+
+async function playersView() {
+  const p0 = params();
+  const state = { q: p0.q || "", filter: p0.filter || "all", sort: p0.sort || "coins" };
   const status = h("p", { class: "muted" });
-  const search = h("input", { placeholder: "Search players", "aria-label": "Search players" });
-  let timer;
-  const load = async () => {
-    try {
-      const r = await api("admin/players?q=" + encodeURIComponent(search.value.trim()));
+  const search = h("input", { placeholder: "Search by name", "aria-label": "Search players", value: state.q, type: "search" });
+  const sortSel = select("sort", [["coins", "Most coins"], ["recent", "Recently seen"], ["new", "Newest accounts"], ["name", "Name A-Z"]], state.sort);
+  const chips = h("div", { class: "chips" });
+  const body = h("tbody");
+  let first = true;
+  const pg = pager(body, async (offset) => {
+    const r = await api("admin/players?q=" + encodeURIComponent(state.q) + "&filter=" + state.filter + "&sort=" + state.sort + "&offset=" + offset);
+    if (first || offset === 0) {
       const s = r.server;
       status.replaceChildren(h("span", { class: "dot" + (s.connected ? " on" : "") }),
-        s.connected ? "Proxy connected · " + s.online + " online · last sync " + when(s.lastSync) : "Proxy not connected (last sync " + when(s.lastSync) + "). Check accounts: in PlebioAPI's config.yml.");
-      list.replaceChildren(h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Player"), h("th", {}, coinName()), h("th", {}, "Items"), h("th", {}, "Account"))),
-        h("tbody", {}, r.players.map((p) => h("tr", { class: "click", onclick: () => { location.hash = "#player?name=" + encodeURIComponent(p.name); } },
-          h("td", {}, p.online ? h("span", { class: "dot on" }) : null, p.name, " ", rolePill(p.role)),
-          h("td", {}, fmt(p.coins)), h("td", {}, fmt(p.items)),
-          h("td", {}, p.locked ? h("span", { class: "pill locked" }, "locked") : p.account ? "yes" : h("span", { class: "muted" }, "none")))))));
-      if (!r.players.length) list.append(h("p", { class: "muted" }, "Nobody found."));
-    } catch (err) { message(list, err.message); }
-  };
-  search.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(load, 250); });
-  wrap.append(h("div", { class: "card" }, h("h1", {}, "Players"), status, search, h("div", { style: "height:12px" }), list));
-  wrap.append(createCard(load));
-  wrap.append(auditCard());
-  load();
-  return wrap;
+        s.connected ? "Proxy connected · " + s.online + " online · last sync " + ago(s.lastSync) : "Proxy not connected (last sync " + ago(s.lastSync) + ").");
+      first = false;
+    }
+    return { items: r.players, total: r.total, more: r.more };
+  }, (p) => h("tr", { class: "click", tabindex: "0", onclick: () => { location.hash = "#player?name=" + encodeURIComponent(p.name); },
+    onkeydown: (e) => { if (e.key === "Enter") location.hash = "#player?name=" + encodeURIComponent(p.name); } },
+  h("td", {}, initial(p.name), p.online ? h("span", { class: "dot on", title: "Online" }) : null, p.name, " ", rolePill(p.role)),
+  h("td", { class: "num" }, fmt(p.coins)), h("td", { class: "num" }, fmt(p.items)),
+  h("td", {}, p.locked ? h("span", { class: "pill locked" }, "locked") : p.account ? h("span", { class: "pill good" }, "yes") : h("span", { class: "muted" }, "none")),
+  h("td", { class: "muted" }, ago(p.lastSeen))), { empty: () => h("tr", {}, h("td", { class: "muted", colspan: "5" }, "Nobody found.")) });
+  const keep = () => history.replaceState(null, "", "#players?" + new URLSearchParams(state).toString());
+  const drawChips = () => chips.replaceChildren(...[["all", "Everyone"], ["online", "Online"], ["accounts", "Has account"], ["noaccount", "No account"], ["staff", "Staff"], ["locked", "Locked"]]
+    .map(([k, t]) => h("button", { class: "chip", "aria-pressed": String(k === state.filter), onclick: () => { state.filter = k; drawChips(); keep(); pg.reset(); } }, t)));
+  drawChips();
+  let timer;
+  search.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => { state.q = search.value.trim(); keep(); pg.reset(); }, 250); });
+  sortSel.addEventListener("change", () => { state.sort = sortSel.value; keep(); pg.reset(); });
+  pg.reset();
+  return h("div", {}, card("Players", status, h("div", { class: "row" }, search, sortSel), h("div", { style: "height:10px" }), chips, h("div", { style: "height:10px" }),
+    h("div", { class: "scroll" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Player"), h("th", { class: "num" }, coinName()), h("th", { class: "num" }, "Items"), h("th", {}, "Account"), h("th", {}, "Last seen"))), body)), pg.more),
+  createCard(() => pg.reset()));
 }
 
 function createCard(after) {
   const out = h("div");
   const form = h("form", { class: "card", onsubmit: async (e) => {
     e.preventDefault();
+    const name = form.elements.namedItem("name").value.trim();
     try {
-      await api("admin/account", { action: "create", name: form.elements.namedItem("name").value.trim(), password: form.elements.namedItem("password").value, role: form.elements.namedItem("role") ? form.elements.namedItem("role").value : "player" });
-      message(out, "Created " + form.elements.namedItem("name").value.trim() + ".", true);
+      await api("admin/account", { action: "create", name, password: form.elements.namedItem("password").value, role: form.elements.namedItem("role") ? form.elements.namedItem("role").value : "player" });
+      message(out, "Created " + name + ".", true);
       form.reset();
       after();
     } catch (err) { message(out, err.message); }
   } }, h("h2", {}, "Create an account for a player"),
-  h("div", { class: "row" },
+  h("div", { class: "grid g3" },
     h("div", {}, field("Minecraft name", { id: "cname", name: "name", required: true, maxlength: 16 })),
     h("div", {}, field("Password", { id: "cpw", name: "password", type: "password", required: true, minlength: 8, autocomplete: "new-password" })),
-    me.role === "owner" ? h("div", {}, h("label", { for: "crole" }, "Role"), h("select", { id: "crole", name: "role" }, ROLE_OPTIONS())) : null,
-    h("button", { class: "primary", type: "submit" }, "Create")), out);
+    isOwner() ? h("div", {}, h("label", { for: "role" }, "Role"), select("role", ROLES.map((r) => [r, r]), "player")) : h("div")),
+  h("div", { style: "height:14px" }), h("button", { class: "primary", type: "submit" }, icon("plus"), "Create"), out);
   return form;
 }
-
-function ROLE_OPTIONS(sel) {
-  return ["player", "admin", "owner"].map((r) => h("option", { value: r, selected: r === sel }, r));
-}
-
-function auditCard() {
-  const box = h("div", { class: "scroll" }, h("button", { onclick: async () => {
-    try {
-      const r = await api("admin/audit");
-      box.replaceChildren(h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "When"), h("th", {}, "Who"), h("th", {}, "What"), h("th", {}, "Detail"))),
-        h("tbody", {}, r.audit.map((a) => h("tr", {}, h("td", {}, when(a.at)), h("td", {}, a.actor), h("td", {}, a.action), h("td", {}, a.detail))))));
-    } catch (err) { message(box, err.message); }
-  } }, "Show the log"));
-  return h("div", { class: "card" }, h("h2", {}, "Admin log"), box);
-}
+const ROLES = ["player", "admin", "owner"];
 
 async function playerView() {
-  if (!me || me.role === "player") { location.hash = "#me"; return meView(); }
   const name = params().name || "";
   const r = await api("admin/player?name=" + encodeURIComponent(name));
   const p = r.player;
   const acc = r.account;
   const out = h("div");
-  const done = (text) => { message(out, text, true); setTimeout(route, 1500); };
-  const act = (body) => api("admin/command", { name: r.name, ...body }).then(() => done("Queued. The server applies it within a few seconds.")).catch((e) => message(out, e.message));
+  const done = (text) => { toast(text); setTimeout(route, 1200); };
+  const act = (body) => api("admin/command", { name: r.name, ...body }).then(() => done("Queued. The server applies it within a few seconds.")).catch((e) => toast(e.message, false));
   const accAct = (body, confirmText) => {
     if (confirmText && !confirm(confirmText)) return;
-    api("admin/account", { name: r.name, ...body }).then(() => done("Done.")).catch((e) => message(out, e.message));
+    api("admin/account", { name: r.name, ...body }).then(() => done("Done.")).catch((e) => toast(e.message, false));
   };
-  const wrap = h("div", {}, h("p", {}, h("a", { href: "#admin" }, "← Players")));
-  wrap.append(h("div", { class: "card" },
-    h("h1", {}, r.online ? h("span", { class: "dot on" }) : null, r.name, " ", rolePill(acc && acc.role), acc && acc.locked ? h("span", { class: "pill locked" }, "locked") : null),
-    h("p", { class: "muted" }, acc ? "Account since " + when(acc.created) + " · last sign-in " + when(acc.lastLogin) + " · " + r.devices + " remembered client(s)" : "No account yet: anyone on this name can't spend until it has one."),
-    h("div", { class: "stats" },
-      h("div", { class: "stat" }, h("b", {}, fmt(p ? p.coins : 0)), h("span", {}, coinName())),
-      h("div", { class: "stat" }, h("b", {}, fmt(p ? p.owned.length : 0)), h("span", {}, "Cosmetics")),
-      h("div", { class: "stat" }, h("b", {}, fmt(p ? p.streak : 0)), h("span", {}, "Login streak"))), out));
+  const wrap = h("div", {}, h("p", {}, h("a", { href: "#players" }, "← Players")));
+  wrap.append(h("div", { class: "card hero" }, initialBig(r.name),
+    h("div", {}, h("h1", {}, r.name, " ", rolePill(acc && acc.role), acc && acc.locked ? h("span", { class: "pill locked" }, "locked") : null),
+      h("p", { class: "muted" }, h("span", { class: "dot" + (r.online ? " on" : "") }), r.online ? "Online now" : "Offline",
+        acc ? " · account since " + when(acc.created) + " · last sign-in " + ago(acc.lastLogin) + " · " + r.devices + " remembered client(s)" : " · no account yet"),
+      out)));
+  wrap.append(h("div", { class: "tiles" },
+    tile("coin", coinName(), fmt(p ? p.coins : 0)),
+    tile("bag", "Cosmetics", fmt(p ? p.owned.length : 0)),
+    tile("trophy", "Login streak", fmt(p ? p.streak : 0))));
 
-  // coins
-  const amount = h("input", { type: "number", min: 0, value: 100, "aria-label": "Amount" });
-  wrap.append(h("div", { class: "card" }, h("h2", {}, coinName()), h("div", { class: "row" }, amount,
-    h("button", { onclick: () => act({ action: "coins", op: "give", amount: amount.value }) }, "Give"),
+  const amount = h("input", { type: "number", min: 0, value: 100, "aria-label": "Amount", style: "max-width:160px" });
+  const quick = [100, 1000, 10000].map((n) => h("button", { class: "small ghost", onclick: () => { amount.value = n; } }, "+" + fmt(n)));
+  const coins = card(coinName(), h("div", { class: "row" }, amount, ...quick), h("div", { style: "height:10px" }), h("div", { class: "row" },
+    h("button", { class: "primary", onclick: () => act({ action: "coins", op: "give", amount: amount.value }) }, "Give"),
     h("button", { onclick: () => act({ action: "coins", op: "take", amount: amount.value }) }, "Take"),
-    h("button", { onclick: () => act({ action: "coins", op: "set", amount: amount.value }) }, "Set to"))));
+    h("button", { onclick: () => act({ action: "coins", op: "set", amount: amount.value }) }, "Set to")));
 
-  // cosmetics
   const cat = r.catalog || [];
   const itemSel = h("select", { "aria-label": "Item" }, cat.map((i) => h("option", { value: i.id }, i.name + " (" + i.category + ")")));
-  wrap.append(h("div", { class: "card" }, h("h2", {}, "Cosmetics"), itemList(p && p.owned, p && p.equipped, cat), h("div", { style: "height:12px" }),
+  const cos = card("Cosmetics", itemList(p && p.owned, p && p.equipped, cat), h("div", { style: "height:12px" }),
     cat.length ? h("div", { class: "row" }, itemSel,
       h("button", { onclick: () => act({ action: "give", item: itemSel.value }) }, "Give"),
       h("button", { onclick: () => act({ action: "remove", item: itemSel.value }) }, "Remove"),
       h("button", { onclick: () => { const it = cat.find((i) => i.id === itemSel.value); act({ action: "equip", category: it.category, item: it.id }); } }, "Put on"))
-      : h("p", { class: "muted" }, "The item list appears after the proxy connects.")));
+      : h("p", { class: "muted" }, "The item list appears after the proxy connects."));
+  wrap.append(h("div", { class: "grid g2" }, coins, cos));
+  wrap.append(h("div", { style: "height:18px" }));
 
-  // moderation
   const reason = h("input", { placeholder: "Kick reason", value: "Kicked by an admin." });
-  const mod = h("div", { class: "card" }, h("h2", {}, "Moderation"), h("div", { class: "row" }, reason, h("button", { class: "danger", onclick: () => act({ action: "kick", reason: reason.value }) }, "Kick")));
+  const mod = card("Moderation", h("div", { class: "row" }, reason, h("button", { class: "danger", onclick: () => act({ action: "kick", reason: reason.value }) }, "Kick")));
   if (acc) {
     const npw = h("input", { type: "password", placeholder: "New password (8+)", autocomplete: "new-password" });
     mod.append(h("div", { style: "height:12px" }), h("div", { class: "row" }, npw, h("button", { onclick: () => accAct({ action: "password", password: npw.value }) }, "Reset password")),
@@ -311,49 +684,283 @@ async function playerView() {
         h("button", { onclick: () => accAct({ action: "signout" }) }, "Sign out everywhere"),
         acc.locked ? h("button", { onclick: () => accAct({ action: "unlock" }) }, "Unlock") : h("button", { class: "danger", onclick: () => accAct({ action: "lock" }, "Lock " + r.name + "? They can't sign in until you unlock them.") }, "Lock account"),
         h("button", { class: "danger", onclick: () => accAct({ action: "delete" }, "Delete " + r.name + "'s account? Their coins stay, but anyone can then register the name.") }, "Delete account")));
-    if (me.role === "owner") {
-      const roleSel = h("select", { "aria-label": "Role" }, ROLE_OPTIONS(acc.role));
+    if (isOwner()) {
+      const roleSel = h("select", { "aria-label": "Role" }, ROLES.map((x) => h("option", { value: x, selected: x === acc.role }, x)));
       mod.append(h("div", { style: "height:12px" }), h("div", { class: "row" }, roleSel, h("button", { onclick: () => accAct({ action: "role", role: roleSel.value }) }, "Set role")));
     }
   }
-  wrap.append(mod);
 
+  // staff notes
+  const notesBox = h("div", { class: "list" });
+  const drawNotes = (notes) => {
+    notesBox.replaceChildren();
+    if (!notes.length) notesBox.append(h("p", { class: "muted" }, "No notes yet. Notes are only seen by admins."));
+    for (const n of notes) {
+      notesBox.append(h("div", { class: "note" }, h("small", {}, h("b", {}, n.by_name), ago(n.at), h("span", { class: "spacer" }),
+        h("button", { class: "small ghost", title: "Delete note", onclick: async () => {
+          try { drawNotes((await api("admin/note", { name: r.name, delete: n.id })).notes); } catch (e) { toast(e.message, false); }
+        } }, icon("trash"))), h("p", {}, n.text)));
+    }
+  };
+  drawNotes(r.notes || []);
+  const noteText = h("textarea", { placeholder: "Write a note about this player (warnings, appeals, anything)", maxlength: 1000, "aria-label": "Note" });
+  const notes = card("Staff notes", h("div", { class: "row" }, noteText), h("div", { style: "height:8px" }),
+    h("button", { onclick: async () => {
+      try { drawNotes((await api("admin/note", { name: r.name, text: noteText.value })).notes); noteText.value = ""; } catch (e) { toast(e.message, false); }
+    } }, icon("note"), "Add note"), h("div", { style: "height:12px" }), notesBox);
+  wrap.append(h("div", { class: "grid g2" }, mod, notes));
+  wrap.append(h("div", { style: "height:18px" }));
   if (r.commands.length) {
-    wrap.append(h("div", { class: "card scroll" }, h("h2", {}, "Recent changes"), h("table", {},
+    wrap.append(card("Recent changes", h("div", { class: "scroll" }, h("table", {},
       h("thead", {}, h("tr", {}, h("th", {}, "When"), h("th", {}, "By"), h("th", {}, "Change"), h("th", {}, "Status"))),
-      h("tbody", {}, r.commands.map((c) => h("tr", {}, h("td", {}, when(c.at)), h("td", {}, c.by), h("td", {}, c.action + " " + c.args.join(" ")),
-        h("td", {}, c.status + (c.result ? ": " + c.result : ""))))))));
+      h("tbody", {}, r.commands.map((c) => h("tr", {}, h("td", {}, ago(c.at)), h("td", {}, c.by), h("td", {}, c.action + " " + c.args.join(" ")),
+        h("td", {}, statusPill(c.status), c.result ? " " + c.result : ""))))))));
   }
   return wrap;
 }
 
+function statusPill(s) {
+  return h("span", { class: "pill " + (s === "done" ? "good" : s === "failed" ? "bad" : "warn") }, s);
+}
+
+// ==================== admin: announcements ====================
+
+async function announceView() {
+  const out = h("div");
+  const text = h("textarea", { id: "atext", maxlength: 200, placeholder: "Double coins this weekend!" });
+  const site = h("input", { type: "checkbox", id: "asite", checked: true });
+  const game = h("input", { type: "checkbox", id: "agame", checked: true });
+  const left = h("small", { class: "muted" }, "200 left");
+  text.addEventListener("input", () => { left.textContent = 200 - text.value.length + " left"; });
+  const cur = info.announcement;
+  return h("div", { class: "grid g2" },
+    card("Make an announcement",
+      h("label", { for: "atext" }, "Message"), text, left,
+      h("label", { class: "check" }, site, "Show a banner on this website"),
+      h("label", { class: "check" }, game, "Send it in game chat to everyone online"),
+      h("div", { style: "height:8px" }),
+      h("button", { class: "primary", onclick: async () => {
+        try {
+          await api("admin/announce", { text: text.value, site: site.checked, game: game.checked });
+          info = await api("info");
+          toast("Announced.");
+          route();
+        } catch (e) { message(out, e.message); }
+      } }, icon("megaphone"), "Announce"), out),
+    card("Website banner now", cur && cur.text ? h("div", {}, h("div", { class: "banner" }, icon("megaphone"), h("span", {}, cur.text)),
+      h("p", { class: "muted" }, "By " + cur.by + ", " + ago(cur.at)),
+      h("button", { class: "danger", onclick: async () => {
+        try { await api("admin/announce", { clear: true }); info = await api("info"); toast("Banner removed."); route(); } catch (e) { toast(e.message, false); }
+      } }, icon("trash"), "Remove banner")) : empty("megaphone", "No banner right now.")));
+}
+
+// ==================== admin: publish to shop ====================
+
+async function publishView() {
+  const out = h("div");
+  const pre = params();
+  const kind = select("pkind", [["cloak", "Cloak (PNG)"], ["hat", "Hat (.bbmodel)"]], pre.kind || "cloak");
+  const fileIn = h("input", { type: "file", id: "pfile", accept: ".png,.bbmodel,image/png,application/json" });
+  const fileNote = h("small", { class: "muted" }, "Or pick one of your saved designs below.");
+  let file = null;
+  let designId = null;
+  const f = (label, attrs) => h("div", {}, field(label, attrs));
+  const idIn = h("input", { id: "pid", placeholder: "fire_cloak", maxlength: 32, spellcheck: "false" });
+  const nameIn = h("input", { id: "pname", placeholder: "Fire Cloak", maxlength: 40 });
+  const price = h("input", { id: "pprice", type: "number", value: 5000, step: 100 });
+  const desc = h("input", { id: "pdesc", maxlength: 100, placeholder: "Animated cloak" });
+  const coll = h("input", { id: "pcoll", maxlength: 40, placeholder: "plebmc (or partners)" });
+  const creator = h("input", { id: "pcreator", maxlength: 40, placeholder: "optional" });
+  const ft = h("input", { id: "pft", type: "number", min: 20, max: 2000, placeholder: "90" });
+  const slug = (s) => s.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 32);
+  nameIn.addEventListener("input", () => { if (!idIn.dataset.touched) idIn.value = slug(nameIn.value); });
+  idIn.addEventListener("input", () => { idIn.dataset.touched = "1"; });
+  fileIn.addEventListener("change", async () => {
+    const fl = fileIn.files[0];
+    if (!fl) return;
+    designId = null;
+    if (fl.name.endsWith(".bbmodel") || fl.type === "application/json") {
+      kind.value = "hat";
+      file = await fl.text();
+    } else {
+      kind.value = "cloak";
+      file = await new Promise((res) => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.readAsDataURL(fl); });
+    }
+    if (!nameIn.value) { nameIn.value = fl.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " "); nameIn.dispatchEvent(new Event("input")); }
+    fileNote.textContent = fl.name + " (" + Math.round(fl.size / 1024) + " KB)";
+  });
+  const btn = h("button", { class: "primary", onclick: async () => {
+    if (!file) return message(out, "Pick a file or one of your designs first.");
+    btn.disabled = true;
+    try {
+      await api("admin/publish", { kind: kind.value, itemId: idIn.value.trim(), name: nameIn.value.trim(), price: price.value, file,
+        description: desc.value, collection: coll.value, creator: creator.value, frametime: ft.value, designId });
+      catalogCache = null;
+      message(out, "Sent to the server. It shows up in the shop within a few seconds (check Recent shop changes below).", true);
+      loadCmds();
+    } catch (e) { message(out, e.message); }
+    btn.disabled = false;
+  } }, icon("upload"), "Publish to shop");
+  const mine = h("div", { class: "designs" });
+  api("designs/mine").then((d) => {
+    if (!d.designs.length) mine.replaceWith(h("p", { class: "muted" }, "You have no saved designs. Make one in the ", h("a", { href: "#makers" }, "makers"), "."));
+    for (const x of d.designs) {
+      mine.append(h("div", { class: "design" }, h("div", { class: "pic" }, x.thumb ? h("img", { src: x.thumb, alt: "" }) : icon(x.kind)),
+        h("div", { class: "body" }, h("b", {}, x.name), h("small", { class: "muted" }, x.kind), h("div", { class: "row" },
+          h("button", { class: "small", onclick: async () => {
+            if (x.kind === "hat") {
+              location.href = toolUrl("hat", x.id);
+              return;
+            }
+            try {
+              const full = (await api("designs/get?id=" + x.id)).design;
+              kind.value = full.kind;
+              designId = full.id;
+              file = full.data;
+              nameIn.value = full.name;
+              idIn.value = full.itemId;
+              idIn.dataset.touched = "1";
+              if (full.extra.frametime) ft.value = full.extra.frametime;
+              if (full.extra.description) desc.value = full.extra.description;
+              if (full.extra.price != null) price.value = full.extra.price;
+              fileNote.textContent = "Using your design " + full.name;
+              message(out, "");
+            } catch (e) { message(out, e.message); }
+          } }, x.kind === "hat" ? "Publish from the Hat Maker" : "Use this")))));
+    }
+  }).catch(() => {});
+  const cmds = h("tbody");
+  const loadCmds = () => api("admin/commands").then((r) => {
+    cmds.replaceChildren(...r.commands.filter((c) => c.action === "additem" || c.action === "broadcast").slice(0, 15).map((c) => h("tr", {},
+      h("td", {}, ago(c.created_at)), h("td", {}, c.by_name), h("td", {}, c.action === "additem" ? "Add to shop" : "Announce"),
+      h("td", {}, statusPill(c.status), c.result ? " " + c.result : ""))));
+    if (!cmds.children.length) cmds.append(h("tr", {}, h("td", { class: "muted" }, "Nothing yet.")));
+  }).catch(() => {});
+  loadCmds();
+  return h("div", {},
+    card("Publish a hat or cloak to the shop",
+      h("p", { class: "muted" }, "The server saves the file, adds the item to config.yml and reloads the shop. Nothing of yours in the config is removed."),
+      h("div", { class: "grid g2" },
+        h("div", {}, h("label", { for: "pkind" }, "Type"), kind),
+        h("div", {}, h("label", { for: "pfile" }, "File"), fileIn, fileNote),
+        h("div", {}, h("label", { for: "pname" }, "Name in the shop"), nameIn),
+        h("div", {}, h("label", { for: "pid" }, "Item id (lowercase, no spaces)"), idIn),
+        h("div", {}, h("label", { for: "pprice" }, "Price (" + coinName() + ", -1 = not for sale)"), price),
+        h("div", {}, h("label", { for: "pft" }, "Time per frame in ms (animated cloaks)"), ft),
+        h("div", {}, h("label", { for: "pdesc" }, "Description"), desc),
+        h("div", {}, h("label", { for: "pcoll" }, "Shop tab (collection)"), coll),
+        h("div", {}, h("label", { for: "pcreator" }, "Made by"), creator)),
+      h("div", { style: "height:16px" }), btn, out),
+    card("Your saved designs", mine),
+    card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "Recent shop changes"), h("span", { class: "spacer" }), h("button", { class: "small", onclick: loadCmds }, icon("refresh"), "Refresh")),
+      h("div", { class: "scroll" }, h("table", {}, cmds))));
+}
+
+// ==================== admin: client updates ====================
+
+async function clientView() {
+  const r = await api("admin/client");
+  const c = r.client;
+  const out = h("div");
+  const ro = !isOwner();
+  const latest = h("input", { id: "clatest", value: c.latest, placeholder: "2.0", disabled: ro });
+  const minimum = h("input", { id: "cmin", value: c.minimum, placeholder: "optional, e.g. 1.9", disabled: ro });
+  const url = h("input", { id: "curl", value: c.url, placeholder: "https://client.plebmc.top/download", disabled: ro });
+  const msg = h("input", { id: "cmsg", value: c.message, maxlength: 200, placeholder: "New: faster loading and new cloaks", disabled: ro });
+  const vbody = h("tbody", {}, r.versions.map((v) => h("tr", {}, h("td", {}, "PlebClient " + v.version), h("td", {}, v.platform), h("td", { class: "num" }, fmt(v.n)),
+    h("td", {}, c.latest && v.version !== c.latest ? h("span", { class: "pill warn" }, "outdated") : h("span", { class: "pill good" }, "latest")))));
+  return h("div", { class: "grid g2" },
+    card("Update checker",
+      h("p", { class: "muted" }, "Every PlebClient asks the panel when it starts. Older than Latest: it shows an Update screen with a Later button. Older than Oldest allowed: it can't be played until updated."),
+      h("label", { for: "clatest" }, "Latest version"), latest,
+      h("label", { for: "cmin" }, "Oldest allowed version (blocks older clients)"), minimum,
+      h("label", { for: "curl" }, "Download link"), url,
+      h("label", { for: "cmsg" }, "Message on the update screen"), msg,
+      h("div", { style: "height:14px" }),
+      ro ? h("p", { class: "muted" }, "Only owners can change these.") : h("button", { class: "primary", onclick: async () => {
+        try {
+          await api("admin/client", { latest: latest.value.trim(), minimum: minimum.value.trim(), url: url.value.trim(), message: msg.value.trim() });
+          info = await api("info");
+          message(out, "Saved. Clients see it the next time they start.", true);
+        } catch (e) { message(out, e.message); }
+      } }, "Save"), out),
+    card("Versions in use (last 7 days)", r.versions.length ? h("div", { class: "scroll" }, h("table", {},
+      h("thead", {}, h("tr", {}, h("th", {}, "Version"), h("th", {}, "Platform"), h("th", { class: "num" }, "Starts"), h("th", {}, ""))), vbody))
+      : empty("refresh", "No client has checked in yet.")));
+}
+
+// ==================== admin: log ====================
+
+async function auditView() {
+  const q = h("input", { type: "search", placeholder: "Filter by who, what or detail", "aria-label": "Filter the log" });
+  const body = h("tbody");
+  let before = null;
+  const pg = pager(body, async (offset) => {
+    if (offset === 0) before = null;
+    const r = await api("admin/audit?q=" + encodeURIComponent(q.value.trim()) + (before ? "&before=" + before : ""));
+    if (r.audit.length) before = r.audit[r.audit.length - 1].id;
+    return { items: r.audit, more: r.more };
+  }, (a) => h("tr", {}, h("td", { title: when(a.at) }, ago(a.at)), h("td", {}, a.actor), h("td", {}, h("span", { class: "pill" }, a.action)), h("td", { class: "wrap" }, a.detail)),
+  { empty: () => h("tr", {}, h("td", { class: "muted" }, "Nothing logged.")) });
+  let timer;
+  q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => pg.reset(), 300); });
+  pg.reset();
+  return card("Admin log", h("p", { class: "muted" }, "Everything admins did on the panel, newest first."), h("div", { class: "row" }, q), h("div", { style: "height:10px" }),
+    h("div", { class: "scroll" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "When"), h("th", {}, "Who"), h("th", {}, "What"), h("th", {}, "Detail"))), body)), pg.more);
+}
+
 // ==================== router ====================
 
+const VIEWS = {
+  home: ["Home", homeView],
+  leaderboard: ["Leaderboard", leaderboardView],
+  shop: ["Shop", shopView],
+  gallery: ["Gallery", galleryView],
+  makers: ["Makers", makersView],
+  login: ["Sign in", loginView],
+  register: ["Create account", registerView],
+  me: ["My account", meView],
+  admin: ["Dashboard", dashboardView, "admin"],
+  players: ["Players", playersView, "admin"],
+  player: ["Player", playerView, "admin"],
+  announce: ["Announcements", announceView, "admin"],
+  publish: ["Publish to shop", publishView, "admin"],
+  client: ["Client updates", clientView, "admin"],
+  audit: ["Admin log", auditView, "admin"],
+};
+
 async function route() {
-  const view = (location.hash.slice(1).split("?")[0]) || (me ? "me" : "login");
-  setNav();
+  let view = location.hash.slice(1).split("?")[0] || "home";
+  if (!VIEWS[view]) view = "home";
+  if ((view === "login" || view === "register") && me) view = "me";
+  const [title, fn, need] = VIEWS[view];
+  side.classList.remove("open");
+  setNav(view);
+  titleEl.textContent = title;
+  document.title = title + " · " + info.site + " Panel";
   let el;
   try {
-    if (view === "register") el = registerView();
-    else if (view === "login") el = me ? await meView() : loginView();
-    else if (view === "admin") el = await adminView();
-    else if (view === "player") el = await playerView();
-    else el = await meView();
+    if (need === "admin" && !isAdmin()) {
+      el = me ? h("div", { class: "card narrow" }, h("h2", {}, "Admins only"), h("p", { class: "muted" }, "This page is for admins.")) : loginView();
+    } else {
+      app.replaceChildren(h("div", { class: "skeleton" }));
+      el = await fn();
+    }
   } catch (err) {
-    el = h("div", { class: "card narrow" }, h("p", {}, err.message), h("a", { href: "#me" }, "Back"));
+    el = h("div", { class: "card narrow" }, h("p", {}, err.message), h("a", { href: "#home" }, "Back home"));
   }
   app.replaceChildren(el);
-  setNav();
+  setNav(view);
+  window.scrollTo(0, 0);
 }
 
 (async function start() {
   try {
     info = await api("info");
     document.getElementById("site").textContent = info.site;
-    document.title = info.site + " Panel";
     const r = await api("me");
     me = r.account;
-  } catch (e) { /* shown by the view */ }
+  } catch (e) { /* the view shows it */ }
   window.addEventListener("hashchange", route);
   route();
 })();

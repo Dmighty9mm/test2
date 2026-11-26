@@ -52,7 +52,7 @@ final class EaglerStaffAuth implements Listener {
 		String address = e.getRemoteAddress() == null ? null : e.getRemoteAddress().getHostAddress();
 		if (!entry.hasPassword()) {
 			e.kickUser("This staff name is locked until the server owner sets its password.");
-			log.warning("Refused " + name + " from " + address + ": protected name without a password (proxy console: plebshop staff set "
+			log.warning("Refused " + name + " from " + address + ": protected name without a password (proxy console: pleb staff set "
 					+ entry.name + " <password>)");
 			return;
 		}

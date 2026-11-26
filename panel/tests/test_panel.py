@@ -178,7 +178,7 @@ class PanelLogic(unittest.TestCase):
             "online": ["Bob"], "currency": "PlebMc Coins"})
         self.assertEqual(self.p.player("bob")["coins"], 500)
         self.assertTrue(self.p.server_status()["connected"])
-        rows = self.p.admin_search("bo")
+        rows = self.p.admin_players("bo")["players"]
         self.assertEqual(rows[0]["name"], "Bob")
         self.assertTrue(rows[0]["online"])
         self.assertFalse(rows[0]["account"])
@@ -203,6 +203,157 @@ class PanelLogic(unittest.TestCase):
         self.clock.t += 600
         self.assertFalse(self.p.server_status()["connected"])
         self.assertEqual(self.p.online(), [])
+
+    def test_players_are_paged(self):
+        self.p.sync({"full": True, "players": [
+            {"uuid": "00000000-0000-0000-0000-%012d" % i, "name": "P%03d" % i, "coins": i, "owned": [], "equipped": {},
+             "streak": 0} for i in range(120)], "online": ["P005", "P100"]})
+        self.p.create_account("P007", "password1", "admin")
+        self.p.create_account("Zed", "password1")
+        r = self.p.admin_players()
+        self.assertEqual((r["total"], len(r["players"]), r["more"]), (121, 50, True))
+        self.assertEqual(r["players"][0]["name"], "P119")  # most coins first
+        r2 = self.p.admin_players(offset=100)
+        self.assertEqual((len(r2["players"]), r2["more"]), (21, False))
+        names = [x["name"] for x in self.p.admin_players(offset=0, limit=100)["players"] + r2["players"]]
+        self.assertEqual(len(set(names)), 121)  # every player exactly once
+        self.assertEqual(self.p.admin_players(filt="online")["total"], 2)
+        self.assertEqual(self.p.admin_players(filt="accounts")["total"], 2)
+        self.assertEqual([x["name"] for x in self.p.admin_players(filt="staff")["players"]], ["P007"])
+        self.assertEqual(self.p.admin_players(filt="noaccount")["total"], 119)
+        self.assertEqual(self.p.admin_players(q="P11")["total"], 10)
+        self.assertEqual(self.p.admin_players(q="%")["total"], 0)  # LIKE wildcards are plain text
+        self.assertEqual(self.p.admin_players(sort="name")["players"][0]["name"], "P000")
+        self.assertEqual(self.p.admin_players(sort="bogus")["players"][0]["name"], "P119")
+        lb = self.p.leaderboard(0, 10)
+        self.assertEqual((lb["rows"][0]["name"], lb["rows"][0]["rank"], lb["total"], lb["more"]), ("P119", 1, 120, True))
+        self.assertEqual(self.p.leaderboard(115, 10)["rows"][-1]["rank"], 120)
+
+    def test_dashboard_notes_and_announcements(self):
+        owner = self.p.create_account("Owner", "password1", "owner")
+        admin = self.p.create_account("Mod", "password1", "admin")
+        self.p.sync({"full": True, "players": [
+            {"uuid": "1" * 32, "name": "Bob", "coins": 50, "owned": ["crown", "cape"], "equipped": {}, "streak": 1},
+            {"uuid": "2" * 32, "name": "Amy", "coins": 70, "owned": ["crown"], "equipped": {}, "streak": 1}],
+            "catalog": [{"id": "crown", "name": "Crown", "category": "hat", "price": 100}]})
+        d = self.p.dashboard()
+        self.assertEqual((d["accounts"], d["staff"], d["players"], d["coins"], d["richest"]), (2, 2, 2, 120, 70))
+        self.assertEqual(d["popular"][0], {"id": "crown", "name": "Crown", "category": "hat", "owners": 2})
+        self.assertEqual(len(d["signups"]), 14)
+        self.assertEqual(d["signups"][-1]["count"], 2)
+        self.p.add_note(admin, "Bob", "Warned for spam")
+        self.p.add_note(owner, "bob", "Second warning")
+        notes = self.p.notes("BOB")
+        self.assertEqual([n["text"] for n in notes], ["Second warning", "Warned for spam"])
+        with self.assertRaises(app.ApiError):
+            self.p.add_note(admin, "Bob", "   ")
+        with self.assertRaises(app.ApiError):
+            self.p.delete_note(admin, notes[0]["id"])  # someone else's note
+        self.p.delete_note(owner, notes[1]["id"])  # owners can delete any
+        self.assertEqual(len(self.p.notes("bob")), 1)
+        with self.assertRaises(app.ApiError):
+            self.p.announce(admin, {"text": "hi"})  # nowhere picked
+        self.p.announce(admin, {"text": "Double coins!", "site": True, "game": True})
+        self.assertEqual(self.p.public_info()["announcement"]["text"], "Double coins!")
+        cmds = self.p.pending()
+        self.assertEqual((cmds[0]["target"], cmds[0]["action"], cmds[0]["args"]), ("*", "broadcast", ["Double coins!"]))
+        self.p.clear_announcement(admin)
+        self.assertIsNone(self.p.public_info()["announcement"])
+
+    def test_client_update_checker(self):
+        owner = self.p.create_account("Owner", "password1", "owner")
+        r = self.p.client_version("2.0", "web")
+        self.assertFalse(r["outdated"] or r["required"])
+        self.p.set_client_release(owner, {"latest": "2.1", "minimum": "1.10", "url": "https://client.plebmc.top/dl",
+                                          "message": "New cloaks"})
+        r = self.p.client_version("2.0", "wasm")
+        self.assertTrue(r["outdated"])
+        self.assertFalse(r["required"])
+        self.assertEqual((r["latest"], r["url"], r["message"]), ("2.1", "https://client.plebmc.top/dl", "New cloaks"))
+        self.assertTrue(self.p.client_version("1.9", "forge")["required"])  # 1.9 < 1.10
+        self.assertFalse(self.p.client_version("2.1", "web")["outdated"])
+        self.assertFalse(self.p.client_version("10.0", "web")["outdated"])
+        self.assertFalse(self.p.client_version("junk", "web")["outdated"])
+        seen = {(v["version"], v["platform"]): v["n"] for v in self.p.client_versions()}
+        self.assertEqual(seen[("2.0", "web")], 1)
+        self.assertEqual(seen[("1.9", "forge")], 1)
+        self.assertNotIn(("junk", "web"), seen)
+        for bad in ({"latest": "two"}, {"latest": "1.0", "minimum": "2.0"}, {"latest": "1.0", "url": "javascript:x"}):
+            with self.assertRaises(app.ApiError):
+                self.p.set_client_release(owner, bad)
+
+    def test_designs(self):
+        amy = self.p.create_account("Amy", "password1")
+        bob = self.p.create_account("Bob", "password1")
+        admin = self.p.create_account("Mod", "password1", "admin")
+        hat = json.dumps({"v": 1, "vox": [["0,8,0", "#ff0000"]]})
+        r = self.p.save_design(amy, {"kind": "hat", "name": "Red Hat", "data": hat, "public": True})
+        did = r["id"]
+        priv = self.p.save_design(amy, {"kind": "cloak", "name": "Secret", "data": "data:image/png;base64,AAAA"})["id"]
+        for bad in ({"kind": "boots", "data": hat}, {"kind": "hat", "data": "nope"}, {"kind": "cloak", "data": "data:text/html,x"},
+                    {"kind": "hat"}):
+            with self.assertRaises(app.ApiError):
+                self.p.save_design(amy, bad)
+        with self.assertRaises(app.ApiError):
+            self.p.save_design(bob, {"id": did, "kind": "hat", "data": hat})  # not his
+        self.assertEqual([d["name"] for d in self.p.public_designs()["designs"]], ["Red Hat"])
+        self.assertEqual(self.p.public_designs(kind="cloak")["total"], 0)
+        with self.assertRaises(app.ApiError):
+            self.p.get_design(priv, bob)
+        self.assertEqual(self.p.get_design(priv, amy)["data"], "data:image/png;base64,AAAA")
+        self.assertEqual(self.p.get_design(did, None)["author"], "Amy")
+        self.p.like_design(bob, did)
+        self.assertEqual(self.p.get_design(did, bob)["likes"], 1)
+        self.assertTrue(self.p.get_design(did, bob)["liked"])
+        self.p.like_design(bob, did)  # again = unlike
+        self.assertEqual(self.p.get_design(did, bob)["likes"], 0)
+        with self.assertRaises(app.ApiError):
+            self.p.like_design(bob, priv)
+        with self.assertRaises(app.ApiError):
+            self.p.delete_design(bob, did)
+        self.p.delete_design(admin, did)  # admins can take down shared designs
+        self.assertEqual(self.p.public_designs()["total"], 0)
+        for i in range(app.MAX_DESIGNS - 1):
+            self.p.save_design(amy, {"kind": "hat", "name": "H%d" % i, "data": hat})
+        with self.assertRaises(app.ApiError):
+            self.p.save_design(amy, {"kind": "hat", "data": hat})
+
+    def test_publish_to_shop(self):
+        admin = self.p.create_account("Mod", "password1", "admin")
+        self.p.sync({"catalog": [{"id": "crown", "name": "Crown", "category": "hat", "price": 100}]})
+        r = self.p.publish(admin, {"kind": "cloak", "itemId": "fire_cloak", "name": "Fire Cloak", "price": 5000,
+                                   "file": "data:image/png;base64,iVBORw0KGgo=", "frametime": 90, "description": "Hot",
+                                   "collection": "partners", "creator": "Amy"})
+        self.assertTrue(r["ok"])
+        cmd = self.p.pending()[0]
+        self.assertEqual(cmd["action"], "additem")
+        item = json.loads(cmd["args"][0])
+        self.assertEqual(item, {"id": "fire_cloak", "name": "Fire Cloak", "category": "cloak", "price": 5000,
+                                "description": "Hot", "collection": "partners", "creator": "Amy", "frametime": 90})
+        self.assertEqual(cmd["args"][1], "iVBORw0KGgo=")
+        bb = json.dumps({"elements": []})
+        self.p.publish(admin, {"kind": "hat", "itemId": "box_hat", "name": "Box", "price": -1, "file": bb})
+        import base64 as b64
+        self.assertEqual(b64.b64decode(self.p.pending()[0]["args"][1]).decode(), bb)
+        for bad in ({"kind": "hat", "itemId": "crown", "name": "X", "price": 1, "file": bb},  # already in the shop
+                    {"kind": "hat", "itemId": "Bad Id", "name": "X", "price": 1, "file": bb},
+                    {"kind": "hat", "itemId": "ok_id", "name": "", "price": 1, "file": bb},
+                    {"kind": "hat", "itemId": "ok_id", "name": "X", "price": "free", "file": bb},
+                    {"kind": "hat", "itemId": "ok_id", "name": "X", "price": 1, "file": "{nope"},
+                    {"kind": "cloak", "itemId": "ok_id", "name": "X", "price": 1, "file": "data:image/gif;base64,AA"},
+                    {"kind": "boots", "itemId": "ok_id", "name": "X", "price": 1, "file": bb}):
+            with self.assertRaises(app.ApiError, msg=str(bad)):
+                self.p.publish(admin, bad)
+        self.assertTrue(any(a["action"] == "publish" for a in self.p.audit_page()["audit"]))
+
+    def test_audit_is_paged(self):
+        for i in range(120):
+            self.p.audit("Owner", "test", "entry %d" % i)
+        a = self.p.audit_page()
+        self.assertEqual((len(a["audit"]), a["more"], a["audit"][0]["detail"]), (50, True, "entry 119"))
+        b = self.p.audit_page(before=a["audit"][-1]["id"])
+        self.assertEqual(b["audit"][0]["detail"], "entry 69")
+        self.assertEqual(len(self.p.audit_page(q="entry 11")["audit"]), 11)
 
 
 class PanelHttp(unittest.TestCase):
@@ -314,6 +465,29 @@ class PanelHttp(unittest.TestCase):
         self.assertTrue(p.client_register("Aaa3", "password1", "6.6.6.6")["ok"])
         p.cfg.client_registration = False
         self.assertFalse(p.client_register("Aaa4", "password1", "6.6.6.6")["ok"])
+
+    def test_public_routes_and_version(self):
+        s, j, _ = self.call("/api/info")
+        self.assertTrue(j["ok"] and "client" in j and "server" in j)
+        s, j, _ = self.call("/api/leaderboard?offset=0&limit=5")
+        self.assertEqual(s, 200)
+        s, j, h = self.call("/api/client/version", {"version": "2.0", "platform": "web"})
+        self.assertTrue(j["ok"])
+        self.assertEqual(h["Access-Control-Allow-Origin"], "*")
+        s, j, _ = self.call("/api/designs/public")
+        self.assertEqual((s, j["total"]), (200, 0))
+        s, _, _ = self.call("/api/designs/save", {"kind": "hat", "data": "{}"})
+        self.assertEqual(s, 401)
+        s, _, _ = self.call("/api/admin/dashboard")
+        self.assertEqual(s, 401)
+
+    def test_static_tools(self):
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        for path in ("/static/tools/hat.html", "/static/tools/cloak.html", "/static/tools/hat.js", "/static/vendor/three.min.js",
+                     "/static/logo.png"):
+            with opener.open(urllib.request.Request(self.base + path), timeout=5) as r:
+                self.assertEqual(r.status, 200, path)
+                self.assertIn("script-src 'self'", r.headers["Content-Security-Policy"])
 
     def test_static_and_headers(self):
         req = urllib.request.Request(self.base + "/")

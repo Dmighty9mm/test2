@@ -770,7 +770,7 @@ class Panel:
     def admin_players(self, q="", filt="all", sort="coins", offset=0, limit=PAGE):
         """One page of players (accounts and players who joined), so a big network never loads all at once."""
         q = str(q or "").lower()[:32]
-        like = "%" + q.replace("\\", "").replace("%", "").replace("_", "\\_") + "%"
+        like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         filt = filt if filt in self.PLAYER_FILTERS else "all"
         sort = sort if sort in self.PLAYER_SORTS else "coins"
         try:
@@ -1108,23 +1108,6 @@ class Panel:
             args.append(int(before))
         rows = self.db.all("SELECT * FROM audit WHERE " + where + " ORDER BY id DESC LIMIT ?", *(args + [PAGE + 1]))
         return {"audit": rows[:PAGE], "more": len(rows) > PAGE}
-
-    def admin_search(self, q):
-        q = str(q or "").lower()
-        like = "%" + q.replace("%", "").replace("_", "\\_") + "%"
-        accs = {a["name_key"]: a for a in self.db.all(
-            "SELECT * FROM accounts WHERE name_key LIKE ? ESCAPE '\\' ORDER BY name_key LIMIT 200", like)}
-        players = {p["name_key"]: p for p in self.db.all(
-            "SELECT * FROM players WHERE name_key LIKE ? ESCAPE '\\' ORDER BY coins DESC LIMIT 200", like)}
-        online = {n.lower() for n in self.online()}
-        out = []
-        for key in set(accs) | set(players):
-            a, p = accs.get(key), players.get(key)
-            out.append({"name": (a or p)["name"], "account": bool(a), "role": a["role"] if a else None,
-                        "locked": bool(a and a["locked"]), "coins": p["coins"] if p else None,
-                        "items": len(json.loads(p["owned"])) if p else 0, "online": key in online})
-        out.sort(key=lambda r: (not r["online"], -(r["coins"] or 0), r["name"].lower()))
-        return out[:200]
 
     def admin_player(self, name):
         acc = self.account(name)

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloak Maker · PlebMc</title>
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/tools/tools.css">
+<script src="/static/vendor/three.min.js" defer></script>
+<script src="/static/tools/bridge.js" defer></script>
+<script src="/static/tools/cloak.js" defer></script>
+</head>
+<body>
+<div class="toolbar">
+  <a class="brand" href="/#home"><img src="/static/logo.png" alt=""><span>PlebMc</span></a>
+  <span class="spacer"></span>
+  <a class="btn small" href="/#gallery">Gallery</a>
+  <a class="btn small" href="/static/tools/hat.html">Hat Maker</a>
+  <a class="btn small" href="/#me">My account</a>
+</div>
+<div class="maker">
+  <header>
+    <div>
+      <h1>PlebMc <span>Cloak Maker</span></h1>
+      <p class="sub">Turn a GIF, a few frames, or one picture into an animated cloak for the PlebMc shop. Save it to your account, share it in the gallery, or download the PNG for the PlebioAPI config.</p>
+    </div>
+  </header>
+
+  <div class="bench cloak">
+    <div class="steps">
+
+      <section class="step" aria-labelledby="s1">
+        <h2 id="s1"><b>1</b> Art</h2>
+        <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a GIF or images">
+          <strong>Drop a GIF, or one or more images</strong><br>
+          <span>Several images become frames in name order (frame01.png, frame02.png ...). One still image can be animated with the effects in step 2.</span>
+          <input id="file" type="file" accept="image/gif,image/png,image/jpeg,image/webp" multiple hidden>
+        </div>
+        <p class="hint">Or start from a generated effect, no art needed:</p>
+        <div class="effects" id="effects" role="group" aria-label="Generated effects"></div>
+        <div class="row">
+          <label class="f" style="flex:0 0 auto">Color 1 <input id="c1" type="color" value="#3fd8e6"></label>
+          <label class="f" style="flex:0 0 auto">Color 2 <input id="c2" type="color" value="#7b4dff"></label>
+          <button type="button" id="shuffle" title="Random colors">Shuffle colors</button>
+          <button type="button" id="swap" title="Swap color 1 and color 2">Swap</button>
+          <p class="hint" style="flex:1 1 200px">Colors drive the effects and the shine and sparkle overlays.</p>
+        </div>
+      </section>
+
+      <section class="step" aria-labelledby="s2">
+        <h2 id="s2"><b>2</b> Motion</h2>
+        <div class="grid2">
+          <label class="f">Overlay on your art
+            <select id="overlay">
+              <option value="none">None</option>
+              <option value="shine">Shine sweep</option>
+              <option value="sparkle">Sparkles</option>
+              <option value="pulse">Glow pulse</option>
+              <option value="rainbow">Rainbow tint</option>
+              <option value="scan">Scanlines</option>
+              <option value="drift">Slow drift</option>
+            </select>
+          </label>
+          <label class="f">Frames <span id="framesOut"></span>
+            <input id="frames" type="range" min="2" max="64" value="16">
+          </label>
+          <label class="f">Time per frame <span id="msOut"></span>
+            <input id="ms" type="range" min="20" max="500" step="10" value="90">
+          </label>
+        </div>
+        <p class="hint" id="motionHint">GIFs keep their own frames and timing (up to 64 frames). The frames slider is for effects and overlays.</p>
+      </section>
+
+      <section class="step" aria-labelledby="s3">
+        <h2 id="s3"><b>3</b> Look</h2>
+        <div class="grid2">
+          <label class="f">Detail (per frame)
+            <select id="res">
+              <option value="64">64 x 32 (vanilla)</option>
+              <option value="128">128 x 64</option>
+              <option value="256" selected>256 x 128</option>
+              <option value="512">512 x 256 (HD)</option>
+            </select>
+          </label>
+          <label class="f">Fit the art
+            <select id="fit">
+              <option value="cover" selected>Fill (crop the edges)</option>
+              <option value="contain">Fit (show it all)</option>
+              <option value="stretch">Stretch</option>
+            </select>
+          </label>
+          <label class="f">Inside of the cloak
+            <select id="inside">
+              <option value="mirror" selected>Mirrored art, darker</option>
+              <option value="same">Same as the outside</option>
+              <option value="dark">Plain dark</option>
+            </select>
+          </label>
+          <label class="f">Edges
+            <select id="edges">
+              <option value="auto" selected>Match the art</option>
+              <option value="c1">Color 1</option>
+              <option value="black">Black</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label class="row" style="gap:8px"><input id="rim" type="checkbox" checked> <span>Darker rim around the art</span></label>
+        </div>
+      </section>
+
+      <section class="step" aria-labelledby="s4">
+        <h2 id="s4"><b>4</b> Name it</h2>
+        <div class="grid2">
+          <label class="f">Cloak id <input id="cid" type="text" value="my_cloak" spellcheck="false"></label>
+          <label class="f">Name in the shop <input id="cname" type="text" value="My Cloak"></label>
+          <label class="f">Price (coins, -1 = not for sale) <input id="price" type="number" value="5000" step="100"></label>
+          <label class="f">Shop tab
+            <select id="col"><option value="plebmc">PlebMc</option><option value="partners">Partners</option></select>
+          </label>
+          <label class="f">Made by (partners) <input id="creator" type="text" placeholder="optional"></label>
+          <label class="f">Description <input id="desc" type="text" value="Animated cloak"></label>
+        </div>
+      </section>
+
+      <section class="step" aria-labelledby="s5">
+        <h2 id="s5"><b>5</b> Your account</h2>
+        <div id="account"></div>
+        <div class="status" id="toast" role="status"></div>
+      </section>
+
+      <section class="step" aria-labelledby="s6">
+        <h2 id="s6"><b>6</b> Download</h2>
+        <div class="row">
+          <button class="primary" id="save">Download PNG</button>
+          <button id="pic">Picture (.png)</button>
+          <button id="copy">Copy config line</button>
+        </div>
+        <pre class="cfg" id="yaml"></pre>
+        <ol class="guide">
+          <li>Put the PNG in <code>plugins/PlebioAPI/cloaks/</code> on the proxy.</li>
+          <li>Paste the line under <code>items:</code> in <code>plugins/PlebioAPI/config.yml</code>.</li>
+          <li>Run <code>/pleb reload</code>. Admins can use Publish to shop above instead.</li>
+        </ol>
+      </section>
+    </div>
+
+    <aside class="stage" aria-label="Preview">
+      <div class="view"><canvas id="three" aria-label="3D preview of the cloak, drag to turn"></canvas><span class="tag">drag to turn</span></div>
+      <div class="flat">
+        <canvas id="flat" width="128" height="64" aria-label="Current frame in the cape layout"></canvas>
+        <div class="cstats" id="stats"></div>
+      </div>
+    </aside>
+  </div>
+
+  <footer>The PNG stacks every frame top to bottom, each frame in the standard 64 x 32 cape layout (scaled). The art on your back is the 10 x 16 box at (1, 1). Limits: 64 frames, 8,388,608 pixels, 8 MB.</footer>
+</div>
+
+</body>
+</html>

@@ -385,7 +385,7 @@ final class StaffLock {
 			file.getParentFile().mkdirs();
 			File tmp = new File(file.getPath() + ".tmp");
 			try (Writer w = new OutputStreamWriter(Files.newOutputStream(tmp.toPath()), StandardCharsets.UTF_8)) {
-				w.write("# Protected staff names (managed with /plebshop staff in the proxy console).\n"
+				w.write("# Protected staff names (managed with /pleb staff in the proxy console).\n"
 						+ "# Passwords are salted hashes; don't edit them by hand.\n");
 				new Yaml(o).dump(root, w);
 			}

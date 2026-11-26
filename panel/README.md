@@ -7,15 +7,35 @@ nLogin's same-IP sessions don't help on Eaglercraft (every player can show up wi
 proxy's IP). So someone could join as you and spend your PlebMc Coins.
 
 **With the panel:** every name can have a PlebMc account with a password. PlebioAPI on the
-proxy won't let a player buy, equip, link the website or open the admin menu until they
+proxy won't let a player buy, equip or open the admin menu until they
 sign in to the account that owns their name. Names with an account must sign in within
 90 seconds of joining or get kicked. Nothing depends on IP addresses.
 
 | Who | What they get |
 | --- | --- |
-| Players | Make an account on the PlebClient's start screen (the client can't be used until you sign in or create one) or on the website's **Create account** page. The client remembers the sign-in. On the website: coins, cosmetics, change password, sign out everywhere. |
-| Admins | Search every player, give/take/set coins, give/remove/put on cosmetics, kick, lock accounts, reset passwords, sign someone out everywhere, create accounts, admin log. |
-| Owners | All of that, plus making admins and owners. |
+| Everyone | Home page with server status and the latest PlebClient, leaderboard, shop catalog, the **Gallery** of shared hats and cloaks (like them, remix them), and the **Hat Maker** and **Cloak Maker**. |
+| Players | Make an account on the PlebClient's start screen (the client can't be used until you sign in or create one) or on the website's **Create account** page. The client remembers the sign-in. On the website: coins, cosmetics, streak, saved designs (up to 30, private or shared), change password, sign out everywhere. |
+| Admins | Dashboard (online, sign-ups chart, active players, coins in circulation, most owned cosmetics, client versions in use), players list (search, filters, sorting, 50 at a time with **Show more**), give/take/set coins, give/remove/put on cosmetics, kick, lock accounts, reset passwords, staff notes on players, announcements (website banner and/or in-game chat), **Publish to shop** (a cloak PNG or hat .bbmodel goes straight into PlebioAPI's shop), admin log with search. Players with the admin or owner role also get the client's Admin menu (after `/adminlogin`). |
+| Owners | All of that, plus making admins and owners and setting the **client update checker** (latest version, oldest allowed version, download link, message). |
+
+### Client updates
+
+Each PlebClient tells the panel its version when it starts (`/api/client/version`). On
+**Client updates**, set *Latest version* to the newest release: older clients show an
+Update screen with a Later button. Set *Oldest allowed version* to block clients that are
+too old (they can't get past the Update screen). This build of the client is version 2.0.
+
+### Publishing and big uploads
+
+Publishing a cloak and saving designs send files up to about 12 MB. nginx allows only
+1 MB by default, so in the panel's `location / { ... }` block add:
+
+```
+client_max_body_size 16m;
+```
+
+then `sudo nginx -t && sudo systemctl reload nginx`. Without it, publishing shows "too big
+for the panel's web server".
 
 Coins and cosmetics still live in PlebioAPI on the proxy (one place, so nothing can be
 spent twice). The proxy sends them to the panel every 20 seconds when they change, and
@@ -78,7 +98,7 @@ You need a small Linux VPS (1 GB RAM is plenty) and a domain or subdomain, for e
      sign-in-seconds: 90
    ```
 
-   Put the new `PlebioAPI.jar` in `plugins/`, restart the proxy (or `/plebshop reload` if
+   Put the new `PlebioAPI.jar` in `plugins/`, restart the proxy (or `/pleb reload` if
    the jar was already new). The console says `PlebMc accounts ON`. Within a minute the
    panel's Admin page says "Proxy connected" and lists your players.
 

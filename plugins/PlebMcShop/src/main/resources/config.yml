@@ -1,7 +1,7 @@
 # PlebioAPI (BungeeCord, formerly PlebMcShop) - PlebMc Coins, quests and the cosmetics shop behind the PlebMc
 # client's "Shop & Quests" menu (Right Shift). Runs on the proxy, so one balance works on
 # every server. PlebMc Coins are separate from every other economy on the network.
-# Run /plebshop reload after editing.
+# Run /pleb reload after editing.
 
 currency-name: 'PlebMc Coins'
 
@@ -87,7 +87,7 @@ plebclient-only: true
 # Worlds where nobody's cosmetics are shown: 'world' or 'server:world' (needs PlebMcBridge on that server).
 hidden-in-worlds: []
 
-# /plebshop needs plebshop.admin.
+# /pleb needs plebshop.admin.
 
 # The admin menu in the PlebMc client (Right Shift > Admin): online players with their coins
 # and cosmetics, give/take/set coins, give/take cosmetics, send a player to a server, kick,
@@ -99,7 +99,7 @@ admin-menu:
   roles: ['admin', 'owner']
   broadcast-title: '&b&lAnnouncement'
   # A second password just for the admin menu: /login, then /adminlogin <password>.
-  # Set it in the proxy console: plebshop adminpass set <name> <password>
+  # Set it in the proxy console: pleb adminpass set <name> <password>
   # (doesn't depend on nLogin sessions or players' IPs)
   require-password: true
 
@@ -108,17 +108,17 @@ admin-menu:
 # Staff lock: on a cracked (offline-mode) server anyone can type the Owner's name and
 # get the Owner's UUID and rank. Protected names need a password at login
 # (the Eaglercraft password screen). Set them in the proxy console:
-#   plebshop staff set <name> <password>
+#   pleb staff set <name> <password>
 # Needs plugins/EaglercraftXBungee/authservice.yml: enable_authentication_system: true
 # and use_onboard_eaglerx_system: false. Java players can't use a protected name
-# unless the proxy is in online mode. The admin menu and in-game /plebshop only work
+# unless the proxy is in online mode. The admin menu and in-game /pleb only work
 # for a name that gave its password at this login.
 staff-lock:
   enabled: true
 
 # PlebMc accounts: the real fix for players spending each other's coins. Host the panel
 # (panel/ in this repo, see panel/README.md) on your VPS, then fill these in and
-# /plebshop reload. With accounts on, a player has to sign in to the account that owns
+# /pleb reload. With accounts on, a player has to sign in to the account that owns
 # their name before they can buy, equip or open the admin menu:
 #   /account login <password>   (any client; the password never reaches a server or the log)
 #   Right Shift > Sign in       (PlebMc client; "Remember me" signs in by itself next time)
@@ -167,14 +167,14 @@ collections:
 #             cloaks: leave it out
 #   collection: optional, which shop tab it's in (a key from 'collections', default plebmc)
 #   creator:  optional, who made it ("by ..." in the shop), for partner cosmetics
-#   price:    coins (-1 = not for sale, give it with /plebshop give)
+#   price:    coins (-1 = not for sale, give it with /pleb give)
 #   color:    optional tint, like '#FFD700' (a cloak without a texture is this color)
 #   texture:  cloaks: a PNG in this plugin's folder, like 'cloaks/mycloak.png'.
 #             Use the normal Minecraft cape layout (64x32) or any multiple of it for
 #             high resolution: 128x64, 256x128, 512x256 (8x), 1024x512, up to 4096x2048.
 #             The art for the back of the cloak goes in the 10x16 box at (1,1) of the
 #             64x32 layout (at 512x256 that's the 80x128 box at (8,8)). Players download
-#             it from the proxy once and keep it until it changes. /plebshop reload
+#             it from the proxy once and keep it until it changes. /pleb reload
 #             picks up new or edited files.
 #             Animated cloaks: stack the frames top to bottom in one PNG (each frame is
 #             the cape layout, e.g. 256x128, so 16 frames = 256x2048), up to 64 frames,
@@ -182,7 +182,7 @@ collections:
 #             Cloak Maker (tools/cloak-maker in the client repo) builds these for you.
 #   model:    hats: a 3D model in this plugin's folder, like 'hats/myhat.bbmodel'. Save it
 #             from Blockbench (File > Save Model) with its texture painted in, drop it in
-#             the hats folder, add an item and run /plebshop reload. Players download it
+#             the hats folder, add an item and run /pleb reload. Players download it
 #             once, just like cloak textures. A Java block/item model .json works too
 #             (then add texture: 'hats/myhat.png'). Rotated cubes and groups are fine.
 #             position: auto (default) centers it on the head and stands it on top;

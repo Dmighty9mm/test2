@@ -85,7 +85,7 @@ final class PanelLink {
 		call("POST", "ack", b);
 	}
 
-	/** A coins/cosmetics change from the panel as /plebshop arguments, or null if it isn't one. */
+	/** A coins/cosmetics change from the panel as /pleb arguments, or null if it isn't one. */
 	static String[] plebshopArgs(String target, String action, List<String> args) {
 		switch (action) {
 		case "coins":

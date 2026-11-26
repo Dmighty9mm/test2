@@ -148,7 +148,7 @@ public final class BungeeShop extends Plugin implements Listener {
 		getProxy().getPluginManager().registerCommand(this, new AdminLoginCommand());
 		if (adminPasswordRequired() && adminPasswords.all().isEmpty()) {
 			getLogger().warning("Admin menu is OFF for everyone until you set an admin password in this console:"
-					+ " plebshop adminpass set <name> <password>  (then in game: /login, then /adminlogin <password>)");
+					+ " pleb adminpass set <name> <password>  (then in game: /login, then /adminlogin <password>)");
 		}
 		eaglerAuth = registerEaglerAuth();
 		if (usingNLogin()) {
@@ -164,7 +164,7 @@ public final class BungeeShop extends Plugin implements Listener {
 							+ " EaglerXBungee's authservice.yml, see the PlebioAPI README)"));
 			if (n == 0) {
 				getLogger().warning("Staff lock: no protected names yet. On a cracked server anyone can join as your Owner."
-						+ " In this console run: plebshop staff set <name> <password>");
+						+ " In this console run: pleb staff set <name> <password>");
 			}
 		}
 		getProxy().getScheduler().schedule(this, signin::tick, 5, 5, TimeUnit.SECONDS);
@@ -296,7 +296,7 @@ public final class BungeeShop extends Plugin implements Listener {
 		@SuppressWarnings("deprecation")
 		public void execute(CommandSender sender, String[] args) {
 			if (!(sender instanceof ProxiedPlayer)) {
-				sender.sendMessage(TextComponent.fromLegacyText("Players only. Set passwords with: plebshop adminpass set <name> <password>"));
+				sender.sendMessage(TextComponent.fromLegacyText("Players only. Set passwords with: pleb adminpass set <name> <password>"));
 				return;
 			}
 			ProxiedPlayer p = (ProxiedPlayer) sender;
@@ -585,7 +585,7 @@ public final class BungeeShop extends Plugin implements Listener {
 			public boolean hasPermission(String perm) {
 				return true;
 			}
-		}, "plebshop", a, this::reload);
+		}, "pleb", a, this::reload);
 		return (failed[0] ? "!" : "") + out;
 	}
 
@@ -741,7 +741,7 @@ public final class BungeeShop extends Plugin implements Listener {
 			ProxiedPlayer p = ProxyServer.getInstance().getPlayer(player);
 			if (p != null && staffLockOn() && !usingNLogin() && !accountsOn() && staffLock.protect(p.getName())) {
 				getLogger().warning("Staff lock: " + p.getName() + " has staff powers but no password, so the name is now locked."
-						+ " Set its password in this console: plebshop staff set " + p.getName() + " <password>");
+						+ " Set its password in this console: pleb staff set " + p.getName() + " <password>");
 			}
 		}
 
@@ -785,7 +785,7 @@ public final class BungeeShop extends Plugin implements Listener {
 
 	private final class AdminCommand extends Command implements TabExecutor {
 		AdminCommand() {
-			super("plebshop", null, "pmshop");
+			super("pleb", null, "plebshop", "pmshop");
 		}
 
 		@Override
@@ -804,8 +804,8 @@ public final class BungeeShop extends Plugin implements Listener {
 				// BungeeCord permissions go by name, which a cracked player can just type
 				bnet.protectStaff(((ProxiedPlayer) sender).getUniqueId());
 				sender.sendMessage(TextComponent.fromLegacyText(usingNLogin() || accountsOn() ? "\u00a7c" + loginFirst() + ", then /adminlogin <admin password>."
-						: "\u00a7cYour name has no staff password yet, so /plebshop is off for it."
-								+ " Set one in the proxy console: plebshop staff set " + sender.getName() + " <password>, then rejoin."));
+						: "\u00a7cYour name has no staff password yet, so /pleb is off for it."
+								+ " Set one in the proxy console: pleb staff set " + sender.getName() + " <password>, then rejoin."));
 				return;
 			}
 			core.command(new ShopCore.Sender() {
@@ -818,10 +818,10 @@ public final class BungeeShop extends Plugin implements Listener {
 				public boolean hasPermission(String perm) {
 					return sender.hasPermission(perm);
 				}
-			}, "plebshop", args, BungeeShop.this::reload);
+			}, "pleb", args, BungeeShop.this::reload);
 		}
 
-		/** /plebshop adminpass ...: console only. The second password /adminlogin checks. */
+		/** /pleb adminpass ...: console only. The second password /adminlogin checks. */
 		@SuppressWarnings("deprecation")
 		private void adminPassCommand(CommandSender sender, String[] a) {
 			java.util.function.Consumer<String> reply = line -> sender.sendMessage(TextComponent.fromLegacyText(line));
@@ -846,9 +846,9 @@ public final class BungeeShop extends Plugin implements Listener {
 				}
 				return;
 			} else {
-				reply.accept("plebshop adminpass set <name> <password>  - allow a name to unlock the admin menu (/adminlogin)");
-				reply.accept("plebshop adminpass remove <name>");
-				reply.accept("plebshop adminpass list");
+				reply.accept("pleb adminpass set <name> <password>  - allow a name to unlock the admin menu (/adminlogin)");
+				reply.accept("pleb adminpass remove <name>");
+				reply.accept("pleb adminpass list");
 				reply.accept("The name also needs a PlebMc account with a role from admin-menu.roles (admin, owner), signed in.");
 				return;
 			}
@@ -858,7 +858,7 @@ public final class BungeeShop extends Plugin implements Listener {
 			}
 		}
 
-		/** /plebshop staff ...: console only, since in-game the name proves nothing. */
+		/** /pleb staff ...: console only, since in-game the name proves nothing. */
 		@SuppressWarnings("deprecation")
 		private void staffCommand(CommandSender sender, String[] a) {
 			java.util.function.Consumer<String> reply = line -> sender.sendMessage(TextComponent.fromLegacyText(line));
@@ -870,7 +870,7 @@ public final class BungeeShop extends Plugin implements Listener {
 			switch (sub) {
 			case "set":
 				if (a.length != 4) {
-					reply.accept("Usage: plebshop staff set <name> <password>");
+					reply.accept("Usage: pleb staff set <name> <password>");
 					return;
 				}
 				String err = staffLock.setPassword(a[2], a[3]);
@@ -884,16 +884,16 @@ public final class BungeeShop extends Plugin implements Listener {
 				return;
 			case "add":
 				if (a.length != 3) {
-					reply.accept("Usage: plebshop staff add <name>  (locks it until you set a password)");
+					reply.accept("Usage: pleb staff add <name>  (locks it until you set a password)");
 					return;
 				}
-				reply.accept(staffLock.protect(a[2]) ? a[2] + " is locked. Set its password: plebshop staff set " + a[2] + " <password>"
+				reply.accept(staffLock.protect(a[2]) ? a[2] + " is locked. Set its password: pleb staff set " + a[2] + " <password>"
 						: a[2] + " was already protected.");
 				kickUnverified(a[2]);
 				return;
 			case "remove":
 				if (a.length != 3) {
-					reply.accept("Usage: plebshop staff remove <name>");
+					reply.accept("Usage: pleb staff remove <name>");
 					return;
 				}
 				reply.accept(staffLock.remove(a[2]) ? a[2] + " is no longer protected: anyone can join with that name again."
@@ -908,10 +908,10 @@ public final class BungeeShop extends Plugin implements Listener {
 				return;
 			}
 			default:
-				reply.accept("plebshop staff set <name> <password>  - protect a name with a password (or change it)");
-				reply.accept("plebshop staff add <name>  - lock a name until it has a password");
-				reply.accept("plebshop staff remove <name>  - stop protecting a name");
-				reply.accept("plebshop staff list");
+				reply.accept("pleb staff set <name> <password>  - protect a name with a password (or change it)");
+				reply.accept("pleb staff add <name>  - lock a name until it has a password");
+				reply.accept("pleb staff remove <name>  - stop protecting a name");
+				reply.accept("pleb staff list");
 			}
 		}
 

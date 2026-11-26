@@ -634,7 +634,7 @@ final class ShopCore {
 			r.put("allowed", false);
 			r.put("ok", false);
 			r.put("message", adminGroup(p)
-					? "Type /adminlogin <admin password> in chat first (set in the proxy console: plebshop adminpass set <name> <password>)."
+					? "Type /adminlogin <admin password> in chat first (set in the proxy console: pleb adminpass set <name> <password>)."
 					: "Only PlebMc admins and owners can use the admin menu (sign in to your account first).");
 			send(p, r);
 			return;
@@ -1109,7 +1109,7 @@ final class ShopCore {
 		}
 	}
 
-	// ==================== /plebshop ====================
+	// ==================== /pleb ====================
 
 	interface Sender {
 		void reply(String line);
