@@ -47,7 +47,18 @@ public final class Mods {
                 @Override
                 public HudBox layout(ClientView v, HudBox.Measure m) {
                         List<String> l = lines(v);
-                        return l.isEmpty() ? null : HudBox.lines(l, m);
+                        if (l.isEmpty()) {
+                                return null;
+                        }
+                        ClientPrefs pr = ClientPrefs.get();
+                        if (pr.hudBrackets != 0 || pr.hudTextStyle != 0) {
+                                List<String> d = new java.util.ArrayList<>(l.size());
+                                for (String s : l) {
+                                        d.add(pr.decorateHud(s));
+                                }
+                                l = d;
+                        }
+                        return HudBox.lines(l, m);
                 }
         }
 
@@ -85,11 +96,16 @@ public final class Mods {
                         facing = setting("facing", "Facing", "Show which way you're looking", OFF_ON, 1);
                         decimals = setting("decimals", "Decimals", "Show one decimal place", OFF_ON, 1);
                         compact = setting("compact", "Layout", "One line or one line per axis", new String[] { "Stacked", "One line" }, 0);
+                        labelX = textSetting("label_x", "X label", "Text before the X number (empty for none)", "X: ");
+                        labelY = textSetting("label_y", "Y label", "Text before the Y number", "Y: ");
+                        labelZ = textSetting("label_z", "Z label", "Text before the Z number", "Z: ");
+                        labelFacing = textSetting("label_facing", "Facing label", "Text before the direction", "Facing: ");
                 }
 
                 private final Setting facing;
                 private final Setting decimals;
                 private final Setting compact;
+                private final Setting labelX, labelY, labelZ, labelFacing;
 
                 private String n(double d) {
                         return decimals.on() ? fmt(d) : Long.toString((long) Math.floor(d));
@@ -98,15 +114,18 @@ public final class Mods {
                 @Override
                 protected List<String> lines(ClientView v) {
                         List<String> l = new ArrayList<>();
+                        String x = labelX.text() + n(v.x()), y = labelY.text() + n(v.y()), z = labelZ.text() + n(v.z());
+                        String f = facing.on() ? labelFacing.text() + facing(v.yaw()) : null;
                         if (compact.on()) {
-                                l.add(n(v.x()) + ", " + n(v.y()) + ", " + n(v.z()));
+                                // everything on one line, facing included
+                                l.add(x + "  " + y + "  " + z + (f == null ? "" : "  " + f));
                         } else {
-                                l.add("X: " + n(v.x()));
-                                l.add("Y: " + n(v.y()));
-                                l.add("Z: " + n(v.z()));
-                        }
-                        if (facing.on()) {
-                                l.add("Facing: " + facing(v.yaw()));
+                                l.add(x);
+                                l.add(y);
+                                l.add(z);
+                                if (f != null) {
+                                        l.add(f);
+                                }
                         }
                         return l;
                 }
@@ -383,15 +402,32 @@ public final class Mods {
                         int mw = (col * 3 - GAP - GAP) / 2;
                         int y = col * 2;
                         if (mouse.on()) {
-                                key(b, cps.on() ? "LMB " + v.cps(0) : "LMB", 0, y, mw, v.mouseDown(0));
-                                key(b, cps.on() ? "RMB " + v.cps(1) : "RMB", mw + GAP, y, mw, v.mouseDown(1));
-                                y += col;
+                                if (cps.on()) {
+                                        // the label on top and the CPS under it, both centered in the key
+                                        mouseKey(b, "LMB", v.cps(0), 0, y, mw, v.mouseDown(0));
+                                        mouseKey(b, "RMB", v.cps(1), mw + GAP, y, mw, v.mouseDown(1));
+                                        y += MOUSE_KEY + GAP;
+                                } else {
+                                        key(b, "LMB", 0, y, mw, v.mouseDown(0));
+                                        key(b, "RMB", mw + GAP, y, mw, v.mouseDown(1));
+                                        y += col;
+                                }
                         }
                         if (jump.on()) {
                                 b.rect(0, y, col * 3 - GAP, 8, v.keyDown("jump") ? HudBox.BG_PRESSED : HudBox.BG);
                                 b.rect(col * 3 / 2 - 10, y + 3, 20, 1, v.keyDown("jump") ? HudBox.TEXT_PRESSED : HudBox.TEXT);
                         }
                         return b;
+                }
+
+                static final int MOUSE_KEY = 24;
+
+                private static void mouseKey(HudBox b, String label, int cps, int x, int y, int w, boolean down) {
+                        b.rect(x, y, w, MOUSE_KEY, down ? HudBox.BG_PRESSED : HudBox.BG);
+                        int fg = down ? HudBox.TEXT_PRESSED : HudBox.TEXT;
+                        b.text(label, x + w / 2, y + 3, fg, true);
+                        // just the number, so even 10+ CPS stays inside the key
+                        b.text(Integer.toString(cps), x + w / 2, y + 13, fg, true);
                 }
 
                 private static void key(HudBox b, String label, int x, int y, int w, boolean down) {

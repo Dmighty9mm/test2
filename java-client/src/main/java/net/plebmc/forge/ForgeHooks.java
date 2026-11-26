@@ -8,6 +8,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiMainMenu;
 import net.minecraft.client.gui.ScaledResolution;
+import net.minecraftforge.client.event.ClientChatReceivedEvent;
 import net.minecraftforge.client.event.GuiScreenEvent;
 import net.minecraftforge.client.event.MouseEvent;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
@@ -91,6 +92,13 @@ public final class ForgeHooks {
 	public void onGuiInit(GuiScreenEvent.InitGuiEvent.Post e) {
 		if (e.gui instanceof GuiMainMenu) {
 			PlebMenu.initMainMenu(e.gui, e.buttonList, e.gui.height / 4 + 48);
+			if (net.plebmc.client.hud.TitleMenu.active()) {
+				// the PlebClient title screen draws its own sidebar; the buttons stay for other mods but are hidden
+				for (net.minecraft.client.gui.GuiButton b : e.buttonList) {
+					b.visible = false;
+				}
+				net.plebmc.client.hud.TitleMenu.init(e.gui);
+			}
 		}
 	}
 
@@ -111,4 +119,42 @@ public final class ForgeHooks {
 		});
 	}
 
+
+	/** Crosshair mod: draw our own instead of the vanilla one. */
+	@SubscribeEvent
+	public void onCrosshair(RenderGameOverlayEvent.Pre e) {
+		if (e.type == RenderGameOverlayEvent.ElementType.CROSSHAIRS
+				&& net.plebmc.client.hud.PlebVisuals.crosshair(e.resolution.getScaledWidth(), e.resolution.getScaledHeight())) {
+			e.setCanceled(true);
+		}
+	}
+
+	/** Overlays mod: no pumpkin blur. */
+	@SubscribeEvent
+	public void onHelmet(RenderGameOverlayEvent.Pre e) {
+		if (e.type == RenderGameOverlayEvent.ElementType.HELMET && mc.thePlayer != null
+				&& net.plebmc.client.hud.PlebVisuals.hidePumpkin()) {
+			net.minecraft.item.ItemStack head = mc.thePlayer.inventory.armorItemInSlot(3);
+			if (head != null && head.getItem() == net.minecraft.item.Item.getItemFromBlock(net.minecraft.init.Blocks.pumpkin)) {
+				e.setCanceled(true);
+			}
+		}
+	}
+
+	/** Block Outline mod: our own color, thickness and fill. */
+	@SubscribeEvent
+	public void onBlockHighlight(net.minecraftforge.client.event.DrawBlockHighlightEvent e) {
+		if (e.subID == 0 && net.plebmc.client.hud.PlebVisuals.blockOutline(e.player, e.target, e.partialTicks)) {
+			e.setCanceled(true);
+		}
+	}
+
+	/** Chat mod: timestamps and stacked repeats (game-info messages above the hotbar are left alone). */
+	@SubscribeEvent
+	public void onChat(ClientChatReceivedEvent e) {
+		if (e.type != 2 && e.message != null && mc.ingameGUI != null
+				&& net.plebmc.client.hud.PlebVisuals.chat(mc.ingameGUI.getChatGUI(), e.message)) {
+			e.setCanceled(true);
+		}
+	}
 }

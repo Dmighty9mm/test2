@@ -34,9 +34,12 @@ public final class Cosmetics {
 	public static final String CHANNEL = "plebmc:shop";
 
 	public static final String HAT = "hat";
+	/** Trails were taken out of the shop; trail items from a server are ignored. */
 	public static final String TRAIL = "trail";
 	public static final String CLOAK = "cloak";
-	public static final String[] CATEGORIES = { HAT, TRAIL, CLOAK };
+	public static final String[] CATEGORIES = { HAT, CLOAK };
+	/** The collection an item is in when the server doesn't say. */
+	public static final String MAIN = "plebmc";
 
 	/** One shop item. {@link #render} is the look the client draws (see {@link #RENDERS}). */
 	public static final class Item {
@@ -53,8 +56,14 @@ public final class Cosmetics {
 		/** Cloaks: the server's texture id (a content hash), or null for a plain colored cloak. */
 		public String texture;
 		public int textureWidth;
+		/** Animated cloaks: milliseconds per frame (the frames are stacked top to bottom in the texture). */
+		public int frameTime = 100;
 		/** Model hats ("render":"model"): the server's model id (a content hash); the texture is {@link #texture}. */
 		public String model;
+		/** The shop collection (tab) it's listed in: plebmc, partners, ... */
+		public String collection = MAIN;
+		/** Partner items: who made it, or null. */
+		public String creator;
 
 		public Item(String id, String name, String category, String render, String description, int price,
 				int color) {
@@ -135,14 +144,38 @@ public final class Cosmetics {
 		}
 	}
 
+	/** A shop collection: a tab across the top of the shop (PlebMc, Partners). */
+	public static final class Collection {
+		public final String id;
+		public final String name;
+		/** An icon name the client knows, or "shop". */
+		public final String icon;
+		/** ARGB, or 0 for the accent color. */
+		public final int color;
+		public final String description;
+
+		public Collection(String id, String name, String icon, int color, String description) {
+			this.id = id;
+			this.name = name;
+			this.icon = icon;
+			this.color = color;
+			this.description = description;
+		}
+	}
+
+	/** Until the server sends its own. */
+	static final List<Collection> DEFAULT_COLLECTIONS = Collections.unmodifiableList(java.util.Arrays.asList(
+			new Collection(MAIN, "PlebMc", "mascot", 0, "Cosmetics from the PlebMc team"),
+			new Collection("partners", "Partners", "partner", 0xFFFF7AC6, "Cosmetics made with PlebMc partners")));
+
 	/** Receives coin/quest popups (set by the HUD; null in tests). */
 	public interface Toasts {
 		void show(String title, String message);
 	}
 
 	/** Every look this client knows how to draw. A catalog item with another render id is hidden. */
-	public static final String[] RENDERS = { "tophat", "crown", "halo", "partyhat", "beanie", "horns", "flame",
-			"hearts", "notes", "rainbow", "cloud", "portal", "emerald", "snow", "cloak", "model" };
+	public static final String[] RENDERS = { "tophat", "crown", "halo", "partyhat", "beanie", "horns", "cap",
+			"headphones", "bunny", "wizard", "viking", "cowboy", "propeller", "chef", "cloak", "model" };
 
 	/** A hat drawn from a model the server sends (a Blockbench model in the shop plugin's folder). */
 	public static final String MODEL = "model";
@@ -154,17 +187,18 @@ public final class Cosmetics {
 			new Item("partyhat", "Party Hat", HAT, "partyhat", "Striped cone hat", 300, -1),
 			new Item("beanie", "Beanie", HAT, "beanie", "Warm knitted beanie", 250, 0x3A7BD5),
 			new Item("horns", "Devil Horns", HAT, "horns", "Two red horns", 1000, -1),
-			new Item("flame", "Flame Trail", TRAIL, "flame", "Fire at your feet", 750, -1),
-			new Item("hearts", "Heart Trail", TRAIL, "hearts", "Hearts follow you", 600, -1),
-			new Item("notes", "Music Trail", TRAIL, "notes", "Music notes as you walk", 600, -1),
-			new Item("rainbow", "Rainbow Trail", TRAIL, "rainbow", "A rainbow dust trail", 2000, -1),
-			new Item("cloud", "Cloud Trail", TRAIL, "cloud", "Puffs of cloud", 400, -1),
-			new Item("portal", "Ender Trail", TRAIL, "portal", "Ender portal sparkles", 900, -1),
-			new Item("emerald", "Emerald Trail", TRAIL, "emerald", "Green sparkles", 800, -1),
-			new Item("snow", "Snow Trail", TRAIL, "snow", "Snowflakes", 500, -1),
+			new Item("cap", "Snapback", HAT, "cap", "A cap with the brim to the front", 900, 0x2D9CDB),
+			new Item("headphones", "Headphones", HAT, "headphones", "Hear the storm coming", 2500, -1),
+			new Item("bunny", "Bunny Ears", HAT, "bunny", "Two tall fluffy ears", 1800, -1),
+			new Item("wizard", "Wizard Hat", HAT, "wizard", "Pointy, starry and a bit magic", 4000, -1),
+			new Item("viking", "Viking Helmet", HAT, "viking", "Iron and horns", 4500, -1),
+			new Item("cowboy", "Cowboy Hat", HAT, "cowboy", "Yeehaw", 2200, -1),
+			new Item("propeller", "Propeller Cap", HAT, "propeller", "It spins", 3000, -1),
+			new Item("chef", "Chef Hat", HAT, "chef", "Cooking up wins", 1200, -1),
 			new Item("red_cloak", "Red Cloak", CLOAK, "cloak", "A plain red cloak", 1500, 0xB71C1C)));
 
 	private static List<Item> catalog = DEFAULT_CATALOG;
+	private static List<Collection> collections = DEFAULT_COLLECTIONS;
 	private static boolean serverCatalog;
 	private static long coins = -1;
 	private static String currency = "PlebMc Coins";
@@ -215,9 +249,96 @@ public final class Cosmetics {
 		});
 	}
 
+	// ==================== offline copy of the shop ====================
+
+	/** Somewhere to keep the PlebioAPI catalog and its textures between sessions. */
+	public interface Cache {
+		byte[] get(String key);
+
+		void put(String key, byte[] value);
+	}
+
+	private static Cache cache;
+	private static List<Item> cachedCatalog;
+	private static List<Collection> cachedCollections;
+
+	/**
+	 * Sets the store for the offline shop and loads the last PlebioAPI
+	 * catalog from it, so the shop shows every hat and cloak even before
+	 * (or without) joining the server.
+	 */
+	public static void setCache(Cache c) {
+		cache = c;
+		try {
+			byte[] b = c == null ? null : c.get("catalog");
+			Object o = b == null ? null : Json.parse(new String(b, StandardCharsets.UTF_8));
+			if (o instanceof Map) {
+				List<Collection> cs = readCollections(((Map<?, ?>) o).get("collections"));
+				List<Item> items = readCatalog(((Map<?, ?>) o).get("catalog"));
+				if (items != null && !items.isEmpty()) {
+					cachedCatalog = items;
+					cachedCollections = cs != null ? cs : DEFAULT_COLLECTIONS;
+					if (!serverCatalog) {
+						catalog = cachedCatalog;
+						collections = cachedCollections;
+						version++;
+					}
+				}
+			}
+		} catch (Throwable t) {
+			warn("could not load the saved shop: " + t);
+		}
+	}
+
+	/** True when the shop shows a saved copy of the server's catalog (not connected to it). */
+	public static boolean offlineCatalog() {
+		return !serverCatalog && cachedCatalog != null;
+	}
+
+	private static void cachePut(String key, byte[] value) {
+		if (cache != null) {
+			try {
+				cache.put(key, value);
+			} catch (Throwable t) {
+				warn("could not save " + key + ": " + t);
+			}
+		}
+	}
+
+	private static List<Collection> readCollections(Object v) {
+		if (!(v instanceof List)) {
+			return null;
+		}
+		List<Collection> cs = new ArrayList<>();
+		for (Object e : (List<?>) v) {
+			if (e instanceof Map && ((Map<?, ?>) e).get("id") instanceof String) {
+				Map<?, ?> c = (Map<?, ?>) e;
+				String cid = ((String) c.get("id")).toLowerCase();
+				cs.add(new Collection(cid, str(c.get("name"), cid), str(c.get("icon"), "shop"),
+						parseColor(str(c.get("color"), "")), str(c.get("description"), "")));
+			}
+		}
+		return cs.isEmpty() ? null : Collections.unmodifiableList(cs);
+	}
+
+	private static List<Item> readCatalog(Object v) {
+		if (!(v instanceof List)) {
+			return null;
+		}
+		List<Item> items = new ArrayList<>();
+		for (Object e : (List<?>) v) {
+			Item it = readItem(e);
+			if (it != null) {
+				items.add(it);
+			}
+		}
+		return Collections.unmodifiableList(items);
+	}
+
 	/** Forget everything from the last server (disconnect or server switch). */
 	public static void reset() {
-		catalog = DEFAULT_CATALOG;
+		catalog = cachedCatalog != null ? cachedCatalog : DEFAULT_CATALOG;
+		collections = cachedCollections != null ? cachedCollections : DEFAULT_COLLECTIONS;
 		serverCatalog = false;
 		coins = -1;
 		currency = "PlebMc Coins";
@@ -244,7 +365,7 @@ public final class Cosmetics {
 	private static final Map<String, byte[]> textures = new java.util.LinkedHashMap<>();
 	private static final Map<String, String[]> textureParts = new HashMap<>();
 	private static final Set<String> requested = new HashSet<>();
-	static final int MAX_PARTS = 256;
+	static final int MAX_PARTS = 512;
 	static final int MAX_TEXTURES = 48;
 
 	/** The PNG for a texture id once it has arrived; asks the server for it the first time. */
@@ -253,6 +374,18 @@ public final class Cosmetics {
 			return null;
 		}
 		byte[] b = textures.get(id);
+		if (b == null && cache != null && !requested.contains(id)) {
+			// saved from an earlier session (the id is a content hash, so it can't be stale)
+			try {
+				b = cache.get("tex/" + id);
+			} catch (Throwable t) {
+				b = null;
+			}
+			if (b != null) {
+				putTexture(id, b);
+				return b;
+			}
+		}
 		if (b == null && !requested.contains(id) && send(obj("type", "texture", "id", id))) {
 			requested.add(id);
 		}
@@ -349,6 +482,11 @@ public final class Cosmetics {
 			warn("bad cloak texture " + id);
 			return;
 		}
+		putTexture(id, png);
+		cachePut("tex/" + id, png);
+	}
+
+	private static void putTexture(String id, byte[] png) {
 		if (textures.size() >= MAX_TEXTURES) {
 			textures.remove(textures.keySet().iterator().next());
 		}
@@ -428,17 +566,25 @@ public final class Cosmetics {
 			if (m.containsKey("loginStreak")) {
 				loginStreak = (int) Math.max(0, num(m.get("loginStreak"), 0));
 			}
-			if (m.get("catalog") instanceof List) {
-				List<Item> items = new ArrayList<>();
-				for (Object e : (List<?>) m.get("catalog")) {
-					Item it = readItem(e);
-					if (it != null) {
-						items.add(it);
-					}
-				}
-				catalog = Collections.unmodifiableList(items);
-				serverCatalog = true;
+			List<Collection> cs = readCollections(m.get("collections"));
+			if (cs != null) {
+				collections = cs;
 			}
+			List<Item> items = readCatalog(m.get("catalog"));
+			if (items != null) {
+				catalog = items;
+				serverCatalog = true;
+				// keep a copy, so the shop works offline next time
+				cachedCatalog = items;
+				cachedCollections = collections;
+				Map<String, Object> saved = new LinkedHashMap<>();
+				saved.put("catalog", m.get("catalog"));
+				if (m.get("collections") instanceof List) {
+					saved.put("collections", m.get("collections"));
+				}
+				cachePut("catalog", Json.write(saved).getBytes(StandardCharsets.UTF_8));
+			}
+			rememberLook();
 		} else if ("players".equals(type)) {
 			if (Boolean.TRUE.equals(m.get("clear"))) {
 				others.clear();
@@ -469,6 +615,7 @@ public final class Cosmetics {
 		} else if ("notify".equals(type)) {
 			if (m.containsKey("coins")) {
 				coins = Math.max(0, num(m.get("coins"), 0));
+				rememberLook();
 			}
 			String title = str(m.get("title"), "");
 			String text = str(m.get("message"), "");
@@ -501,7 +648,7 @@ public final class Cosmetics {
 		Map<?, ?> m = (Map<?, ?>) o;
 		String id = str(m.get("id"), null);
 		String cat = str(m.get("category"), null);
-		if (id == null || cat == null) {
+		if (id == null || cat == null || TRAIL.equals(cat)) {
 			return null;
 		}
 		String render = str(m.get("render"), CLOAK.equals(cat) ? "cloak" : id);
@@ -526,10 +673,14 @@ public final class Cosmetics {
 		Item it = new Item(id, str(m.get("name"), id), cat, render, str(m.get("description"), ""),
 				(int) Math.max(0, Math.min(Integer.MAX_VALUE, num(m.get("price"), 0))), color);
 		it.forSale = !Boolean.FALSE.equals(m.get("forSale"));
+		it.collection = str(m.get("collection"), MAIN).toLowerCase();
+		String creator = str(m.get("creator"), null);
+		it.creator = creator == null || creator.trim().isEmpty() ? null : creator.trim();
 		String tex = str(m.get("texture"), null);
 		if (CLOAK.equals(cat) && tex != null && tex.matches("[0-9a-f]{8,64}")) {
 			it.texture = tex;
 			it.textureWidth = (int) Math.max(0, num(m.get("textureWidth"), 0));
+			it.frameTime = (int) Math.max(20, Math.min(10_000, num(m.get("frameTime"), 100)));
 		}
 		if (MODEL.equals(render)) {
 			String model = str(m.get("model"), null);
@@ -719,6 +870,104 @@ public final class Cosmetics {
 		return changed;
 	}
 
+	// ==================== the last look (for the title screen) ====================
+
+	private static long lastCoins = -1;
+	private static String lastCurrency = "PlebMc Coins";
+	private static Item lastHat, lastCloak;
+	private static int lookVersion;
+
+	/** Keeps the balance and what the player wore, so the title screen can show them after leaving. */
+	private static void rememberLook() {
+		boolean changed = false;
+		if (coins >= 0 && coins != lastCoins) {
+			lastCoins = coins;
+			changed = true;
+		}
+		if (!currency.equals(lastCurrency)) {
+			lastCurrency = currency;
+			changed = true;
+		}
+		Item h = item(equipped.get(HAT)), c = item(equipped.get(CLOAK));
+		if (h != lastHat || c != lastCloak) {
+			lastHat = h;
+			lastCloak = c;
+			changed = true;
+		}
+		if (changed) {
+			lookVersion++;
+		}
+	}
+
+	/** The last balance a server sent (kept after leaving and across restarts), or -1. */
+	public static long lastCoins() {
+		return coins >= 0 ? coins : lastCoins;
+	}
+
+	public static String lastCurrency() {
+		return lastCurrency;
+	}
+
+	/** The hat or cloak the player last wore on a server, or null. */
+	public static Item lastWorn(String category) {
+		return HAT.equals(category) ? lastHat : CLOAK.equals(category) ? lastCloak : null;
+	}
+
+	/** Changes every time the remembered look changes (to know when to save it). */
+	public static int lookVersion() {
+		return lookVersion;
+	}
+
+	public static String lookJson() {
+		Map<String, Object> m = new java.util.LinkedHashMap<>();
+		m.put("coins", (double) lastCoins);
+		m.put("currency", lastCurrency);
+		if (lastHat != null) {
+			m.put("hat", itemJson(lastHat));
+		}
+		if (lastCloak != null) {
+			m.put("cloak", itemJson(lastCloak));
+		}
+		return net.plebmc.client.apollo.proto.Json.write(m);
+	}
+
+	public static void loadLook(String raw) {
+		try {
+			Object o = raw == null || raw.isEmpty() ? null : net.plebmc.client.apollo.proto.Json.parse(raw);
+			if (!(o instanceof Map)) {
+				return;
+			}
+			Map<?, ?> m = (Map<?, ?>) o;
+			lastCoins = (long) num(m.get("coins"), -1);
+			lastCurrency = str(m.get("currency"), lastCurrency);
+			Item h = readItem(m.get("hat")), c = readItem(m.get("cloak"));
+			lastHat = h != null && HAT.equals(h.category) ? h : null;
+			lastCloak = c != null && CLOAK.equals(c.category) ? c : null;
+		} catch (RuntimeException e) {
+			// a broken value: forget it
+		}
+	}
+
+	private static Map<String, Object> itemJson(Item it) {
+		Map<String, Object> m = new java.util.LinkedHashMap<>();
+		m.put("id", it.id);
+		m.put("name", it.name);
+		m.put("category", it.category);
+		m.put("render", it.render);
+		if (it.color >= 0) {
+			m.put("color", String.format("#%06X", it.color));
+		}
+		if (it.texture != null) {
+			m.put("texture", it.texture);
+			m.put("textureWidth", (double) it.textureWidth);
+			m.put("frameTime", (double) it.frameTime);
+		}
+		if (it.model != null) {
+			m.put("model", it.model);
+		}
+		return m;
+	}
+
 	public static String seenJson() {
 		return net.plebmc.client.apollo.proto.Json.write(new ArrayList<Object>(seen));
 	}
@@ -788,6 +1037,35 @@ public final class Cosmetics {
 			}
 		}
 		return out;
+	}
+
+	/** The items of a category in one collection (anything with an unknown collection shows under the first). */
+	public static List<Item> catalog(String category, String collection) {
+		String first = collections.isEmpty() ? MAIN : collections.get(0).id;
+		List<Item> out = new ArrayList<>();
+		for (Item it : catalog) {
+			if (!it.category.equals(category)) {
+				continue;
+			}
+			String c = collection(it.collection) != null ? it.collection : first;
+			if (c.equals(collection)) {
+				out.add(it);
+			}
+		}
+		return out;
+	}
+
+	public static List<Collection> collections() {
+		return collections;
+	}
+
+	public static Collection collection(String id) {
+		for (Collection c : collections) {
+			if (c.id.equals(id)) {
+				return c;
+			}
+		}
+		return null;
 	}
 
 	public static Item item(String id) {

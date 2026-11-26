@@ -11,25 +11,64 @@ import java.util.Map;
 final class Catalog {
 
 	static final String HAT = "hat";
+	/** Trails were taken out of the shop; trail items in an old config are skipped with a warning. */
 	static final String TRAIL = "trail";
 	static final String CLOAK = "cloak";
-	static final List<String> CATEGORIES = Collections.unmodifiableList(java.util.Arrays.asList(HAT, TRAIL, CLOAK));
+	static final List<String> CATEGORIES = Collections.unmodifiableList(java.util.Arrays.asList(HAT, CLOAK));
+
+	/** Shop collections (tabs in the client's shop): PlebMc by default, Partners for partner-made cosmetics. */
+	static final String MAIN = "plebmc";
+
+	static final class Collection {
+		final String id;
+		final String name;
+		final String icon;
+		final String color; // "#RRGGBB" or null
+		final String description;
+
+		Collection(String id, String name, String icon, String color, String description) {
+			this.id = id;
+			this.name = name;
+			this.icon = icon;
+			this.color = color;
+			this.description = description;
+		}
+
+		Map<String, Object> toJson() {
+			Map<String, Object> m = new LinkedHashMap<>();
+			m.put("id", id);
+			m.put("name", name);
+			m.put("icon", icon);
+			if (color != null) {
+				m.put("color", color);
+			}
+			m.put("description", description);
+			return m;
+		}
+	}
 
 	static boolean isCategory(String c) {
 		return CATEGORIES.contains(c);
 	}
 
-	/** Cloak textures: a PNG in the standard cape layout (64x32) at any multiple, up to 4096x2048. */
+	/**
+	 * Cloak textures: a PNG in the standard cape layout (64x32) at any
+	 * multiple, up to 4096x2048. An animated cloak stacks its frames top to
+	 * bottom (width x width/2 each, up to 64 frames and 8,388,608 pixels in
+	 * all, for example 512x256 x 64 or 1024x512 x 16).
+	 */
 	static final int MAX_TEXTURE_BYTES = 4 * 1024 * 1024;
+	static final int MAX_ANIMATED_BYTES = 8 * 1024 * 1024;
 	static final int MAX_TEXTURE_WIDTH = 4096;
+	static final int MAX_FRAMES = 64;
+	static final long MAX_ANIMATED_PIXELS = 8_388_608L;
 
 	/** What the PlebMc client can draw. Items with another render are skipped. */
 	static final List<String> HAT_RENDERS = Collections.unmodifiableList(java.util.Arrays.asList("tophat", "crown",
-			"halo", "partyhat", "beanie", "horns"));
+			"halo", "partyhat", "beanie", "horns", "cap", "headphones", "bunny", "wizard", "viking", "cowboy",
+			"propeller", "chef"));
 	/** A hat drawn from a model file (Blockbench) in the plugin folder. */
 	static final String MODEL = "model";
-	static final List<String> TRAIL_RENDERS = Collections.unmodifiableList(java.util.Arrays.asList("flame", "hearts",
-			"notes", "rainbow", "cloud", "portal", "emerald", "snow"));
 
 	static final class Item {
 		final String id;
@@ -44,9 +83,16 @@ final class Catalog {
 		byte[] png;
 		String textureHash;
 		int textureWidth;
+		/** Animated cloaks: frames in the texture (1 = still) and milliseconds per frame. */
+		int frames = 1;
+		int frameTime = 100;
 		/** Model hats: the quads the client draws, and their content hash. */
 		byte[] modelBlob;
 		String modelHash;
+		/** The shop collection it's listed in (plebmc, partners, ...). */
+		String collection = MAIN;
+		/** Partner items: who made it (shown in the shop), or null. */
+		String creator;
 
 		Item(String id, String name, String category, String render, long price, String color, String description,
 				String permission) {
@@ -85,12 +131,21 @@ final class Catalog {
 			if (textureHash != null) {
 				m.put("texture", textureHash);
 				m.put("textureWidth", textureWidth);
+				if (frames > 1) {
+					m.put("frames", frames);
+					m.put("frameTime", frameTime);
+				}
 			}
 			m.put("description", description);
+			m.put("collection", collection);
+			if (creator != null) {
+				m.put("creator", creator);
+			}
 			return m;
 		}
 	}
 
+	private final Map<String, Collection> collections = new LinkedHashMap<>();
 	private final Map<String, Item> items = new LinkedHashMap<>();
 	private final List<String> warnings = new ArrayList<>();
 
@@ -100,8 +155,16 @@ final class Catalog {
 		this(sec, null);
 	}
 
-	/** {@code folder}: where cloak texture paths are read from (the plugin's folder). */
 	Catalog(Cfg sec, java.io.File folder) {
+		this(sec, folder, null);
+	}
+
+	/**
+	 * {@code folder}: where cloak texture paths are read from (the plugin's folder);
+	 * {@code cols}: the "collections" section (null = PlebMc and Partners).
+	 */
+	Catalog(Cfg sec, java.io.File folder, Cfg cols) {
+		readCollections(cols);
 		if (sec == null) {
 			warnings.add("config.yml has no 'items' section, the shop is empty");
 			return;
@@ -114,8 +177,12 @@ final class Catalog {
 			String category = s.str("category", "").toLowerCase();
 			String modelPath = s.str("model", null);
 			String render = s.str("render", CLOAK.equals(category) ? CLOAK : modelPath != null ? MODEL : id).toLowerCase();
+			if (TRAIL.equals(category)) {
+				warnings.add("item " + id + ": trails were removed from the shop, leaving it out");
+				continue;
+			}
 			if (!isCategory(category)) {
-				warnings.add("item " + id + ": category must be hat, trail or cloak");
+				warnings.add("item " + id + ": category must be hat or cloak");
 				continue;
 			}
 			if (modelPath != null && !HAT.equals(category)) {
@@ -125,8 +192,7 @@ final class Catalog {
 			if (modelPath != null) {
 				render = MODEL;
 			}
-			List<String> renders = HAT.equals(category) ? HAT_RENDERS
-					: TRAIL.equals(category) ? TRAIL_RENDERS : Collections.singletonList(CLOAK);
+			List<String> renders = HAT.equals(category) ? HAT_RENDERS : Collections.singletonList(CLOAK);
 			if (!renders.contains(render) && !(MODEL.equals(render) && modelPath != null)) {
 				warnings.add("item " + id + ": unknown " + category + " render '" + render + "' (use one of " + renders
 						+ ")");
@@ -139,6 +205,20 @@ final class Catalog {
 			}
 			Item it = new Item(id, s.str("name", id), category, render, s.num("price", 0), color,
 					s.str("description", ""), s.str("permission", null));
+			String col = s.str("collection", MAIN).toLowerCase();
+			if ("regular".equals(col) && !collections.containsKey(col)) {
+				col = MAIN; // the old name of the main collection
+			}
+			if (!collections.containsKey(col)) {
+				warnings.add("item " + id + ": collection '" + col + "' is not in 'collections' " + collections.keySet()
+						+ ", listing it under " + MAIN);
+				col = collections.containsKey(MAIN) ? MAIN : collections.keySet().iterator().next();
+			}
+			it.collection = col;
+			String creator = s.str("creator", null);
+			if (creator != null && !creator.trim().isEmpty()) {
+				it.creator = creator.trim();
+			}
 			String tex = s.str("texture", null);
 			if (modelPath != null) {
 				String problem = loadModel(it, folder, modelPath, tex, s);
@@ -149,6 +229,7 @@ final class Catalog {
 				byTexture.put(it.textureHash, it);
 				byTexture.put(it.modelHash, it);
 			} else if (tex != null && CLOAK.equals(category) && folder != null) {
+				it.frameTime = (int) Math.max(20, Math.min(10_000, s.num("frametime", 100)));
 				String problem = loadTexture(it, folder, tex);
 				if (problem != null) {
 					warnings.add("item " + id + ": texture " + tex + " " + problem + ", showing a plain cloak");
@@ -158,6 +239,43 @@ final class Catalog {
 			}
 			items.put(id, it);
 		}
+	}
+
+	private void readCollections(Cfg cols) {
+		if (cols != null) {
+			for (String cid : cols.keys()) {
+				Cfg c = cols.section(cid);
+				String id = cid.toLowerCase();
+				if (c == null || !id.matches("[a-z0-9_-]{1,32}")) {
+					warnings.add("collections." + cid + ": ids are lowercase letters, digits, _ and -");
+					continue;
+				}
+				String color = c.str("color", null);
+				if (color != null && !color.matches("#[0-9a-fA-F]{6}")) {
+					warnings.add("collections." + cid + ".color must look like '#FF7AC6'");
+					color = null;
+				}
+				collections.put(id, new Collection(id, c.str("name", cid), c.str("icon", "shop"), color,
+						c.str("description", "")));
+			}
+		}
+		if (collections.isEmpty()) {
+			collections.put(MAIN, new Collection(MAIN, "PlebMc", "mascot", null, "Cosmetics from the PlebMc team"));
+			collections.put("partners", new Collection("partners", "Partners", "partner", "#FF7AC6",
+					"Cosmetics made with PlebMc partners"));
+		}
+	}
+
+	Map<String, Collection> collections() {
+		return collections;
+	}
+
+	List<Object> collectionsJson() {
+		List<Object> out = new ArrayList<>();
+		for (Collection c : collections.values()) {
+			out.add(c.toJson());
+		}
+		return out;
 	}
 
 	/** Reads and checks a cloak PNG; returns what is wrong with it, or null. */
@@ -173,17 +291,30 @@ final class Catalog {
 			if (!f.isFile()) {
 				return "was not found at " + f.getPath();
 			}
-			if (f.length() > MAX_TEXTURE_BYTES) {
-				return "is bigger than 4 MB";
+			if (f.length() > MAX_ANIMATED_BYTES) {
+				return "is bigger than 8 MB";
 			}
 			byte[] b = java.nio.file.Files.readAllBytes(f.toPath());
 			int[] wh = pngSize(b);
 			if (wh == null) {
 				return "is not a PNG";
 			}
-			if (wh[0] != wh[1] * 2 || wh[0] % 64 != 0 || wh[0] > MAX_TEXTURE_WIDTH) {
-				return "is " + wh[0] + "x" + wh[1] + ": use the cape layout at 64x32 or a multiple (128x64 ... 4096x2048)";
+			if (wh[0] % 64 != 0 || wh[0] > MAX_TEXTURE_WIDTH || wh[1] == 0 || wh[1] % (wh[0] / 2) != 0) {
+				return "is " + wh[0] + "x" + wh[1] + ": use the cape layout at 64x32 or a multiple (128x64 ... 4096x2048),"
+						+ " or frames of that size stacked top to bottom for an animated cloak";
 			}
+			int frames = wh[1] / (wh[0] / 2);
+			if (frames == 1 && b.length > MAX_TEXTURE_BYTES) {
+				return "is bigger than 4 MB";
+			}
+			if (frames > MAX_FRAMES) {
+				return "has " + frames + " frames, the most is " + MAX_FRAMES;
+			}
+			if (frames > 1 && (long) wh[0] * wh[1] > MAX_ANIMATED_PIXELS) {
+				return "is " + wh[0] + "x" + wh[1] + ", too big for an animated cloak: use smaller frames (512x256 x 64,"
+						+ " 1024x512 x 16) or fewer of them";
+			}
+			it.frames = frames;
 			java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-1");
 			StringBuilder h = new StringBuilder();
 			for (byte x : md.digest(b)) {

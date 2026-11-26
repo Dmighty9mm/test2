@@ -105,8 +105,10 @@ public class ShopTest {
     static void cloaks(File dir, Logger log) throws Exception {
         File cl = new File(dir, "cloaks");
         cl.mkdirs();
-        try (java.io.InputStream in = ShopTest.class.getClassLoader().getResourceAsStream("cloaks/plebmc.png")) {
-            Files.write(new File(cl, "plebmc.png").toPath(), QuestsTest.readAll(in));
+        for (String name : new String[] { "plebmc.png", "aurora.png", "inferno.png", "galaxy.png", "rainbow_wave.png" }) {
+            try (java.io.InputStream in = ShopTest.class.getClassLoader().getResourceAsStream("cloaks/" + name)) {
+                Files.write(new File(cl, name).toPath(), QuestsTest.readAll(in));
+            }
         }
         // a big noisy 1024x512 cloak, so it needs several messages
         java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(1024, 512, java.awt.image.BufferedImage.TYPE_INT_ARGB);
@@ -115,16 +117,24 @@ public class ShopTest {
         javax.imageio.ImageIO.write(img, "png", new File(cl, "storm.png"));
         byte[] big = Files.readAllBytes(new File(cl, "storm.png").toPath());
         // a texture with the wrong shape is refused with a clear warning
-        java.awt.image.BufferedImage sq = new java.awt.image.BufferedImage(64, 64, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        java.awt.image.BufferedImage sq = new java.awt.image.BufferedImage(64, 48, java.awt.image.BufferedImage.TYPE_INT_ARGB);
         javax.imageio.ImageIO.write(sq, "png", new File(cl, "square.png"));
+        // an animated cloak: six 128x64 frames stacked top to bottom
+        java.awt.image.BufferedImage an = new java.awt.image.BufferedImage(128, 64 * 6, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < an.getHeight(); y++) for (int x = 0; x < 128; x++) an.setRGB(x, y, 0xFF000000 | (y / 64) * 0x2A0000 | x);
+        javax.imageio.ImageIO.write(an, "png", new File(cl, "anim.png"));
         net = new FakeNet();
         core = new ShopCore(net, new Store(new File(dir, "cloak-players.yml"), log),
-                cfg("  red_cloak:", "  bad_cloak: {name: Bad, category: cloak, texture: 'cloaks/square.png', price: 5, description: x}\n  esc_cloak: {name: Esc, category: cloak, texture: '../players.yml', price: 5, description: x}\n  red_cloak:"), log);
+                cfg("  red_cloak:", "  bad_cloak: {name: Bad, category: cloak, texture: 'cloaks/square.png', price: 5, description: x}\n  anim_cloak: {name: Anim, category: cloak, texture: 'cloaks/anim.png', frametime: 80, price: 5}\n  esc_cloak: {name: Esc, category: cloak, texture: '../players.yml', price: 5, description: x}\n  red_cloak:"), log);
         core.folder(dir);
         check(core.catalog.get("plebmc_cloak").textureHash != null && core.catalog.get("storm_cloak").textureWidth == 1024,
                 "cloak textures load from the plugin folder");
         check(core.catalog.get("bad_cloak").textureHash == null && core.catalog.get("esc_cloak").textureHash == null
                 && core.catalog.warnings().size() == 2, "wrong-size and outside-folder textures refused: " + core.catalog.warnings());
+        Catalog.Item anim = core.catalog.get("anim_cloak");
+        check(anim.textureHash != null && anim.frames == 6 && anim.frameTime == 80
+                && Integer.valueOf(6).equals(anim.toJson().get("frames")) && Integer.valueOf(80).equals(anim.toJson().get("frameTime")),
+                "animated cloak: frames stacked top to bottom, frame time sent to clients");
         P c = join("Caper", "lobby", true);
         Map<?, ?> storm = null;
         List<?> cat = null;
@@ -144,6 +154,7 @@ public class ShopTest {
         for (String m : c.raw) Cosmetics.handle(m);
         Cosmetics.Item ci = Cosmetics.item("storm_cloak");
         check(ci != null && hash.equals(ci.texture), "client knows the cloak's texture");
+        check(Cosmetics.item("anim_cloak") != null && Cosmetics.item("anim_cloak").frameTime == 80, "client reads the frame time");
         int before = c.got.size();
         check(Cosmetics.texture(ci.texture) == null, "texture requested");
         int parts = 0;
@@ -208,6 +219,39 @@ public class ShopTest {
         check(Math.abs(minY - 7.6f) < 0.01f && maxAbsX < 6f, "auto placement: " + minY + " " + maxAbsX);
     }
 
+    /** Shop collections (PlebMc / Partners), partner creators, and old trail items being left out. */
+    static void collections(File dir, Logger log) throws Exception {
+        net = new FakeNet();
+        core = new ShopCore(net, new Store(new File(dir, "col-players.yml"), log),
+                cfg("  red_cloak:", "  p_cloak: {name: P, category: cloak, color: '#FF00FF', collection: Partners, creator: ' Streamer ', price: 5}\n"
+                        + "  lost_hat: {name: L, category: hat, render: cap, collection: nope, price: 5}\n"
+                        + "  old_hat: {name: O, category: hat, render: chef, collection: regular, price: 5}\n"
+                        + "  old_trail: {name: T, category: trail, render: flame, price: 5}\n  red_cloak:"), log);
+        Catalog.Item pc = core.catalog.get("p_cloak");
+        check(pc != null && "partners".equals(pc.collection) && "Streamer".equals(pc.creator), "partner item: collection and creator");
+        check("plebmc".equals(core.catalog.get("lost_hat").collection) && core.catalog.warnings().toString().contains("nope"),
+                "unknown collection falls back to plebmc with a warning");
+        check("plebmc".equals(core.catalog.get("old_hat").collection) && !core.catalog.warnings().toString().contains("regular"),
+                "the old 'regular' collection is read as plebmc, quietly");
+        check(core.catalog.get("old_trail") == null && core.catalog.warnings().toString().contains("trails were removed"),
+                "trail items are left out: " + core.catalog.warnings());
+        P p = join("Partnered", "lobby", true);
+        PluginChannels.reset();
+        for (String m : p.raw) Cosmetics.handle(m);
+        check(Cosmetics.collections().size() == 2 && "partners".equals(Cosmetics.collections().get(1).id)
+                && Cosmetics.collections().get(1).color == 0xFFFF7AC6, "client reads the collections");
+        Cosmetics.Item ci = Cosmetics.item("p_cloak");
+        check(ci != null && "partners".equals(ci.collection) && "Streamer".equals(ci.creator)
+                && Cosmetics.catalog(Cosmetics.CLOAK, "partners").size() == 1
+                && Cosmetics.catalog(Cosmetics.CLOAK, "plebmc").size() == 10, "client splits the shop by collection");
+        // the equipped cloak survives a restart (it used to be dropped on load)
+        cmd("give", "Partnered", "red_cloak");
+        cmd("equip", "Partnered", "cloak", "red_cloak");
+        core.saveIfDirty();
+        Store again = new Store(new File(dir, "col-players.yml"), log);
+        check("red_cloak".equals(again.get(p.id).equipped.get("cloak")), "equipped cloak saved and loaded");
+    }
+
     static List<String> admin = new ArrayList<>();
     static void cmd(String... args) {
         core.command(new ShopCore.Sender() {
@@ -241,7 +285,16 @@ public class ShopTest {
                 "questCategories: " + cats);
         Map<?, ?> withCatalog = null;
         for (Map<?, ?> m : mighty.got) if (m.containsKey("catalog")) withCatalog = m;
-        check(withCatalog != null && ((List<?>) withCatalog.get("catalog")).size() == 21, "catalog has 21 items");
+        check(withCatalog != null && ((List<?>) withCatalog.get("catalog")).size() == 28, "catalog has 28 items");
+        List<?> cols = (List<?>) withCatalog.get("collections");
+        check(cols != null && cols.size() == 2 && "plebmc".equals(((Map<?, ?>) cols.get(0)).get("id"))
+                && "Partners".equals(((Map<?, ?>) cols.get(1)).get("name")), "collections sent: " + cols);
+        boolean noTrails = true;
+        for (Object o : (List<?>) withCatalog.get("catalog")) {
+            Map<?, ?> im = (Map<?, ?>) o;
+            noTrails &= !"trail".equals(im.get("category")) && "plebmc".equals(im.get("collection"));
+        }
+        check(noTrails, "no trails in the shop, everything in PlebMc by default");
         check(mighty.coins() == 50, "day 1 login reward: " + mighty.coins());
         check(String.valueOf(mighty.last("notify").get("message")).contains("+50 PlebMc Coins"), "login popup");
         check(mighty.done("login") && "general".equals(mighty.quest("login").get("category")) && ((Number) mighty.quest("login").get("streak")).intValue() == 1,
@@ -311,7 +364,7 @@ public class ShopTest {
         core.fromClient(mighty.id, "{\"type\":\"buy\",\"id\":\"halo\"}");
         check(mighty.coins() == 6500, "cooldown blocks a second action");
         sleepCooldown();
-        core.fromClient(mighty.id, "{\"type\":\"buy\",\"id\":\"rainbow\"}");
+        core.fromClient(mighty.id, "{\"type\":\"buy\",\"id\":\"diamond_crown\"}");
         check(Boolean.FALSE.equals(mighty.last("result").get("ok")), "not enough coins");
         sleepCooldown();
         core.fromClient(mighty.id, "{\"type\":\"buy\",\"id\":\"dropzone_crown\"}");
@@ -477,7 +530,7 @@ public class ShopTest {
         cmd("give", "Poor", "dropzone_crown");
         cmd("equip", "Poor", "hat", "dropzone_crown");
         check("dropzone_crown".equals(((Map<?, ?>) poor.last("state").get("equipped")).get("hat")), "admin give + equip");
-        check(core.tabComplete(new String[] { "equip", "Poor", "trail", "r" }).contains("rainbow"), "tab complete");
+        check(core.tabComplete(new String[] { "equip", "Poor", "cloak", "r" }).contains("red_cloak"), "tab complete");
         check(core.tabComplete(new String[] { "progress", "Mighty", "ch" }).contains("chat"), "tab complete chat");
         admin.clear();
         cmd("quests");
@@ -515,6 +568,7 @@ public class ShopTest {
         check(((Map<?, ?>) back.quest("login")).get("reward").equals(75.0), "streak day 2");
 
         cloaks(dir, log);
+        collections(dir, log);
 
         System.out.println(checks - failed + "/" + checks + " plugin checks passed");
         int q = QuestsTest.run();

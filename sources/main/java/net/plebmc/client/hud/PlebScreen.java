@@ -523,6 +523,11 @@ public abstract class PlebScreen extends GuiScreen {
 		return y + 40;
 	}
 
+	/** How wide the header's coin balance is (0 when it isn't shown), so header controls can sit left of it. */
+	protected static int coinChipWidth() {
+		return Cosmetics.coins() >= 0 ? Ui.width(Ui.num(Cosmetics.coins())) + 24 : 0;
+	}
+
 	/** A tooltip for a plain area (not a widget). */
 	protected void tooltipArea(int x, int y, int w, int h, String tip) {
 		if (mouseX >= x && mouseY >= y && mouseX < x + w && mouseY < y + h) {

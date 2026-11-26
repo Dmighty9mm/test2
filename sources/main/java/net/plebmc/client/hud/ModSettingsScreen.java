@@ -55,7 +55,11 @@ public final class ModSettingsScreen extends PlebScreen {
 		List<Mod.Setting> ss = mod.settings();
 		for (Mod.Setting st : ss) {
 			W row;
-			if (st.labels == Mod.OFF_ON) {
+			if (st.isText()) {
+				row = new TextRow(st, field(0, 0, Math.min(lw / 2, 110) - 8, 10, 24));
+				row.at(lx, y, lw, 26);
+				widgets.add(row);
+			} else if (st.labels == Mod.OFF_ON) {
 				row = toggle(st.name, st.description, lx, y, lw, 26, st::on, () -> {
 					st.next();
 					PlebClient.saveSettings();
@@ -84,6 +88,7 @@ public final class ModSettingsScreen extends PlebScreen {
 			Button reset = button("Reset", bx - 64, wy + wh - 24, 64, 16, () -> {
 				mod.resetSettings();
 				PlebClient.saveSettings();
+				rebuild();
 			});
 			reset.icon("reset").tip("Put " + mod.name() + "'s options back to their defaults");
 			bx -= 70;
@@ -92,6 +97,42 @@ public final class ModSettingsScreen extends PlebScreen {
 			Button place = button("Move on HUD", bx - 86, wy + wh - 24, 86, 16,
 					() -> this.mc.displayGuiScreen(new HudEditorScreen(this, mod)));
 			place.icon("drag").style(Style.PRIMARY).tip("Drag, resize and recolor it in the HUD editor");
+		}
+	}
+
+	/** A custom label: name on the left, a text box on the right. Saved as you type. */
+	private final class TextRow extends W {
+		final Mod.Setting st;
+		final net.minecraft.client.gui.GuiTextField f;
+
+		TextRow(Mod.Setting st, net.minecraft.client.gui.GuiTextField f) {
+			this.st = st;
+			this.f = f;
+			f.setText(st.text());
+			tip = st.description + " (default \"" + st.defText() + "\")";
+		}
+
+		@Override
+		void draw(int mx, int my) {
+			Ui.round(x, y, w, h, Ui.mix(Ui.RAISED, Ui.HOVER, hover));
+			int bw = Math.min(w / 2, 110);
+			Ui.text(Ui.fit(st.name, w - bw - 16), x + 8, y + (h - 18) / 2, Ui.TEXT);
+			Ui.text(Ui.fit(st.description, w - bw - 16), x + 8, y + (h - 18) / 2 + 10, Ui.FAINT);
+			int bx = x + w - bw - 6, by = y + (h - 14) / 2;
+			Ui.card(bx, by, bw, 14, 0xFF0D1217, f.isFocused() ? Ui.accent() : Ui.mix(Ui.BORDER, Ui.accent(), hover));
+			f.xPosition = bx + 4;
+			f.yPosition = by + 3;
+			boolean shown = clip == null || (y >= clip[1] && y + h <= clip[1] + clip[3]);
+			f.setVisible(shown);
+			if (!f.getText().equals(st.text())) {
+				st.setText(f.getText());
+				PlebClient.saveSettings();
+			}
+		}
+
+		@Override
+		void click(int mx, int my, int button) {
+			f.setFocused(true);
 		}
 	}
 

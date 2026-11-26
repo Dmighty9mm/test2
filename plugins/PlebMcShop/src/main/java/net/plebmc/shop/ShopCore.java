@@ -139,7 +139,7 @@ final class ShopCore {
 
 	synchronized void load(Cfg cfg) {
 		this.config = cfg;
-		catalog = new Catalog(cfg.section("items"), folder);
+		catalog = new Catalog(cfg.section("items"), folder, cfg.section("collections"));
 		quests = new Quests(cfg);
 		for (String w : catalog.warnings()) {
 			log.warning(w);
@@ -996,6 +996,7 @@ final class ShopCore {
 		m.put("weeklyResetIn", quests.secondsToWeeklyReset(now));
 		m.put("loginStreak", quests.loginClaimed(d, now) ? d.streak : 0);
 		if (withCatalog) {
+			m.put("collections", catalog.collectionsJson());
 			m.put("catalog", catalog.toJson());
 		}
 		send(p, m);
@@ -1180,7 +1181,7 @@ final class ShopCore {
 		}
 		case "equip": {
 			if (a.length < 4) {
-				s.reply(prefix + color("&cUsage: /" + label + " equip <player> <hat|trail|cloak> <item|none>"));
+				s.reply(prefix + color("&cUsage: /" + label + " equip <player> <hat|cloak> <item|none>"));
 				return;
 			}
 			UUID id = resolve(a[1]);
@@ -1222,8 +1223,7 @@ final class ShopCore {
 			s.reply(prefix + a[1] + color(": &e" + fmt(d.coins) + " &7") + currency + color(", login streak &f" + d.streak));
 			if (sub.equals("info")) {
 				s.reply(color("&7Owned: &f" + (d.owned.isEmpty() ? "nothing" : String.join(", ", d.owned))));
-				s.reply(color("&7Hat: &f" + d.equipped.getOrDefault(Catalog.HAT, "none") + "  &7Trail: &f"
-						+ d.equipped.getOrDefault(Catalog.TRAIL, "none") + "  &7Cloak: &f"
+				s.reply(color("&7Hat: &f" + d.equipped.getOrDefault(Catalog.HAT, "none") + "  &7Cloak: &f"
 						+ d.equipped.getOrDefault(Catalog.CLOAK, "none")));
 				s.reply(color("&7Quests done: &f" + (d.done.isEmpty() ? "none" : String.join(", ", d.done))));
 				Website.Account acc = accounts.get(id);
@@ -1297,7 +1297,7 @@ final class ShopCore {
 			s.reply(prefix + color("&fPlebMc Coins, quests and cosmetics"));
 			for (String line : Arrays.asList("reload", "quests", "list", "coins <give|take|set> <player> <amount>",
 					"balance <player>", "info <player>", "progress <player> <type> [amount]", "give <player> <item>",
-					"remove <player> <item>", "equip <player> <hat|trail|cloak> <item|none>")) {
+					"remove <player> <item>", "equip <player> <hat|cloak> <item|none>")) {
 				s.reply(color("&7/" + label + " " + line));
 			}
 		}

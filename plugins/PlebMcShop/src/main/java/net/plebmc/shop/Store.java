@@ -88,7 +88,7 @@ final class Store {
 			d.name = s.str("name", "");
 			d.coins = s.num("coins", 0);
 			d.owned.addAll(s.list("owned"));
-			for (String cat : new String[] { Catalog.HAT, Catalog.TRAIL }) {
+			for (String cat : new String[] { Catalog.HAT, Catalog.CLOAK }) {
 				String v = s.str("equipped." + cat, null);
 				if (v != null && !v.isEmpty()) {
 					d.equipped.put(cat, v);

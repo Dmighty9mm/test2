@@ -61,6 +61,12 @@ final class GameView implements ClientView {
 
 	@Override
 	public float yaw() {
+		// the camera's yaw for this very frame (what you see), not the last tick's
+		net.minecraft.entity.Entity cam = mc.getRenderViewEntity();
+		if (cam != null) {
+			float pt = PlebClient.framePartialTicks;
+			return cam.prevRotationYaw + (cam.rotationYaw - cam.prevRotationYaw) * pt;
+		}
 		EntityPlayerSP p = player();
 		return p == null ? 0 : p.rotationYaw;
 	}
@@ -299,7 +305,7 @@ final class GameView implements ClientView {
 		if (p == null) {
 			return Collections.emptyList();
 		}
-		Collection<PotionEffect> active = p.getActivePotionEffects();
+		Collection<PotionEffect> active = p.getActivePotionEffectsList();
 		List<String> out = new ArrayList<>(active.size());
 		for (PotionEffect e : active) {
 			Potion potion = Potion.potionTypes[e.getPotionID()];
@@ -316,5 +322,48 @@ final class GameView implements ClientView {
 			out.add(name + " " + Potion.getDurationString(e));
 		}
 		return out;
+	}
+
+	@Override
+	public long worldTime() {
+		return mc.theWorld == null ? -1 : mc.theWorld.getWorldTime();
+	}
+
+	@Override
+	public String biome() {
+		EntityPlayerSP p = player();
+		if (p == null || mc.theWorld == null) {
+			return null;
+		}
+		try {
+			return mc.theWorld.getBiomeGenForCoords(new net.minecraft.util.BlockPos(p)).biomeName;
+		} catch (Throwable t) {
+			return null;
+		}
+	}
+
+	@Override
+	public String server() {
+		if (mc.theWorld == null) {
+			return null;
+		}
+		if (mc.isSingleplayer()) {
+			return "Singleplayer";
+		}
+		net.minecraft.client.multiplayer.ServerData d = mc.getCurrentServerData();
+		return d == null ? "Multiplayer" : d.serverIP;
+	}
+
+	@Override
+	public int light() {
+		EntityPlayerSP p = player();
+		if (p == null || mc.theWorld == null) {
+			return -1;
+		}
+		try {
+			return mc.theWorld.getLight(new net.minecraft.util.BlockPos(p));
+		} catch (Throwable t) {
+			return -1;
+		}
 	}
 }

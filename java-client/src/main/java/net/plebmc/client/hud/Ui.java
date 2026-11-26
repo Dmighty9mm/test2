@@ -5,6 +5,12 @@ import java.util.List;
 import java.util.Map;
 
 import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.WorldRenderer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.texture.ITextureObject;
+import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.util.ResourceLocation;
 import net.plebmc.client.mods.ClientPrefs;
 
 /**
@@ -87,12 +93,15 @@ public final class Ui {
 	}
 
 	/** The main window of a screen, with a thin accent line on top. */
+	private static final int[] WINDOW_ALPHA = { 0xF4, 0xC8, 0x96 };
+
 	public static void window(int x, int y, int w, int h) {
 		int acc = accent();
 		// soft shadow, then a glassy body that darkens toward the bottom
 		round(x - 3, y - 2, w + 6, h + 6, 0x22000000);
 		round(x - 1, y - 1, w + 2, h + 3, 0x50000000);
-		PlebTheme.gradientRound(x, y, w, h, 0xF4121A23, 0xF60A0F15);
+		int wa = WINDOW_ALPHA[Math.max(0, Math.min(2, net.plebmc.client.mods.ClientPrefs.get().windowOpacity))];
+		PlebTheme.gradientRound(x, y, w, h, alpha(0xFF121A23, wa), alpha(0xFF0A0F15, Math.min(255, wa + 2)));
 		outline(x, y, w, h, BORDER);
 		// an accent line on top with a faint glow under it
 		PlebTheme.gradient(x + 1, y + 1, w - 2, 16, alpha(acc, 0x1C), alpha(acc, 0x00));
@@ -296,6 +305,38 @@ public final class Ui {
 				"..##.##..", "...###...");
 		icon("drag", "...#.....", "..###....", "...#.....", "#.###.#..", "#######..", "#.###.#..", "...#.....",
 				"..###....", "...#.....");
+		icon("home", "....#....", "...###...", "..#####..", ".#######.", "#########", ".##...##.", ".##...##.",
+				".##...##.", ".#######.");
+		icon("play", ".#.......", ".##......", ".###.....", ".####....", ".#####...", ".####....", ".###.....",
+				".##......", ".#.......");
+		icon("world", "..#####..", ".#######.", "#########", "#...#...#", "#...#...#", "#...#...#", "##..#..##",
+				"..#####..", ".........");
+		icon("server", "#########", "#.......#", "#.##..#.#", "#########", "#.......#", "#.##..#.#", "#########",
+				"....#....", "..#####..");
+		icon("discord", ".........", ".#######.", "#########", "##.###.##", "##.###.##", "#########", "####.####",
+				".#.....#.", ".........");
+		icon("power", "....#....", "..#.#.#..", ".#..#..#.", "#...#...#", "#.......#", "#.......#", ".#.....#.",
+				"..#####..", ".........");
+		icon("news", "#######..", "#.....###", "#.###.#.#", "#.....#.#", "#.###.#.#", "#.....#.#", "#.###.#.#",
+				"#######.#", ".#######.");
+		icon("wardrobe", ".##...##.", "####.####", "#########", "#.#####.#", "..#####..", "..#####..", "..#####..",
+				"..#####..", ".........");
+		icon("partner", ".##...##.", "####.####", "#########", "#########", ".#######.", "..#####..", "...###...",
+				"....#....", ".........");
+		// 11x11 line icons for the title screen sidebar
+		icon("nav_options", "....###....", ".##.###.##.", ".#########.", "..#######..", "####...####", "####...####", "####...####", "..#######..", ".#########.", ".##.###.##.", "....###....");
+		icon("nav_language", "...#####...", ".##..#..##.", ".#..#.#..#.", "#...#.#...#", "#..#...#..#", "###########", "#..#...#..#", "#...#.#...#", ".#..#.#..#.", ".##..#..##.", "...#####...");
+		icon("nav_quit", ".....#.....", "..#..#..#..", ".#...#...#.", "#....#....#", "#....#....#", "#.........#", "#.........#", ".#.......#.", "..#.....#..", "...#####...", "...........");
+		icon("nav_play", "...........", "...#.......", "...##......", "...###.....", "...####....", "...#####...", "...####....", "...###.....", "...##......", "...#.......", "...........");
+		icon("nav_single", "....###....", "..##...##..", "##.......##", "#.##...##.#", "#...###...#", "#....#....#", "#....#....#", "#....#....#", "##...#...##", "..##.#.##..", "....###....");
+		icon("nav_multi", "###########", "#.........#", "#.##....#.#", "#.........#", "###########", "...........", "###########", "#.........#", "#.##....#.#", "#.........#", "###########");
+		icon("nav_wardrobe", ".....##....", "....#..#...", ".......#...", "......#....", ".....#.....", "....#.#....", "...#...#...", "..#.....#..", ".#.......#.", "###########", "...........");
+		icon("nav_mods", "...........", "..###......", "###########", "..###......", "......###..", "###########", "......###..", "...###.....", "###########", "...###.....", "...........");
+		icon("nav_quests", "..#######..", "###.....###", "#.#.....#.#", "#.#.....#.#", ".##.....##.", "..#.....#..", "...#...#...", "....###....", ".....#.....", "....###....", "..#######..");
+		icon("nav_customize", "........###", ".......####", "......####.", ".....####..", "....####...", "...####....", "..#.##.....", ".###.......", "####.......", "###........", "#..........");
+		icon("nav_profile", "....###....", "...#...#...", "...#...#...", "...#...#...", "....###....", "...........", "..#######..", ".#.......#.", "#.........#", "#.........#", "###########");
+		icon("nav_discord", "...........", "..##...##..", ".#########.", "###########", "##..###..##", "##..###..##", "###########", ".####.####.", "..##...##..", "...........", "...........");
+		icon("nav_forge", "...........", ".##########", "###########", ".#########.", "....###....", "....###....", "...#####...", ".#########.", ".#########.", "...........", "...........");
 	}
 
 	private static void icon(String name, String... rows) {
@@ -320,12 +361,24 @@ public final class Ui {
 		RUNS.put(name, runs.toArray(new int[0][]));
 	}
 
+	/** The icon's horizontal runs {x, y, length}, or null. */
+	static int[][] runs(String name) {
+		return RUNS.get(name);
+	}
+
 	public static boolean hasIcon(String name) {
-		return RUNS.containsKey(name);
+		return RUNS.containsKey(name) || "mascot".equals(name);
 	}
 
 	/** Draws a 9x9 icon at (x, y), {@code px} GUI pixels per icon pixel. */
 	public static void icon(String name, int x, int y, int px, int color) {
+		if ("mascot".equals(name)) {
+			mascot(x - px, y - px, 11 * px, ((color >>> 24) & 0xFF) / 255f);
+			return;
+		}
+		if (texturedIcon(name, x, y, px, color)) {
+			return;
+		}
 		int[][] runs = RUNS.get(name);
 		if (runs == null) {
 			return;
@@ -333,5 +386,88 @@ public final class Ui {
 		for (int[] r : runs) {
 			rect(x + r[0] * px, y + r[1] * px, r[2] * px, px, color);
 		}
+	}
+
+	private static final ResourceLocation DISCORD = new ResourceLocation("plebitems", "textures/gui/discord.png");
+
+	/**
+	 * Icons drawn from a smooth texture instead of pixel runs (the Discord
+	 * chat bubble, 4:3, centered in the icon box). False for other icons.
+	 */
+	public static boolean texturedIcon(String name, float x, float y, float px, int color) {
+		if (!"nav_discord".equals(name) && !"discord".equals(name)) {
+			return false;
+		}
+		float box = ("discord".equals(name) ? 9 : 11) * px;
+		float w = box * 1.06f, h = w * 0.75f;
+		return tinted(DISCORD, x + (box - w) / 2f, y + (box - h) / 2f, w, h, color);
+	}
+
+	/** A white-on-transparent texture drawn in {@code color} (ARGB), smoothly scaled. False if it can't be bound. */
+	public static boolean tinted(ResourceLocation loc, float x, float y, float w, float h, int color) {
+		Minecraft mc = Minecraft.getMinecraft();
+		try {
+			mc.getTextureManager().bindTexture(loc);
+			ITextureObject tex = mc.getTextureManager().getTexture(loc);
+			if (tex == null) {
+				return false;
+			}
+			tex.setBlurMipmap(true, false);
+		} catch (Throwable t) {
+			return false;
+		}
+		GlStateManager.enableTexture2D();
+		GlStateManager.enableBlend();
+		GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+		GlStateManager.enableAlpha();
+		GlStateManager.alphaFunc(516, 0.01f);
+		GlStateManager.color((color >> 16 & 0xFF) / 255f, (color >> 8 & 0xFF) / 255f, (color & 0xFF) / 255f,
+				(color >>> 24) / 255f);
+		WorldRenderer wr = Tessellator.getInstance().getWorldRenderer();
+		wr.begin(7, DefaultVertexFormats.POSITION_TEX);
+		wr.pos(x, y + h, 0).tex(0, 1).endVertex();
+		wr.pos(x + w, y + h, 0).tex(1, 1).endVertex();
+		wr.pos(x + w, y, 0).tex(1, 0).endVertex();
+		wr.pos(x, y, 0).tex(0, 0).endVertex();
+		Tessellator.getInstance().draw();
+		GlStateManager.alphaFunc(516, 0.1f);
+		GlStateManager.color(1f, 1f, 1f, 1f);
+		return true;
+	}
+
+	private static final ResourceLocation MASCOT = new ResourceLocation("plebitems", "textures/gui/mascot.png");
+	private static final ResourceLocation MASCOT_BIG = new ResourceLocation("plebitems", "textures/gui/mascot_big.png");
+
+	/** The PlebMc mascot's head, {@code size} GUI pixels square, smoothly scaled. */
+	public static void mascot(float x, float y, float size, float alpha) {
+		if (alpha <= 0.01f) {
+			return;
+		}
+		Minecraft mc = Minecraft.getMinecraft();
+		ResourceLocation loc = size > 28 ? MASCOT_BIG : MASCOT;
+		try {
+			mc.getTextureManager().bindTexture(loc);
+			ITextureObject tex = mc.getTextureManager().getTexture(loc);
+			if (tex != null) {
+				tex.setBlurMipmap(true, false);
+			}
+		} catch (Throwable t) {
+			return;
+		}
+		GlStateManager.enableTexture2D();
+		GlStateManager.enableBlend();
+		GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+		GlStateManager.enableAlpha();
+		GlStateManager.alphaFunc(516, 0.01f);
+		GlStateManager.color(1f, 1f, 1f, alpha);
+		WorldRenderer wr = Tessellator.getInstance().getWorldRenderer();
+		wr.begin(7, DefaultVertexFormats.POSITION_TEX);
+		wr.pos(x, y + size, 0).tex(0, 1).endVertex();
+		wr.pos(x + size, y + size, 0).tex(1, 1).endVertex();
+		wr.pos(x + size, y, 0).tex(1, 0).endVertex();
+		wr.pos(x, y, 0).tex(0, 0).endVertex();
+		Tessellator.getInstance().draw();
+		GlStateManager.alphaFunc(516, 0.1f);
+		GlStateManager.color(1f, 1f, 1f, 1f);
 	}
 }

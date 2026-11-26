@@ -178,9 +178,12 @@
 + 			shouldReload = false;
 + 		}
 
-> CHANGE  6 : 7  @  6 : 7
+> CHANGE  6 : 10  @  6 : 7
 
 ~ 	protected void keyTyped(char parChar1, int parInt1) {
+~ 		if (net.plebmc.client.hud.TitleMenu.active()) {
+~ 			net.plebmc.client.hud.TitleMenu.key(this, parChar1, parInt1);
+~ 		}
 
 > CHANGE  3 : 9  @  3 : 7
 
@@ -229,7 +232,16 @@
 
 ~ 			this.field_92019_w = this.field_92021_u + (line2 ? 24 : 11);
 
-> CHANGE  10 : 23  @  10 : 12
+> INSERT  3 : 9  @  3
+
++ 		if (net.plebmc.client.hud.TitleMenu.active()) {
++ 			for (int k = 0; k < this.buttonList.size(); ++k) {
++ 				((GuiButton) this.buttonList.get(k)).visible = false;
++ 			}
++ 			net.plebmc.client.hud.TitleMenu.init(this);
++ 		}
+
+> CHANGE  7 : 20  @  7 : 9
 
 ~ 		if (EaglercraftVersion.mainMenuEnableGithubButton) {
 ~ 			this.buttonList.add(
@@ -347,7 +359,13 @@
 ~ 			this.drawPanorama(i, j, f);
 ~ 		}
 
-> DELETE  1  @  1 : 3
+> CHANGE  1 : 6  @  1 : 3
+
+~ 		if (net.plebmc.client.hud.TitleMenu.active()) {
+~ 			net.plebmc.client.hud.TitleMenu.draw(this, i, j, f, this.splashText);
+~ 			this.updateCheckerOverlay.drawScreen(i, j, f);
+~ 			return;
+~ 		}
 
 > CHANGE  3 : 8  @  3 : 5
 
@@ -502,9 +520,13 @@
 + 
 + 		this.updateCheckerOverlay.drawScreen(i, j, f);
 
-> CHANGE  3 : 15  @  3 : 11
+> CHANGE  3 : 19  @  3 : 11
 
 ~ 	protected void mouseClicked(int par1, int par2, int par3) {
+~ 		if (net.plebmc.client.hud.TitleMenu.active()) {
+~ 			net.plebmc.client.hud.TitleMenu.click(this, par1, par2, par3);
+~ 			return;
+~ 		}
 ~ 		if (par3 == 0) {
 ~ 			String lbl = "CREDITS.txt";
 ~ 			int w = fontRendererObj.getStringWidth(lbl) * 3 / 4;

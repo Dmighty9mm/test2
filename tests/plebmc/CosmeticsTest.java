@@ -40,15 +40,17 @@ public class CosmeticsTest {
 		check(sent.size() == 2 && sent.get(0).contains("\"open\"") && sent.get(1).equals("{\"type\":\"signin\"}"),
 				"join asks the server for the shop state and the account sign-in");
 		check(!Cosmetics.serverSupported() && Cosmetics.coins() == -1, "no server support before a message");
-		check(Cosmetics.catalog("hat").size() > 0 && Cosmetics.catalog("trail").size() > 0, "default catalog");
+		check(Cosmetics.catalog("hat").size() > 0 && Cosmetics.catalog("cloak").size() > 0 && Cosmetics.catalog("trail").isEmpty(), "default catalog (no trails)");
+		check(Cosmetics.collections().size() == 2 && Cosmetics.catalog("hat", "plebmc").size() == Cosmetics.catalog("hat").size()
+				&& Cosmetics.catalog("hat", "partners").isEmpty(), "default collections");
 
 		String me = "00000000-0000-0000-0000-000000000001";
 		String other = "00000000-0000-0000-0000-000000000002";
 		Cosmetics.setSelf(me);
 		check(Cosmetics.nothingToDraw(), "nothing equipped yet");
 
-		Cosmetics.handle("{\"type\":\"state\",\"coins\":1250,\"owned\":[\"tophat\",\"flame\"],"
-				+ "\"equipped\":{\"hat\":\"tophat\",\"trail\":\"flame\"}}");
+		Cosmetics.handle("{\"type\":\"state\",\"coins\":1250,\"owned\":[\"tophat\",\"halo\"],"
+				+ "\"equipped\":{\"hat\":\"tophat\"}}");
 		check(Cosmetics.serverSupported(), "server support after state");
 		check(Cosmetics.coins() == 1250, "coins");
 		check(Cosmetics.owns("tophat") && !Cosmetics.owns("crown"), "owned");
@@ -132,12 +134,40 @@ public class CosmeticsTest {
 		check(q != null && q.length == 20 && q[19] == 1f, "model blob parsed");
 		check(Cosmetics.parseModel("{\"quads\":[1,2,3]}".getBytes(java.nio.charset.StandardCharsets.UTF_8)) == null
 				&& Cosmetics.parseModel("nope".getBytes(java.nio.charset.StandardCharsets.UTF_8)) == null, "bad model blobs refused");
+		// collections: PlebMc / Partners, a creator, unknown collections fall back to the first, trails ignored
+		Cosmetics.handle("{\"type\":\"state\",\"collections\":[{\"id\":\"plebmc\",\"name\":\"PlebMc\"},{\"id\":\"Partners\",\"name\":\"Partners\",\"icon\":\"partner\",\"color\":\"#FF7AC6\"}],"
+				+ "\"catalog\":[{\"id\":\"a\",\"category\":\"hat\",\"render\":\"cap\",\"price\":1},"
+				+ "{\"id\":\"b\",\"category\":\"hat\",\"render\":\"wizard\",\"collection\":\"partners\",\"creator\":\"Streamer\",\"price\":1},"
+				+ "{\"id\":\"c\",\"category\":\"hat\",\"render\":\"bunny\",\"collection\":\"gone\",\"price\":1},"
+				+ "{\"id\":\"d\",\"category\":\"trail\",\"render\":\"flame\",\"price\":1}]}");
+		check(Cosmetics.collections().size() == 2 && "partners".equals(Cosmetics.collections().get(1).id)
+				&& Cosmetics.collections().get(1).color == 0xFFFF7AC6, "collections read");
+		check(Cosmetics.catalog("hat", "plebmc").size() == 2 && Cosmetics.catalog("hat", "partners").size() == 1
+				&& "Streamer".equals(Cosmetics.item("b").creator) && Cosmetics.item("d") == null, "items split by collection, trails ignored");
+
 		// admin flag and admin data
 		Cosmetics.handle("{\"type\":\"account\",\"linked\":true,\"username\":\"Master\",\"groups\":[\"Owner\"],\"admin\":true}");
 		check(Cosmetics.account().admin, "account says admin");
 		Cosmetics.handle("{\"type\":\"admin\",\"allowed\":true,\"players\":[{\"uuid\":\"u2\",\"name\":\"zed\",\"coins\":5},{\"uuid\":\"u1\",\"name\":\"Amy\",\"coins\":7,\"owned\":[\"halo\"]}],\"servers\":[\"lobby\",\"plebnite\"],\"items\":[{\"id\":\"halo\",\"name\":\"Halo\",\"category\":\"hat\"}],\"message\":\"ok\",\"ok\":true}");
 		check(Cosmetics.admin().allowed && Cosmetics.admin().players.size() == 2 && "Amy".equals(Cosmetics.admin().players.get(0).name)
 				&& Cosmetics.admin().player("u1").owned.contains("halo") && Cosmetics.admin().servers.size() == 2, "admin data read");
+
+		// the title screen remembers the balance and the outfit after leaving (and across restarts)
+		Cosmetics.reset();
+		Cosmetics.handle("{\"type\":\"state\",\"coins\":4321,\"currency\":\"PlebMc Coins\",\"equipped\":{\"hat\":\"wizard\",\"cloak\":\"red_cloak\"},"
+				+ "\"catalog\":[{\"id\":\"wizard\",\"name\":\"Wizard\",\"category\":\"hat\",\"color\":\"#112233\"},"
+				+ "{\"id\":\"red_cloak\",\"name\":\"Anim\",\"category\":\"cloak\",\"texture\":\"0123456789abcdef\",\"textureWidth\":128,\"frames\":6,\"frameTime\":80}]}");
+		Cosmetics.reset();
+		check(Cosmetics.coins() < 0 && Cosmetics.lastCoins() == 4321 && Cosmetics.lastWorn("hat") != null
+				&& "wizard".equals(Cosmetics.lastWorn("hat").id), "last coins and hat kept after leaving");
+		String look = Cosmetics.lookJson();
+		Cosmetics.loadLook("{}");
+		Cosmetics.loadLook(look);
+		check(Cosmetics.lastCoins() == 4321 && Cosmetics.lastWorn("hat").color == 0x112233 && Cosmetics.lastWorn("cloak") != null
+				&& Cosmetics.lastWorn("cloak").frameTime == 80 && "0123456789abcdef".equals(Cosmetics.lastWorn("cloak").texture),
+				"last look saved and loaded: " + look);
+		Cosmetics.loadLook("not json");
+		check(Cosmetics.lastCoins() == 4321, "a broken saved look is ignored");
 
 		System.out.println("CosmeticsTest: " + checks + " checks, failures=" + failures);
 		System.exit(failures == 0 ? 0 : 1);

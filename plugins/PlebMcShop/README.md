@@ -10,7 +10,7 @@ work on every server behind the proxy.
 - **Earning**: a daily login reward with a streak, coins for time online, and daily and
   weekly quests in **categories**: by default **General** (counts on every server) and
   **PlebNite** (counts only on PlebNite). The client shows All / General / PlebNite.
-- **Spending**: hats, trails and HD cloaks. Everyone on the PlebMc client sees each other's (per server).
+- **Spending**: hats and HD cloaks, in shop collections (PlebMc, Partners, ...). Everyone on the PlebMc client sees each other's (per server).
 - **plebmc.top login**: players log in to the client with their website (NamelessMC)
   account and see their website name and rank (Right Shift > Account), and log out.
 
@@ -114,7 +114,7 @@ Passwords never go through the game, and the API key never leaves the proxy.
 | `/plebshop balance <player>` / `info <player>` | Someone's coins (and what they own) |
 | `/plebshop progress <player> <type> [amount]` | Count quest progress on the server they're on |
 | `/plebshop give <player> <item>` / `remove` | Give or take an item for free |
-| `/plebshop equip <player> <hat\|trail\|cloak> <item\|none>` | Put something on a player |
+| `/plebshop equip <player> <hat\|cloak> <item\|none>` | Put something on a player |
 
 ## PlebMc accounts (recommended): stop players spending each other's coins
 
@@ -218,9 +218,27 @@ checked again on the proxy, so a modified client can't use it. Turn it off with
 
 ## Items
 
-Each item in `items:` has a `category` (`hat`, `trail` or `cloak`), a `render` (the look the
+Each item in `items:` has a `category` (`hat` or `cloak`; trails were removed and are skipped with a warning), a `render` (the look the
 client draws; leave it out for cloaks), a `price` (`-1` = not for sale, give it by command), and optionally a
-`color` (`'#RRGGBB'`, tints a hat or colors a plain cloak), a `description` and a `permission` needed to buy it.
+`color` (`'#RRGGBB'`, tints a hat or colors a plain cloak), a `description`, a `permission` needed to buy it, a `collection` (shop tab, default `plebmc`) and a `creator` (shown as "by ...").
+
+### Collections (PlebMc, Partners)
+
+The shop's top tabs come from `collections:` in `config.yml`:
+
+```yaml
+collections:
+  plebmc: {name: 'PlebMc'}
+  partners: {name: 'Partners', icon: partner, color: '#FF7AC6'}
+```
+
+Put a partner's item in their tab with `collection: partners` (and `creator: 'TheirName'`):
+
+```yaml
+  partner_hat: {name: 'Partner Hat', category: hat, render: wizard, color: '#FF7AC6', price: 2000, collection: partners, creator: 'Steve'}
+```
+
+Add more collections the same way. An item naming a collection that isn't listed goes under `plebmc` with a warning.
 
 ### HD cloaks
 
@@ -241,6 +259,25 @@ as a plain one in its `color`. Two examples ship with the plugin (`cloaks/plebmc
 `cloaks/storm.png`, copied into the folder on first start) and are used by
 `plebmc_cloak` and `storm_cloak` in the default config.
 
+### Animated cloaks
+
+Stack the frames top to bottom in one PNG, each frame in the cape layout above (so a
+256x128 cloak with 16 frames is a 256x2048 image), and add `frametime` (milliseconds per
+frame, default 100, 20 to 10000):
+
+```yaml
+  aurora_cloak: {name: 'Aurora Cloak', category: cloak, texture: 'cloaks/aurora.png', frametime: 90, price: 12000, description: 'Animated northern lights'}
+```
+
+The frame count is the image height divided by half its width. Limits: 64 frames,
+8,388,608 pixels in total (for example 512x256 x 64 frames) and 8 MB per file. `aurora_cloak`, `inferno_cloak`,
+`galaxy_cloak` and `rainbow_wave_cloak` (16 frames each, in `cloaks/`) ship as examples.
+
+The easiest way to make one is the **Cloak Maker** (`tools/cloak-maker/index.html` in the repo;
+open it in a browser or put it on GitHub Pages). Drop in a GIF, a set of frame images or one
+picture (it can add a shine, sparkles, a glow pulse and more), or pick a built-in effect; it
+shows the cloak on a 3D player, checks the limits and gives you the PNG plus the config line.
+
 ### 3D model hats (same as cloaks)
 
 Make a hat in Blockbench, paint its texture, **File > Save Model** (`.bbmodel`), put it in
@@ -258,8 +295,7 @@ top of the head is y 8), `scale: 1.2`, `offset: [0, -1, 0]` (pixels). Players do
 model once and keep it until the file changes. `king_crown.bbmodel` ships as an example (copied
 to `hats/` on first start); the line above is in the default config, commented out.
 
-Hats: `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns` (or `model:` above).
-Trails: `flame`, `hearts`, `notes`, `rainbow`, `cloud`, `portal`, `emerald`, `snow`.
+Hats: `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`, `cap`, `headphones`, `bunny`, `wizard`, `viking`, `cowboy`, `propeller`, `chef` (or `model:` above).
 
 Item and quest ids are what `players.yml` saves, so don't rename ones players already have.
 `hidden-in-worlds: [arena1, 'plebnite:arena2']` hides cosmetics in those worlds.

@@ -94,7 +94,7 @@ chat-for-other-clients: true
 # other clients earn nothing (and get no coin messages). false = everyone earns.
 plebclient-only: true
 
-# Worlds where nobody's hat or trail is shown: 'world' or 'server:world' (needs PlebMcBridge on that server).
+# Worlds where nobody's cosmetics are shown: 'world' or 'server:world' (needs PlebMcBridge on that server).
 hidden-in-worlds: []
 
 # /plebshop needs plebshop.admin.
@@ -165,12 +165,22 @@ messages:
   playtime-title: '&bThanks for playing'
   playtime-message: '+%coins% %currency%'
 
+# Shop collections: the tabs across the top of the client's shop. Every item is in one
+# (collection: partners), PlebMc when it doesn't say. Add as many as you like.
+#   icon:  a client icon name (mascot, shop, partner, star, gift, ...)
+#   color: the collection's accent in the client
+collections:
+  plebmc:   {name: 'PlebMc', icon: mascot, description: 'Cosmetics from the PlebMc team'}
+  partners: {name: 'Partners', icon: partner, color: '#FF7AC6', description: 'Cosmetics made with PlebMc partners'}
+
 # The shop. Each item:
-#   category: hat, trail or cloak
+#   category: hat or cloak
 #   render:   the look the client draws
-#             hats:   tophat, crown, halo, partyhat, beanie, horns (or use model, below)
-#             trails: flame, hearts, notes, rainbow, cloud, portal, emerald, snow
+#             hats:   tophat, crown, halo, partyhat, beanie, horns, cap, headphones, bunny,
+#                     wizard, viking, cowboy, propeller, chef (or use model, below)
 #             cloaks: leave it out
+#   collection: optional, which shop tab it's in (a key from 'collections', default plebmc)
+#   creator:  optional, who made it ("by ..." in the shop), for partner cosmetics
 #   price:    coins (-1 = not for sale, give it with /plebshop give)
 #   color:    optional tint, like '#FFD700' (a cloak without a texture is this color)
 #   texture:  cloaks: a PNG in this plugin's folder, like 'cloaks/mycloak.png'.
@@ -180,6 +190,10 @@ messages:
 #             64x32 layout (at 512x256 that's the 80x128 box at (8,8)). Players download
 #             it from the proxy once and keep it until it changes. /plebshop reload
 #             picks up new or edited files.
+#             Animated cloaks: stack the frames top to bottom in one PNG (each frame is
+#             the cape layout, e.g. 256x128, so 16 frames = 256x2048), up to 64 frames,
+#             8 MB. 'frametime' is milliseconds per frame (default 100). The PlebMc
+#             Cloak Maker (tools/cloak-maker in the client repo) builds these for you.
 #   model:    hats: a 3D model in this plugin's folder, like 'hats/myhat.bbmodel'. Save it
 #             from Blockbench (File > Save Model) with its texture painted in, drop it in
 #             the hats folder, add an item and run /plebshop reload. Players download it
@@ -205,16 +219,26 @@ items:
   dropzone_crown: {name: 'Drop Zone Crown', category: hat, render: crown, price: -1, color: '#4FC3F7', description: 'Season 1 Battle Pass reward'}
   # A hat from a Blockbench model (the sample model is copied to plugins/PlebioAPI/hats/):
   # king_crown: {name: 'King Crown', category: hat, model: 'hats/king_crown.bbmodel', price: 10000, description: 'A 3D crown'}
-
-  flame:   {name: 'Flame Trail', category: trail, render: flame, price: 2500, description: 'Fire at your feet'}
-  hearts:  {name: 'Heart Trail', category: trail, render: hearts, price: 1500, description: 'Hearts follow you'}
-  notes:   {name: 'Music Trail', category: trail, render: notes, price: 1500, description: 'Music notes as you walk'}
-  rainbow: {name: 'Rainbow Trail', category: trail, render: rainbow, price: 7500, description: 'A rainbow dust trail'}
-  cloud:   {name: 'Cloud Trail', category: trail, render: cloud, price: 1200, description: 'Puffs of cloud'}
-  portal:  {name: 'Ender Trail', category: trail, render: portal, price: 3500, description: 'Ender portal sparkles'}
-  emerald: {name: 'Emerald Trail', category: trail, render: emerald, price: 2000, description: 'Green sparkles'}
-  snow:    {name: 'Snow Trail', category: trail, render: snow, price: 2000, description: 'Snowflakes'}
+  cap:         {name: 'Snapback', category: hat, render: cap, price: 900, color: '#2D9CDB', description: 'A cap with the brim to the front'}
+  headphones:  {name: 'Headphones', category: hat, render: headphones, price: 2500, description: 'Hear the storm coming'}
+  bunny:       {name: 'Bunny Ears', category: hat, render: bunny, price: 1800, description: 'Two tall fluffy ears'}
+  wizard:      {name: 'Wizard Hat', category: hat, render: wizard, price: 4000, description: 'Pointy, starry and a bit magic'}
+  viking:      {name: 'Viking Helmet', category: hat, render: viking, price: 4500, description: 'Iron and horns'}
+  cowboy:      {name: 'Cowboy Hat', category: hat, render: cowboy, price: 2200, description: 'Yeehaw'}
+  propeller:   {name: 'Propeller Cap', category: hat, render: propeller, price: 3000, description: 'It spins'}
+  chef:        {name: 'Chef Hat', category: hat, render: chef, price: 1200, description: 'Cooking up wins'}
 
   plebmc_cloak: {name: 'PlebMc Cloak', category: cloak, texture: 'cloaks/plebmc.png', price: 6000, description: 'HD cloak with the PlebMc mark'}
   storm_cloak:  {name: 'Storm Cloak', category: cloak, texture: 'cloaks/storm.png', price: 9000, description: 'The storm, on your back (HD)'}
+  aurora_cloak: {name: 'Aurora Cloak', category: cloak, texture: 'cloaks/aurora.png', frametime: 90, price: 12000, description: 'Animated northern lights'}
+  inferno_cloak: {name: 'Inferno Cloak', category: cloak, texture: 'cloaks/inferno.png', frametime: 70, price: 15000, description: 'Animated flames'}
+  galaxy_cloak: {name: 'Galaxy Cloak', category: cloak, texture: 'cloaks/galaxy.png', frametime: 110, price: 15000, description: 'Swirling stars'}
+  rainbow_wave_cloak: {name: 'Rainbow Wave Cloak', category: cloak, texture: 'cloaks/rainbow_wave.png', frametime: 80, price: 10000, description: 'Colors that never stop'}
   red_cloak:    {name: 'Red Cloak', category: cloak, color: '#B71C1C', price: 1500, description: 'A plain red cloak'}
+  midnight_cloak: {name: 'Midnight Cloak', category: cloak, color: '#1A1F3A', price: 1500, description: 'A plain dark blue cloak'}
+  mint_cloak:   {name: 'Mint Cloak', category: cloak, color: '#3FD8B0', price: 1500, description: 'A plain mint cloak'}
+  gold_cloak:   {name: 'Gold Cloak', category: cloak, color: '#E8B923', price: 4000, description: 'A plain golden cloak'}
+
+  # Partner cosmetics go in the Partners tab. For example:
+  # streamer_cloak: {name: 'Streamer Cloak', category: cloak, texture: 'cloaks/streamer.png', collection: partners, creator: 'SomeStreamer', price: 5000, description: 'Made with SomeStreamer'}
+  # streamer_hat:   {name: 'Streamer Crown', category: hat, model: 'hats/streamer.bbmodel', collection: partners, creator: 'SomeStreamer', price: -1, description: 'Given out on stream'}

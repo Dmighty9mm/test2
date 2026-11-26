@@ -15,7 +15,7 @@ import net.plebmc.client.mods.Mod;
  */
 public final class ModsScreen extends PlebScreen {
 
-	static final String[] CATEGORIES = { null, Mod.PLEBNITE, Mod.HUD, Mod.GAMEPLAY, Mod.PERFORMANCE };
+	static final String[] CATEGORIES = { null, Mod.PLEBNITE, Mod.HUD, Mod.GAMEPLAY, Mod.VISUAL, Mod.PERFORMANCE };
 	private static final String SECRET = "fpslarp";
 
 	private String category;
@@ -41,6 +41,9 @@ public final class ModsScreen extends PlebScreen {
 		}
 		if (Mod.PERFORMANCE.equals(category)) {
 			return "performance";
+		}
+		if (Mod.VISUAL.equals(category)) {
+			return "eye";
 		}
 		return "all";
 	}
@@ -74,6 +77,10 @@ public final class ModsScreen extends PlebScreen {
 			t.tip = on + " of " + total + " on";
 			ry += 20;
 		}
+		// your hats and cloaks, one click from Right Shift
+		Button cos = button("Cosmetics", rx, Math.max(ry + 6, wy + wh - 8 - 20), rw, 20,
+				() -> this.mc.displayGuiScreen(new ShopScreen(this)));
+		cos.style(Style.PRIMARY).icon("shop").tip = "Wear and try on your hats and cloaks";
 
 		gx = rx + rw + 10;
 		gw = wx + ww - 12 - gx;

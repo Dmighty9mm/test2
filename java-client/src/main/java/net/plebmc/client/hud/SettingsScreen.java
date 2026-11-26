@@ -13,8 +13,11 @@ import net.plebmc.client.mods.Mod;
  */
 public final class SettingsScreen extends PlebScreen {
 
-	private static final String[] SECTIONS = { "Interface", "Notifications", "HUD", "Performance", "Behavior", "Developer" };
-	private static final String[] ICONS = { "palette", "bell", "hud", "performance", "settings", "debug" };
+	private static final String[] SECTIONS = { "Interface", "Title screen", "Notifications", "HUD", "Performance", "Behavior",
+			"Developer" };
+	/** The Title screen section, for {@link #SettingsScreen(GuiScreen, int)}. */
+	public static final int TITLE_SCREEN = 1;
+	private static final String[] ICONS = { "palette", "home", "bell", "hud", "performance", "settings", "debug" };
 
 	private int section;
 	private final Scroll scroll = new Scroll();
@@ -26,6 +29,12 @@ public final class SettingsScreen extends PlebScreen {
 
 	public SettingsScreen(GuiScreen parent) {
 		super(parent);
+	}
+
+	/** Opens on one section (for example {@link #TITLE_SCREEN}). */
+	public SettingsScreen(GuiScreen parent, int section) {
+		super(parent);
+		this.section = Math.max(0, Math.min(SECTIONS.length - 1, section));
 	}
 
 	private static ClientPrefs p() {
@@ -42,6 +51,10 @@ public final class SettingsScreen extends PlebScreen {
 	private static int wrap(int v, int n) {
 		return ((v % n) + n) % n;
 	}
+
+	private static String transferMsg;
+	private static long transferAt;
+	private static boolean transferExport;
 
 	@Override
 	protected void build() {
@@ -74,6 +87,24 @@ public final class SettingsScreen extends PlebScreen {
 		});
 		reset.style(Style.DANGER).icon("reset").tip = "Puts every setting on this screen back to default (not your mods or HUD)";
 
+		// every PlebClient setting as one line of text (never your login)
+		boolean fresh = System.currentTimeMillis() - transferAt < 3500;
+		Button exp = button(fresh && transferMsg != null && transferExport ? transferMsg : "Export all", rx, wy + wh - 26 - 40, rw, 16, () -> {
+			transferExport = true;
+			transferMsg = PlebClient.exportSettings() ? "Copied!" : "Couldn't copy";
+			transferAt = System.currentTimeMillis();
+			rebuild();
+		});
+		exp.icon("next").tip = "Copies your mods, HUD layout and settings to the clipboard (not your login)";
+		Button imp = button(fresh && transferMsg != null && !transferExport ? transferMsg : "Import all", rx, wy + wh - 26 - 20, rw, 16, () -> {
+			transferExport = false;
+			int n = PlebClient.importSettings();
+			transferMsg = n < 0 ? "Not a PlebClient export" : "Imported!";
+			transferAt = System.currentTimeMillis();
+			rebuild();
+		});
+		imp.icon("back").tip = "Copy an export, then click to load it (replaces your mods, HUD layout and settings)";
+
 		lx = rx + rw + 10;
 		lw = wx + ww - 12 - lx;
 		ly = wy + 46;
@@ -90,7 +121,17 @@ public final class SettingsScreen extends PlebScreen {
 					() -> ClientPrefs.ACCENT_NAMES[pr.accent], saved(() -> pr.accent = wrap(pr.accent + 1, ClientPrefs.ACCENTS.length)),
 					saved(() -> pr.accent = wrap(pr.accent - 1, ClientPrefs.ACCENTS.length))), clip);
 			y += step;
-			add(choice("Menu background", "How much of the game shows behind menus", lx, y, lw, h,
+			add(choice("Menu background", "What menus show behind them on the title screen", lx, y, lw, h,
+					() -> ClientPrefs.MENU_BACKGROUNDS[pr.menuBackground],
+					saved(() -> pr.menuBackground = wrap(pr.menuBackground + 1, ClientPrefs.MENU_BACKGROUNDS.length)),
+					saved(() -> pr.menuBackground = wrap(pr.menuBackground - 1, ClientPrefs.MENU_BACKGROUNDS.length))), clip);
+			y += step;
+			add(choice("Window style", "How see-through PlebClient windows are", lx, y, lw, h,
+					() -> ClientPrefs.WINDOW_OPACITY[pr.windowOpacity],
+					saved(() -> pr.windowOpacity = wrap(pr.windowOpacity + 1, ClientPrefs.WINDOW_OPACITY.length)),
+					saved(() -> pr.windowOpacity = wrap(pr.windowOpacity - 1, ClientPrefs.WINDOW_OPACITY.length))), clip);
+			y += step;
+			add(choice("In-game backdrop", "How much of the game shows behind menus while you play", lx, y, lw, h,
 					() -> ClientPrefs.BACKDROPS[pr.backdrop], saved(() -> pr.backdrop = wrap(pr.backdrop + 1, ClientPrefs.BACKDROPS.length)),
 					saved(() -> pr.backdrop = wrap(pr.backdrop - 1, ClientPrefs.BACKDROPS.length))), clip);
 			y += step;
@@ -104,7 +145,45 @@ public final class SettingsScreen extends PlebScreen {
 					saved(() -> pr.uiSounds = !pr.uiSounds)), clip);
 			y += step;
 			break;
-		case 1: // Notifications
+		case 1: // Title screen
+			add(choice("Sidebar", "Open the sidebar when you point at it, keep it open, or show icons only", lx, y, lw, h,
+					() -> ClientPrefs.SIDEBAR_MODES[pr.titleSidebar],
+					saved(() -> pr.titleSidebar = wrap(pr.titleSidebar + 1, ClientPrefs.SIDEBAR_MODES.length)),
+					saved(() -> pr.titleSidebar = wrap(pr.titleSidebar - 1, ClientPrefs.SIDEBAR_MODES.length))), clip);
+			y += step;
+			add(choice("Background dim", "How much the title screen darkens its background", lx, y, lw, h,
+					() -> ClientPrefs.PANORAMA_DIMS[pr.titlePanorama],
+					saved(() -> pr.titlePanorama = wrap(pr.titlePanorama + 1, ClientPrefs.PANORAMA_DIMS.length)),
+					saved(() -> pr.titlePanorama = wrap(pr.titlePanorama - 1, ClientPrefs.PANORAMA_DIMS.length))), clip);
+			y += step;
+			add(choice("Background", "The PlebMc wallpaper or the classic Minecraft panorama", lx, y, lw, h,
+					() -> ClientPrefs.BACKGROUNDS[pr.titleBackground],
+					saved(() -> pr.titleBackground = wrap(pr.titleBackground + 1, ClientPrefs.BACKGROUNDS.length)),
+					saved(() -> pr.titleBackground = wrap(pr.titleBackground - 1, ClientPrefs.BACKGROUNDS.length))), clip);
+			y += step;
+			add(toggle("Mini mascot", "The little mascot in the corner (click him)", lx, y, lw, h, () -> pr.titleBuddy,
+					saved(() -> pr.titleBuddy = !pr.titleBuddy)), clip);
+			y += step;
+			add(choice("Particles", "Snow, embers or fireflies drifting over the title screen", lx, y, lw, h,
+					() -> ClientPrefs.PARTICLES[pr.titleParticles],
+					saved(() -> pr.titleParticles = wrap(pr.titleParticles + 1, ClientPrefs.PARTICLES.length)),
+					saved(() -> pr.titleParticles = wrap(pr.titleParticles - 1, ClientPrefs.PARTICLES.length))), clip);
+			y += step;
+			add(toggle("Mascot", "The PlebMc mascot at the top of the sidebar", lx, y, lw, h, () -> pr.titleMascot,
+					saved(() -> pr.titleMascot = !pr.titleMascot)), clip);
+			y += step;
+			add(toggle("Clock", "The time in the bottom corner", lx, y, lw, h, () -> pr.titleClock,
+					saved(() -> pr.titleClock = !pr.titleClock)), clip);
+			y += step;
+			add(toggle("Splash text", "The yellow Minecraft splash line at the bottom", lx, y, lw, h, () -> pr.titleSplash,
+					saved(() -> pr.titleSplash = !pr.titleSplash)), clip);
+			y += step;
+			add(choice("Accent color", "The color of highlights in every PlebMc menu", lx, y, lw, h,
+					() -> ClientPrefs.ACCENT_NAMES[pr.accent], saved(() -> pr.accent = wrap(pr.accent + 1, ClientPrefs.ACCENTS.length)),
+					saved(() -> pr.accent = wrap(pr.accent - 1, ClientPrefs.ACCENTS.length))), clip);
+			y += step;
+			break;
+		case 2: // Notifications
 			add(toggle("Popups", "Coins, finished quests and the daily login reward", lx, y, lw, h, () -> pr.toasts,
 					saved(() -> pr.toasts = !pr.toasts)), clip);
 			y += step;
@@ -116,16 +195,26 @@ public final class SettingsScreen extends PlebScreen {
 			add(dur, clip);
 			y += step;
 			break;
-		case 2: // HUD
+		case 3: // HUD
 			add(toggle("Text shadow", "A shadow under HUD text, easier to read on bright ground", lx, y, lw, h,
 					() -> pr.hudShadow, saved(() -> pr.hudShadow = !pr.hudShadow)), clip);
+			y += step;
+			add(choice("Brackets", "Wrap every HUD text in brackets, like [FPS: 120]", lx, y, lw, h,
+					() -> ClientPrefs.HUD_BRACKETS[pr.hudBrackets],
+					saved(() -> pr.hudBrackets = wrap(pr.hudBrackets + 1, ClientPrefs.HUD_BRACKETS.length)),
+					saved(() -> pr.hudBrackets = wrap(pr.hudBrackets - 1, ClientPrefs.HUD_BRACKETS.length))), clip);
+			y += step;
+			add(choice("Text style", "Bold or italic HUD text", lx, y, lw, h,
+					() -> ClientPrefs.HUD_TEXT_STYLES[pr.hudTextStyle],
+					saved(() -> pr.hudTextStyle = wrap(pr.hudTextStyle + 1, ClientPrefs.HUD_TEXT_STYLES.length)),
+					saved(() -> pr.hudTextStyle = wrap(pr.hudTextStyle - 1, ClientPrefs.HUD_TEXT_STYLES.length))), clip);
 			y += step;
 			Button edit = button("Open HUD editor", lx, y, lw, 20, () -> this.mc.displayGuiScreen(new HudEditorScreen(this)));
 			edit.style(Style.PRIMARY).icon("drag");
 			add(edit, clip);
 			y += 26;
 			break;
-		case 3: // Performance
+		case 4: // Performance
 			Mod boost = PlebClient.mods().fpsBoost;
 			Toggle tb = toggle("FPS Boost", boost.description(), lx, y, lw, h, () -> boost.isEnabled() && !boost.isBlockedByServer(),
 					saved(() -> boost.setEnabled(!boost.isEnabled())));
@@ -137,7 +226,7 @@ public final class SettingsScreen extends PlebScreen {
 					saved(() -> fps.setEnabled(!fps.isEnabled()))), clip);
 			y += step;
 			break;
-		case 4: // Behavior
+		case 5: // Behavior
 			add(choice("Right Shift opens", "The screen Right Shift takes you to", lx, y, lw, h,
 					() -> ClientPrefs.OPENS[pr.shiftOpens], saved(() -> pr.shiftOpens = wrap(pr.shiftOpens + 1, ClientPrefs.OPENS.length)),
 					saved(() -> pr.shiftOpens = wrap(pr.shiftOpens - 1, ClientPrefs.OPENS.length))), clip);
@@ -200,7 +289,7 @@ public final class SettingsScreen extends PlebScreen {
 			rows.get(i).y = rowBase.get(i) - off;
 		}
 		scroll.drawBar(lx + lw + 3);
-		if (section == 0) {
+		if (section == 0 || section == TITLE_SCREEN) {
 			// accent swatches under the options
 			int y = rowBase.get(rows.size() - 1) - off + 34;
 			if (y + 12 < ly + lh) {
@@ -218,7 +307,7 @@ public final class SettingsScreen extends PlebScreen {
 
 	@Override
 	protected void clicked(int mx, int my, int button) {
-		if (section == 0 && !rows.isEmpty()) {
+		if ((section == 0 || section == TITLE_SCREEN) && !rows.isEmpty()) {
 			int y = rowBase.get(rows.size() - 1) - scroll.y() + 34;
 			for (int i = 0; i < ClientPrefs.ACCENTS.length; i++) {
 				int x = lx + i * 18;

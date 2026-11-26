@@ -89,4 +89,22 @@ final class PlebItemPack implements IResourcePack {
 	public String getPackName() {
 		return "PlebClient items";
 	}
+
+	@Override
+	public net.lax1dude.eaglercraft.v1_8.minecraft.ResourceIndex getEaglerFileIndex() {
+		return EMPTY_INDEX;
+	}
+
+	/** No OptiFine-style .properties files in the built-in item pack. */
+	private static final net.lax1dude.eaglercraft.v1_8.minecraft.ResourceIndex EMPTY_INDEX = new net.lax1dude.eaglercraft.v1_8.minecraft.ResourceIndex() {
+		@Override
+		protected java.util.Collection<String> getPropertiesFiles0() {
+			return java.util.Collections.emptyList();
+		}
+
+		@Override
+		protected java.util.Collection<String> getCITPotionsFiles0() {
+			return java.util.Collections.emptyList();
+		}
+	};
 }

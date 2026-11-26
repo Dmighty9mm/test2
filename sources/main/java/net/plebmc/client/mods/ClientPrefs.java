@@ -22,8 +22,10 @@ public final class ClientPrefs {
 	}
 
 	// ---- interface ----
-	public static final int[] ACCENTS = { 0xFF3FD8E6, 0xFF4C9BFF, 0xFF4FE39A, 0xFFB085FF, 0xFFF5B942, 0xFFFF6FAE };
-	public static final String[] ACCENT_NAMES = { "PlebClient Cyan", "Blue", "Mint", "Violet", "Amber", "Rose" };
+	public static final int[] ACCENTS = { 0xFF3FD8E6, 0xFF4C9BFF, 0xFF4FE39A, 0xFFB085FF, 0xFFF5B942, 0xFFFF6FAE,
+			0xFFFF5A5A, 0xFFFF9A3C, 0xFFA6E34F, 0xFF2EC4B6, 0xFFFF7AC6, 0xFFE8EEF2 };
+	public static final String[] ACCENT_NAMES = { "PlebClient Cyan", "Blue", "Mint", "Violet", "Amber", "Rose", "Crimson",
+			"Orange", "Lime", "Teal", "Pink", "Snow" };
 	public int accent;
 	/** Menus slide and fade in, hover states ease. */
 	public boolean animations = true;
@@ -34,6 +36,55 @@ public final class ClientPrefs {
 	public static final String[] BACKDROPS = { "Dim", "Dark", "Light" };
 	/** How much of the game shows behind menus. */
 	public int backdrop;
+
+	public static final String[] MENU_BACKGROUNDS = { "Blurred wallpaper", "Wallpaper", "Dark", "Glow", "Retro grid" };
+	/** What menus show behind their windows when you're not in a world. */
+	public int menuBackground;
+	public static final String[] WINDOW_OPACITY = { "Solid", "Glass", "Clear" };
+	/** How see-through menu windows are. */
+	public int windowOpacity;
+	public static final String[] HUD_BRACKETS = { "None", "[ ]", "( )", "< >", "| |" };
+	/** Brackets around every HUD text line. */
+	public int hudBrackets;
+	public static final String[] HUD_TEXT_STYLES = { "Normal", "Bold", "Italic", "Bold italic" };
+	/** Bold / italic for HUD text. */
+	public int hudTextStyle;
+
+	/** Applies the HUD bracket and text-style options to one line of HUD text. */
+	public String decorateHud(String s) {
+		if (s == null || s.isEmpty()) {
+			return s;
+		}
+		String style = new String[] { "", "\u00a7l", "\u00a7o", "\u00a7l\u00a7o" }[clamp(hudTextStyle, HUD_TEXT_STYLES.length)];
+		int b = clamp(hudBrackets, HUD_BRACKETS.length);
+		if (b > 0) {
+			String br = HUD_BRACKETS[b];
+			s = br.charAt(0) + s + style + br.charAt(2);
+		}
+		return style + s;
+	}
+
+	// ---- title screen ----
+	public static final String[] SIDEBAR_MODES = { "Opens on hover", "Always open", "Icons only" };
+	/** How the title screen's sidebar behaves. */
+	public int titleSidebar;
+	public static final String[] PANORAMA_DIMS = { "Clear", "Soft", "Dark" };
+	/** How much the title screen darkens the panorama. */
+	public int titlePanorama = 1;
+	public static final String[] BACKGROUNDS = { "PlebMc wallpaper", "Minecraft panorama" };
+	/** What the title screen shows behind everything. */
+	public int titleBackground;
+	/** The little animated mascot in the corner of the title screen. */
+	public boolean titleBuddy = true;
+	public static final String[] PARTICLES = { "None", "Snow", "Embers", "Fireflies" };
+	/** Particles drifting over the title screen. */
+	public int titleParticles = 1;
+	/** The mascot head at the top of the sidebar. */
+	public boolean titleMascot = true;
+	/** A clock in the corner of the title screen. */
+	public boolean titleClock;
+	/** The yellow splash text at the bottom of the title screen. */
+	public boolean titleSplash;
 
 	// ---- notifications ----
 	/** Coin, quest and login popups (otherwise only the shop's own messages). */
@@ -92,6 +143,18 @@ public final class ClientPrefs {
 		modernMenus = d.modernMenus;
 		uiSounds = d.uiSounds;
 		backdrop = d.backdrop;
+		menuBackground = d.menuBackground;
+		windowOpacity = d.windowOpacity;
+		hudBrackets = d.hudBrackets;
+		hudTextStyle = d.hudTextStyle;
+		titleSidebar = d.titleSidebar;
+		titlePanorama = d.titlePanorama;
+		titleBackground = d.titleBackground;
+		titleBuddy = d.titleBuddy;
+		titleParticles = d.titleParticles;
+		titleMascot = d.titleMascot;
+		titleClock = d.titleClock;
+		titleSplash = d.titleSplash;
 		toasts = d.toasts;
 		toastTime = d.toastTime;
 		hudShadow = d.hudShadow;
@@ -123,6 +186,18 @@ public final class ClientPrefs {
 		modernMenus = ProtoValues.asBool(m.get("modernMenus"), modernMenus);
 		uiSounds = ProtoValues.asBool(m.get("sounds"), uiSounds);
 		backdrop = idx(m.get("backdrop"), backdrop, BACKDROPS.length);
+		menuBackground = idx(m.get("menuBackground"), menuBackground, MENU_BACKGROUNDS.length);
+		windowOpacity = idx(m.get("windowOpacity"), windowOpacity, WINDOW_OPACITY.length);
+		hudBrackets = idx(m.get("hudBrackets"), hudBrackets, HUD_BRACKETS.length);
+		hudTextStyle = idx(m.get("hudTextStyle"), hudTextStyle, HUD_TEXT_STYLES.length);
+		titleSidebar = idx(m.get("titleSidebar"), titleSidebar, SIDEBAR_MODES.length);
+		titlePanorama = idx(m.get("titlePanorama"), titlePanorama, PANORAMA_DIMS.length);
+		titleBackground = idx(m.get("titleBackground"), titleBackground, BACKGROUNDS.length);
+		titleBuddy = ProtoValues.asBool(m.get("titleBuddy"), titleBuddy);
+		titleParticles = idx(m.get("titleParticles"), titleParticles, PARTICLES.length);
+		titleMascot = ProtoValues.asBool(m.get("titleMascot"), titleMascot);
+		titleClock = ProtoValues.asBool(m.get("titleClock"), titleClock);
+		titleSplash = ProtoValues.asBool(m.get("titleSplash"), titleSplash);
 		toasts = ProtoValues.asBool(m.get("toasts"), toasts);
 		toastTime = idx(m.get("toastTime"), toastTime, TOAST_SECONDS.length);
 		hudShadow = ProtoValues.asBool(m.get("hudShadow"), hudShadow);
@@ -141,6 +216,18 @@ public final class ClientPrefs {
 		m.put("modernMenus", modernMenus);
 		m.put("sounds", uiSounds);
 		m.put("backdrop", (double) backdrop);
+		m.put("menuBackground", (double) menuBackground);
+		m.put("windowOpacity", (double) windowOpacity);
+		m.put("hudBrackets", (double) hudBrackets);
+		m.put("hudTextStyle", (double) hudTextStyle);
+		m.put("titleSidebar", (double) titleSidebar);
+		m.put("titlePanorama", (double) titlePanorama);
+		m.put("titleBackground", (double) titleBackground);
+		m.put("titleBuddy", titleBuddy);
+		m.put("titleParticles", titleParticles);
+		m.put("titleMascot", titleMascot);
+		m.put("titleClock", titleClock);
+		m.put("titleSplash", titleSplash);
 		m.put("toasts", toasts);
 		m.put("toastTime", (double) toastTime);
 		m.put("hudShadow", hudShadow);

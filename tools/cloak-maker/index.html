@@ -1,0 +1,612 @@
+<title>PlebMc Cloak Maker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a two-column workbench. Left: the steps (art, motion, look, export). Right: the live cape, sticky. */
+:root {
+  --bg: #0b1016;
+  --panel: #111a23;
+  --raised: #17222d;
+  --line: #22313f;
+  --fg: #e6edf2;
+  --muted: #8d9caa;
+  --accent: #3fd8e6;
+  --accent-ink: #062a2e;
+  --gold: #f2c230;
+  --bad: #ff6b6b;
+  --good: #4fe39a;
+  --display: "Silkscreen", "Courier New", monospace;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--fg); }
+body { font: 14px/1.5 var(--body); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px; }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 20px; }
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+h1 { font: 400 28px/1.1 var(--display); margin: 0; letter-spacing: .5px; text-wrap: balance; }
+h1 span { color: var(--accent); }
+.sub { color: var(--muted); margin: 6px 0 0; max-width: 62ch; }
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .bench { grid-template-columns: minmax(0, 1fr); } .stage { position: static !important; } }
+.steps { display: grid; gap: 14px; min-width: 0; }
+section.step { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.step h2 { margin: 0; font: 400 15px/1.2 var(--display); display: flex; gap: 10px; align-items: center; letter-spacing: .4px; }
+.step h2 b { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 4px; background: var(--accent); color: var(--accent-ink); font: 400 12px var(--display); }
+.hint { color: var(--muted); font-size: 13px; margin: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 14px; }
+label.f { display: grid; gap: 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; min-width: 0; }
+select, input[type=text], input[type=number] { width: 100%; background: var(--raised); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: 14px var(--body); }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+input[type=color] { width: 44px; height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); padding: 2px; }
+button { font: 500 14px var(--body); border-radius: 6px; border: 1px solid var(--line); background: var(--raised); color: var(--fg); padding: 8px 14px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button.primary:hover { filter: brightness(1.08); }
+button:focus-visible, select:focus-visible, input:focus-visible, .drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.drop { border: 1.5px dashed #35506a; border-radius: 10px; padding: 18px; text-align: center; color: var(--muted); cursor: pointer; background: repeating-linear-gradient(45deg, transparent 0 10px, rgba(63,216,230,.03) 10px 20px); }
+.drop.over { border-color: var(--accent); color: var(--fg); }
+.drop strong { color: var(--fg); }
+.effects { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.fx { display: grid; gap: 6px; padding: 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); cursor: pointer; text-align: center; font-size: 12px; color: var(--fg); }
+.fx canvas { width: 100%; aspect-ratio: 10 / 16; image-rendering: pixelated; border-radius: 3px; background: #000; }
+.fx[aria-pressed=true] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.stage { position: sticky; top: calc(12px + env(safe-area-inset-top, 0px)); display: grid; gap: 12px; min-width: 0; }
+.view { background: radial-gradient(120% 90% at 50% 20%, #1d3140 0%, #0d151d 70%); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; position: relative; aspect-ratio: 1 / 1; max-width: 100%; }
+.view canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.view .tag { position: absolute; left: 10px; top: 10px; font: 11px var(--mono); color: var(--muted); background: rgba(0,0,0,.35); padding: 3px 7px; border-radius: 4px; }
+.flat { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.flat canvas { image-rendering: pixelated; background: #000 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Crect width='4' height='4' fill='%23222'/%3E%3Crect x='4' y='4' width='4' height='4' fill='%23222'/%3E%3C/svg%3E"); border-radius: 4px; }
+.stats { font: 12px/1.7 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 0; }
+.stats b { color: var(--fg); font-weight: 500; }
+.ok { color: var(--good); } .warn { color: var(--gold); } .err { color: var(--bad); }
+pre.yaml { margin: 0; background: #070b10; border: 1px solid var(--line); border-radius: 8px; padding: 12px; font: 12.5px/1.6 var(--mono); color: #cfe9ee; overflow-x: auto; white-space: pre; }
+.guide { display: grid; gap: 6px; margin: 0; padding-left: 20px; color: var(--muted); }
+.guide code, .hint code { font: 12.5px var(--mono); color: var(--fg); background: var(--raised); padding: 1px 5px; border-radius: 4px; }
+.toast { min-height: 1.5em; font-size: 13px; }
+footer { color: var(--muted); font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>PLEBMC <span>CLOAK MAKER</span></h1>
+      <p class="sub">Turn a GIF, a few frames, or one picture into an animated cloak for the PlebMc shop. You get one PNG and the line to paste into the PlebioAPI config.</p>
+    </div>
+  </header>
+
+  <div class="bench">
+    <div class="steps">
+
+      <section class="step" aria-labelledby="s1">
+        <h2 id="s1"><b>1</b> Art</h2>
+        <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a GIF or images">
+          <strong>Drop a GIF, or one or more images</strong><br>
+          <span>Several images become frames in name order (frame01.png, frame02.png ...). One still image can be animated with the effects in step 2.</span>
+          <input id="file" type="file" accept="image/gif,image/png,image/jpeg,image/webp" multiple hidden>
+        </div>
+        <p class="hint">Or start from a generated effect, no art needed:</p>
+        <div class="effects" id="effects" role="group" aria-label="Generated effects"></div>
+        <div class="row">
+          <label class="f" style="flex:0 0 auto">Color 1 <input id="c1" type="color" value="#3fd8e6"></label>
+          <label class="f" style="flex:0 0 auto">Color 2 <input id="c2" type="color" value="#7b4dff"></label>
+          <p class="hint" style="flex:1 1 200px">Colors drive the effects and the shine and sparkle overlays.</p>
+        </div>
+      </section>
+
+      <section class="step" aria-labelledby="s2">
+        <h2 id="s2"><b>2</b> Motion</h2>
+        <div class="grid2">
+          <label class="f">Overlay on your art
+            <select id="overlay">
+              <option value="none">None</option>
+              <option value="shine">Shine sweep</option>
+              <option value="sparkle">Sparkles</option>
+              <option value="pulse">Glow pulse</option>
+              <option value="rainbow">Rainbow tint</option>
+              <option value="scan">Scanlines</option>
+              <option value="drift">Slow drift</option>
+            </select>
+          </label>
+          <label class="f">Frames <span id="framesOut"></span>
+            <input id="frames" type="range" min="2" max="64" value="16">
+          </label>
+          <label class="f">Time per frame <span id="msOut"></span>
+            <input id="ms" type="range" min="20" max="500" step="10" value="90">
+          </label>
+        </div>
+        <p class="hint" id="motionHint">GIFs keep their own frames and timing (up to 64 frames). The frames slider is for effects and overlays.</p>
+      </section>
+
+      <section class="step" aria-labelledby="s3">
+        <h2 id="s3"><b>3</b> Look</h2>
+        <div class="grid2">
+          <label class="f">Detail (per frame)
+            <select id="res">
+              <option value="64">64 x 32 (vanilla)</option>
+              <option value="128">128 x 64</option>
+              <option value="256" selected>256 x 128</option>
+              <option value="512">512 x 256 (HD)</option>
+            </select>
+          </label>
+          <label class="f">Fit the art
+            <select id="fit">
+              <option value="cover" selected>Fill (crop the edges)</option>
+              <option value="contain">Fit (show it all)</option>
+              <option value="stretch">Stretch</option>
+            </select>
+          </label>
+          <label class="f">Inside of the cloak
+            <select id="inside">
+              <option value="mirror" selected>Mirrored art, darker</option>
+              <option value="same">Same as the outside</option>
+              <option value="dark">Plain dark</option>
+            </select>
+          </label>
+          <label class="f">Edges
+            <select id="edges">
+              <option value="auto" selected>Match the art</option>
+              <option value="c1">Color 1</option>
+              <option value="black">Black</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label class="row" style="gap:8px"><input id="rim" type="checkbox" checked> <span>Darker rim around the art</span></label>
+        </div>
+      </section>
+
+      <section class="step" aria-labelledby="s4">
+        <h2 id="s4"><b>4</b> Save and add it to the shop</h2>
+        <div class="grid2">
+          <label class="f">Cloak id <input id="cid" type="text" value="my_cloak" spellcheck="false"></label>
+          <label class="f">Name in the shop <input id="cname" type="text" value="My Cloak"></label>
+          <label class="f">Price (coins, -1 = not for sale) <input id="price" type="number" value="5000" step="100"></label>
+          <label class="f">Shop tab
+            <select id="col"><option value="plebmc">PlebMc</option><option value="partners">Partners</option></select>
+          </label>
+          <label class="f">Made by (partners) <input id="creator" type="text" placeholder="optional"></label>
+          <label class="f">Description <input id="desc" type="text" value="Animated cloak"></label>
+        </div>
+        <div class="row">
+          <button class="primary" id="save">Save PNG</button>
+          <button id="copy">Copy config line</button>
+          <span class="toast" id="toast" role="status"></span>
+        </div>
+        <pre class="yaml" id="yaml"></pre>
+        <ol class="guide">
+          <li>Put the PNG in <code>plugins/PlebioAPI/cloaks/</code> on the proxy.</li>
+          <li>Paste the line under <code>items:</code> in <code>plugins/PlebioAPI/config.yml</code>.</li>
+          <li>Run <code>/plebshop reload</code>. The cloak shows up in the shop and plays on everyone's PlebMc client.</li>
+        </ol>
+      </section>
+    </div>
+
+    <aside class="stage" aria-label="Preview">
+      <div class="view"><canvas id="three" aria-label="3D preview of the cloak, drag to turn"></canvas><span class="tag">drag to turn</span></div>
+      <div class="flat">
+        <canvas id="flat" width="128" height="64" aria-label="Current frame in the cape layout"></canvas>
+        <div class="stats" id="stats"></div>
+      </div>
+    </aside>
+  </div>
+
+  <footer>The PNG stacks every frame top to bottom, each frame in the standard 64 x 32 cape layout (scaled). The art on your back is the 10 x 16 box at (1, 1). Limits: 64 frames, 8,388,608 pixels, 8 MB.</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const MAX_FRAMES = 64, MAX_PIXELS = 8388608, MAX_BYTES = 8 * 1024 * 1024;
+
+  // ---------- state ----------
+  const S = {
+    source: 'effect',      // 'effect' | 'still' | 'frames'
+    effect: 'aurora',
+    art: [],               // canvases for 'still' (1) or 'frames' (n)
+    artMs: [],             // per-frame ms for GIFs
+    frames: 16, ms: 90,
+  };
+  const hexToRgb = (h) => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+  const mixRgb = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  const css = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+  // ---------- generated effects (draw art for one frame, t in 0..1) ----------
+  const EFFECTS = {
+    aurora: { name: 'Aurora', draw(g, w, h, t, A, B) {
+      const img = g.createImageData(w, h), d = img.data, ph = t * Math.PI * 2;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const u = x / w * 10, v = y / h * 16;
+        const k = (Math.sin(u * .9 + ph) + Math.sin(v * .45 - ph * 2 + u * .3) + Math.sin((u + v) * .35 + ph) + 3) / 6;
+        const c = mixRgb([6, 10, 24], mixRgb(A, B, (Math.sin(v * .3 + ph) + 1) / 2), Math.pow(k, 1.4));
+        const i = (y * w + x) * 4; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
+      }
+      g.putImageData(img, 0, 0); stars(g, w, h, t, 18);
+    }},
+    fire: { name: 'Fire', draw(g, w, h, t, A, B) {
+      const img = g.createImageData(w, h), d = img.data, ph = t * Math.PI * 2;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const u = x / w, v = y / h;
+        const n = Math.sin(u * 14 + ph * 2) * .5 + Math.sin(u * 7 - ph * 3 + v * 9) * .5 + Math.sin(v * 22 + ph * 4 + u * 3) * .3;
+        const k = Math.max(0, Math.min(1, v * 1.25 - .15 + n * .18));
+        const c = k < .5 ? mixRgb([20, 4, 2], B, k * 2) : mixRgb(B, mixRgb(A, [255, 255, 210], .4), (k - .5) * 2);
+        const i = (y * w + x) * 4; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+    }},
+    rainbow: { name: 'Rainbow', draw(g, w, h, t) {
+      for (let y = 0; y < h; y++) { g.fillStyle = `hsl(${(y / h * 360 + t * 360) % 360} 85% 55%)`; g.fillRect(0, y, w, 1); }
+      const s = g.createLinearGradient(0, 0, w, 0); s.addColorStop(0, 'rgba(0,0,0,.25)'); s.addColorStop(.5, 'rgba(255,255,255,.08)'); s.addColorStop(1, 'rgba(0,0,0,.25)');
+      g.fillStyle = s; g.fillRect(0, 0, w, h);
+    }},
+    galaxy: { name: 'Galaxy', draw(g, w, h, t, A, B) {
+      const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, css(mixRgb([4, 4, 14], B, .45))); gr.addColorStop(1, css([3, 3, 10]));
+      g.fillStyle = gr; g.fillRect(0, 0, w, h);
+      const cx = w / 2, cy = h * .45, ph = t * Math.PI * 2;
+      for (let i = 0; i < 3; i++) { const r = g.createRadialGradient(cx + Math.cos(ph + i * 2) * w * .2, cy + Math.sin(ph + i * 2) * h * .12, 0, cx, cy, w * .7);
+        r.addColorStop(0, css(i ? B : A, .55)); r.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = r; g.fillRect(0, 0, w, h); }
+      stars(g, w, h, t, 40);
+    }},
+    pulse: { name: 'Pulse', draw(g, w, h, t, A, B) {
+      const k = (Math.sin(t * Math.PI * 2) + 1) / 2;
+      const r = g.createRadialGradient(w / 2, h * .42, 0, w / 2, h * .42, h * (.45 + .25 * k));
+      r.addColorStop(0, css(mixRgb(A, [255, 255, 255], .3 * k))); r.addColorStop(.6, css(B)); r.addColorStop(1, css(mixRgb(B, [0, 0, 0], .7)));
+      g.fillStyle = r; g.fillRect(0, 0, w, h);
+    }},
+    matrix: { name: 'Code rain', draw(g, w, h, t, A) {
+      g.fillStyle = '#020806'; g.fillRect(0, 0, w, h);
+      const cols = 10, cw = w / cols, ch = Math.max(1, h / 32);
+      for (let c = 0; c < cols; c++) {
+        const speed = .6 + hash(c) * .9, off = hash(c * 7 + 1);
+        for (let j = 0; j < 14; j++) {
+          const y = (((off + t * speed) % 1) * 1.6 - .3) * h - j * ch * 1.6;
+          if (y < -ch || y > h) continue;
+          g.fillStyle = css(j ? A : mixRgb(A, [255, 255, 255], .7), j ? Math.max(0, .9 - j * .07) : 1);
+          g.fillRect(Math.round(c * cw + cw * .25), Math.round(y), Math.max(1, Math.round(cw * .5)), Math.max(1, Math.round(ch)));
+        }
+      }
+    }},
+  };
+  function hash(n) { n = (n << 13) ^ n; return ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) / 0x7fffffff; }
+  function stars(g, w, h, t, n) {
+    for (let i = 0; i < n; i++) { const tw = (Math.sin((t + hash(i)) * Math.PI * 2 * (1 + (i % 3))) + 1) / 2;
+      g.fillStyle = `rgba(255,255,255,${.25 + .75 * tw})`; const s = Math.max(1, Math.round(w / 40));
+      g.fillRect(Math.floor(hash(i * 3 + 1) * w), Math.floor(hash(i * 5 + 2) * h), s, s); }
+  }
+
+  // ---------- overlays on uploaded art ----------
+  function overlay(g, w, h, t, kind, A, B) {
+    const ph = t * Math.PI * 2;
+    if (kind === 'shine') {
+      const x = (t * 1.8 - .4) * (w + h);
+      const gr = g.createLinearGradient(x - h * .4, 0, x, h * .6); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(.5, 'rgba(255,255,255,.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.globalCompositeOperation = 'lighter'; g.fillStyle = gr; g.fillRect(0, 0, w, h); g.globalCompositeOperation = 'source-over';
+    } else if (kind === 'sparkle') {
+      for (let i = 0; i < 14; i++) { const life = (t + hash(i * 9)) % 1, k = Math.sin(life * Math.PI);
+        const x = hash(i * 3 + 4) * w, y = hash(i * 7 + 2) * h, s = Math.max(1, Math.round(w / 32)) * (1 + Math.round(k * 2));
+        g.fillStyle = css(i % 2 ? A : [255, 255, 255], k); g.fillRect(x - s / 2, y - s / 6, s, s / 3 || 1); g.fillRect(x - s / 6, y - s / 2, s / 3 || 1, s); }
+    } else if (kind === 'pulse') {
+      const k = (Math.sin(ph) + 1) / 2, r = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, h * .7);
+      r.addColorStop(0, css(A, .35 * k)); r.addColorStop(1, 'rgba(0,0,0,0)');
+      g.globalCompositeOperation = 'lighter'; g.fillStyle = r; g.fillRect(0, 0, w, h); g.globalCompositeOperation = 'source-over';
+    } else if (kind === 'rainbow') {
+      g.globalCompositeOperation = 'color';
+      for (let y = 0; y < h; y++) { g.fillStyle = `hsla(${(y / h * 360 + t * 360) % 360},90%,55%,.55)`; g.fillRect(0, y, w, 1); }
+      g.globalCompositeOperation = 'source-over';
+    } else if (kind === 'scan') {
+      const step = Math.max(2, Math.round(h / 32)), off = Math.floor(t * step * 4) % step;
+      g.fillStyle = 'rgba(0,0,0,.28)'; for (let y = off; y < h; y += step) g.fillRect(0, y, w, Math.max(1, step / 2));
+      const by = t * h; const gr = g.createLinearGradient(0, by - h * .1, 0, by + h * .1);
+      gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(.5, css(A, .35)); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    }
+  }
+
+  // ---------- drawing one frame of the cape layout ----------
+  function artFor(i, n, aw, ah) {
+    const c = document.createElement('canvas'); c.width = aw; c.height = ah; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+    const A = hexToRgb($('c1').value), B = hexToRgb($('c2').value), t = i / n;
+    if (S.source === 'effect') { EFFECTS[S.effect].draw(g, aw, ah, t, A, B); return c; }
+    const src = S.source === 'frames' ? S.art[i % S.art.length] : S.art[0];
+    // behind see-through art (like a GIF with no background): a dark wash of the two colors
+    const bg = g.createLinearGradient(0, 0, 0, ah); bg.addColorStop(0, css(mixRgb(A, [0, 0, 0], .7))); bg.addColorStop(1, css(mixRgb(B, [0, 0, 0], .8)));
+    g.fillStyle = bg; g.fillRect(0, 0, aw, ah);
+    const fit = $('fit').value;
+    let dw = aw, dh = ah, dx = 0, dy = 0;
+    if (fit !== 'stretch') {
+      const k = fit === 'cover' ? Math.max(aw / src.width, ah / src.height) : Math.min(aw / src.width, ah / src.height);
+      dw = src.width * k; dh = src.height * k; dx = (aw - dw) / 2; dy = (ah - dh) / 2;
+    }
+    if (S.source === 'still' && $('overlay').value === 'drift') { const k = 1.12, p = Math.sin(t * Math.PI * 2); dx -= (dw * (k - 1)) / 2 + p * dw * .04; dy -= (dh * (k - 1)) / 2; dw *= k; dh *= k; }
+    g.imageSmoothingEnabled = src.width > aw;
+    g.drawImage(src, dx, dy, dw, dh);
+    const ov = $('overlay').value; if (ov !== 'none' && ov !== 'drift') overlay(g, aw, ah, t, ov, A, B);
+    return c;
+  }
+  function average(c) {
+    const g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height).data; let r = 0, gg = 0, b = 0, n = 0;
+    for (let i = 0; i < d.length; i += 16) { r += d[i]; gg += d[i + 1]; b += d[i + 2]; n++; }
+    return [r / n | 0, gg / n | 0, b / n | 0];
+  }
+  function layoutFrame(i, n, W) {
+    const H = W / 2, u = W / 64, aw = 10 * u, ah = 16 * u;
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+    const art = artFor(i, n, aw, ah);
+    const avg = average(art), mode = $('edges').value;
+    const edge = mode === 'c1' ? mixRgb(hexToRgb($('c1').value), [0, 0, 0], .35) : mode === 'black' ? [12, 12, 14] : mixRgb(avg, [0, 0, 0], .45);
+    g.fillStyle = css(edge); g.fillRect(0, 0, 22 * u, 17 * u);
+    g.drawImage(art, 1 * u, 1 * u);
+    if ($('rim').checked) { g.fillStyle = 'rgba(0,0,0,.35)'; const r = Math.max(1, u / 2);
+      g.fillRect(u, u, aw, r); g.fillRect(u, u + ah - r, aw, r); g.fillRect(u, u, r, ah); g.fillRect(u + aw - r, u, r, ah); }
+    const inside = $('inside').value;
+    if (inside === 'dark') { g.fillStyle = css(mixRgb(edge, [0, 0, 0], .4)); g.fillRect(12 * u, u, aw, ah); }
+    else {
+      g.save(); if (inside === 'mirror') { g.translate(12 * u + aw, u); g.scale(-1, 1); g.drawImage(art, 0, 0); } else g.drawImage(art, 12 * u, u); g.restore();
+      if (inside === 'mirror') { g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(12 * u, u, aw, ah); }
+    }
+    return c;
+  }
+
+  // ---------- frames, timing, and the sheet ----------
+  let frames = [], frameMs = [], dirty = true, gen = 0;
+  function frameCount() { return S.source === 'frames' ? Math.min(MAX_FRAMES, S.art.length) : S.frames; }
+  function rebuild() {
+    const W = +$('res').value, n = frameCount(), my = ++gen;
+    frames = []; frameMs = [];
+    for (let i = 0; i < n; i++) frames.push(layoutFrame(i, n, W));
+    const uniform = S.source === 'frames' && S.artMs.length ? Math.round(S.artMs.slice(0, n).reduce((a, b) => a + b, 0) / n / 10) * 10 : S.ms;
+    for (let i = 0; i < n; i++) frameMs.push(uniform);
+    if (S.source === 'frames' && S.artMs.length) { $('ms').value = Math.max(20, Math.min(500, uniform)); }
+    S.ms = +$('ms').value; $('msOut').textContent = `(${S.ms} ms)`;
+    if (my === gen) { updateStats(); updateYaml(); }
+    dirty = false;
+  }
+  let pending = 0; const schedule = () => { cancelAnimationFrame(pending); pending = requestAnimationFrame(rebuild); };
+
+  function sheet() {
+    const W = +$('res').value, H = W / 2, c = document.createElement('canvas'); c.width = W; c.height = H * frames.length;
+    const g = c.getContext('2d'); frames.forEach((f, i) => g.drawImage(f, 0, i * H)); return c;
+  }
+  function updateStats() {
+    const W = +$('res').value, n = frames.length, px = W * (W / 2) * n;
+    const lines = [
+      `<b>${W} x ${W / 2 * n}</b> PNG`,
+      `<b>${n}</b> frame${n === 1 ? '' : 's'} at <b>${S.ms} ms</b> (${(1000 / S.ms).toFixed(1)} fps)`,
+      `loop: <b>${(n * S.ms / 1000).toFixed(2)} s</b>`,
+      px > MAX_PIXELS ? `<span class="err">too big: ${px.toLocaleString()} pixels, the limit is ${MAX_PIXELS.toLocaleString()}. Lower the detail or the frames.</span>`
+        : `<span class="ok">fits the PlebioAPI limits</span>`,
+    ];
+    $('stats').innerHTML = lines.join('<br>');
+  }
+  function q(s) { return "'" + String(s).replace(/'/g, "''") + "'"; }
+  function safeId() { return ($('cid').value.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'my_cloak'); }
+  function updateYaml() {
+    const id = safeId(), parts = [`name: ${q($('cname').value || id)}`, 'category: cloak', `texture: 'cloaks/${id}.png'`];
+    if (frames.length > 1) parts.push(`frametime: ${S.ms}`);
+    parts.push(`price: ${parseInt($('price').value, 10) || 0}`);
+    if ($('col').value !== 'plebmc') parts.push(`collection: ${$('col').value}`);
+    if ($('creator').value.trim()) parts.push(`creator: ${q($('creator').value.trim())}`);
+    parts.push(`description: ${q($('desc').value)}`);
+    $('yaml').textContent = `  ${id}: {${parts.join(', ')}}`;
+  }
+
+  // ---------- inputs: files and GIFs ----------
+  const toast = (m, cls = '') => { const t = $('toast'); t.className = 'toast ' + cls; t.textContent = m; };
+  async function loadImage(file) {
+    const url = URL.createObjectURL(file);
+    try { const img = new Image(); img.src = url; await img.decode(); const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0); return c; }
+    finally { URL.revokeObjectURL(url); }
+  }
+  // A small GIF decoder (no download needed): frames, delays, disposal and transparency.
+  function decodeGif(buf) {
+    const b = new Uint8Array(buf); let p = 0;
+    const u16 = () => { const v = b[p] | b[p + 1] << 8; p += 2; return v; };
+    if (String.fromCharCode(b[0], b[1], b[2]) !== 'GIF') throw new Error('not a GIF');
+    p = 6; const W = u16(), H = u16(), fl = b[p++]; p += 2;
+    const readTable = (n) => { const t = []; for (let i = 0; i < n; i++) { t.push([b[p], b[p + 1], b[p + 2]]); p += 3; } return t; };
+    const gct = fl & 0x80 ? readTable(1 << ((fl & 7) + 1)) : null;
+    const subBlocks = () => { const parts = []; let n = 0; for (let len = b[p++]; len; len = b[p++]) { parts.push(b.subarray(p, p + len)); n += len; p += len; }
+      const out = new Uint8Array(n); let o = 0; for (const q of parts) { out.set(q, o); o += q.length; } return out; };
+    const frames = []; let gce = { delay: 100, trans: -1, disp: 0 };
+    while (p < b.length) {
+      const t = b[p++];
+      if (t === 0x3B) break;
+      if (t === 0x21) { const label = b[p++];
+        if (label === 0xF9) { p++; const f = b[p++], d = u16(), ti = b[p++]; p++; gce = { delay: (d || 10) * 10, trans: f & 1 ? ti : -1, disp: f >> 2 & 7 }; }
+        else subBlocks();
+        continue; }
+      if (t !== 0x2C) break;
+      const x = u16(), y = u16(), w = u16(), h = u16(), f = b[p++];
+      const lct = f & 0x80 ? readTable(1 << ((f & 7) + 1)) : null, inter = f & 0x40;
+      const minCode = b[p++], data = subBlocks();
+      frames.push({ x, y, w, h, inter, pal: lct || gct, idx: lzw(minCode, data, w * h), ...gce });
+      gce = { delay: 100, trans: -1, disp: 0 };
+    }
+    return { W, H, frames };
+  }
+  function lzw(minCode, data, n) {
+    const out = new Uint8Array(n), clear = 1 << minCode, eoi = clear + 1;
+    const prefix = new Int16Array(4096), suffix = new Uint8Array(4096), stack = new Uint8Array(4097);
+    let size = minCode + 1, mask = (1 << size) - 1, avail = clear + 2, old = -1, first = 0, bits = 0, cur = 0, o = 0, i = 0;
+    for (let c = 0; c < clear; c++) { prefix[c] = -1; suffix[c] = c; }
+    while (o < n) {
+      while (bits < size) { if (i >= data.length) return out; cur |= data[i++] << bits; bits += 8; }
+      let code = cur & mask; cur >>= size; bits -= size;
+      if (code === clear) { size = minCode + 1; mask = (1 << size) - 1; avail = clear + 2; old = -1; continue; }
+      if (code === eoi) break;
+      if (old === -1) { out[o++] = suffix[code]; old = code; first = code; continue; }
+      const inCode = code; let sp = 0;
+      if (code >= avail) { stack[sp++] = first; code = old; }
+      while (code >= clear) { stack[sp++] = suffix[code]; code = prefix[code]; }
+      first = suffix[code]; stack[sp++] = first;
+      if (avail < 4096) { prefix[avail] = old; suffix[avail] = first; avail++; if ((avail & mask) === 0 && avail < 4096) { size++; mask = (1 << size) - 1; } }
+      old = inCode;
+      while (sp && o < n) out[o++] = stack[--sp];
+    }
+    return out;
+  }
+  async function loadGif(file) {
+    const { W, H, frames: fr } = decodeGif(await file.arrayBuffer());
+    const full = document.createElement('canvas'); full.width = W; full.height = H;
+    const g = full.getContext('2d'), patch = document.createElement('canvas'), pg = patch.getContext('2d');
+    let out = [], ms = [], before = null;
+    for (const f of fr) {
+      if (f.disp === 3) before = g.getImageData(0, 0, W, H);
+      patch.width = f.w; patch.height = f.h;
+      const id = pg.createImageData(f.w, f.h), d = id.data;
+      const rows = []; if (f.inter) { for (const [s, st] of [[0, 8], [4, 8], [2, 4], [1, 2]]) for (let r = s; r < f.h; r += st) rows.push(r); } else for (let r = 0; r < f.h; r++) rows.push(r);
+      for (let k = 0; k < f.h; k++) { const r = rows[k]; for (let c = 0; c < f.w; c++) { const ix = f.idx[k * f.w + c], q = (r * f.w + c) * 4;
+        if (ix === f.trans || !f.pal || !f.pal[ix]) continue; const col = f.pal[ix]; d[q] = col[0]; d[q + 1] = col[1]; d[q + 2] = col[2]; d[q + 3] = 255; } }
+      pg.putImageData(id, 0, 0);
+      g.drawImage(patch, f.x, f.y);
+      const snap = document.createElement('canvas'); snap.width = W; snap.height = H; snap.getContext('2d').drawImage(full, 0, 0);
+      out.push(snap); ms.push(f.delay);
+      if (f.disp === 2) g.clearRect(f.x, f.y, f.w, f.h);
+      else if (f.disp === 3 && before) g.putImageData(before, 0, 0);
+    }
+    if (out.length > MAX_FRAMES) { // keep 64 evenly spaced frames, same loop length
+      const keep = [], kms = [], step = out.length / MAX_FRAMES, total = ms.reduce((a, b) => a + b, 0);
+      for (let i = 0; i < MAX_FRAMES; i++) { keep.push(out[Math.floor(i * step)]); kms.push(total / MAX_FRAMES); }
+      out = keep; ms = kms; toast(`The GIF had more than ${MAX_FRAMES} frames, so every ${step.toFixed(1)}th frame is used.`, 'warn');
+    }
+    return { out, ms };
+  }
+  async function takeFiles(list) {
+    const files = [...list].filter(f => /^image\//.test(f.type)).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    if (!files.length) { toast('Pick a GIF, PNG, JPG or WebP image.', 'err'); return; }
+    toast('Reading ' + (files.length > 1 ? files.length + ' images' : files[0].name) + '...');
+    try {
+      if (files.length === 1 && files[0].type === 'image/gif') {
+        const { out, ms } = await loadGif(files[0]);
+        if (out.length > 1) { S.source = 'frames'; S.art = out; S.artMs = ms; }
+        else { S.source = 'still'; S.art = out; S.artMs = []; }
+      } else if (files.length === 1) { S.source = 'still'; S.art = [await loadImage(files[0])]; S.artMs = []; }
+      else { S.source = 'frames'; S.art = []; for (const f of files.slice(0, MAX_FRAMES)) S.art.push(await loadImage(f)); S.artMs = []; }
+      if (!$('toast').classList.contains('warn')) toast(S.source === 'frames' ? `${S.art.length} frames loaded.` : 'Image loaded. Pick an overlay in step 2 to animate it.', 'ok');
+      markEffects(); syncMotion(); schedule();
+    } catch (e) { toast('Could not read that file: ' + (e && e.message || e), 'err'); }
+  }
+  const drop = $('drop');
+  drop.addEventListener('click', () => $('file').click());
+  drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); } });
+  $('file').addEventListener('change', (e) => { takeFiles(e.target.files); e.target.value = ''; });
+  ['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(t => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', (e) => takeFiles(e.dataTransfer.files));
+  window.addEventListener('paste', (e) => { const f = [...(e.clipboardData?.files || [])]; if (f.length) takeFiles(f); });
+
+  // effect buttons with live thumbnails
+  const fxBox = $('effects'), thumbs = [];
+  Object.entries(EFFECTS).forEach(([key, fx]) => {
+    const b = document.createElement('button'); b.className = 'fx'; b.type = 'button'; b.dataset.key = key;
+    const c = document.createElement('canvas'); c.width = 20; c.height = 32; b.append(c, document.createTextNode(fx.name));
+    b.addEventListener('click', () => { S.source = 'effect'; S.effect = key; S.art = []; S.artMs = []; markEffects(); syncMotion(); schedule(); toast(''); });
+    fxBox.append(b); thumbs.push([c, fx]);
+  });
+  function markEffects() { fxBox.querySelectorAll('.fx').forEach(b => b.setAttribute('aria-pressed', String(S.source === 'effect' && b.dataset.key === S.effect))); }
+  function syncMotion() {
+    const gifTiming = S.source === 'frames';
+    $('frames').disabled = gifTiming || (S.source === 'still' && $('overlay').value === 'none');
+    $('overlay').disabled = S.source !== 'still' && S.source !== 'frames';
+    if (S.source === 'still' && $('overlay').value === 'none') S.frames = 1; else if (!gifTiming) S.frames = +$('frames').value;
+    $('framesOut').textContent = gifTiming ? `(${Math.min(MAX_FRAMES, S.art.length)} from your files)` : `(${S.frames})`;
+    $('msOut').textContent = `(${$('ms').value} ms)`;
+  }
+
+  ['c1', 'c2', 'res', 'fit', 'inside', 'edges', 'rim', 'overlay'].forEach(id => $(id).addEventListener('input', () => { syncMotion(); schedule(); }));
+  $('frames').addEventListener('input', () => { syncMotion(); schedule(); });
+  $('ms').addEventListener('input', () => { S.ms = +$('ms').value; S.artMs = S.source === 'frames' ? [] : S.artMs; syncMotion(); updateStats(); updateYaml(); });
+  ['cid', 'cname', 'price', 'col', 'creator', 'desc'].forEach(id => $(id).addEventListener('input', updateYaml));
+
+  // ---------- save and copy ----------
+  let downloads = null;
+  if (window.claude && window.claude.use) window.claude.use('downloads').then(d => { downloads = d; }).catch(() => {});
+  $('save').addEventListener('click', () => {
+    if (!frames.length) return;
+    const W = +$('res').value, px = W * (W / 2) * frames.length;
+    if (px > MAX_PIXELS) { toast('Too big for PlebioAPI. Lower the detail or the frames first.', 'err'); return; }
+    sheet().toBlob(async (blob) => {
+      if (!blob) { toast('Could not make the PNG.', 'err'); return; }
+      if (blob.size > MAX_BYTES) { toast(`The PNG is ${(blob.size / 1048576).toFixed(1)} MB, over the 8 MB limit. Lower the detail or the frames.`, 'err'); return; }
+      const name = safeId() + '.png';
+      if (downloads) {
+        try { await downloads.save({ filename: name, data: blob }); toast(`Saved ${name} (${(blob.size / 1024).toFixed(0)} KB).`, 'ok'); }
+        catch (e) { toast(e && e.code === 'declined' ? 'Save cancelled.' : 'Could not save here: ' + (e && e.message || e), 'err'); }
+        return;
+      }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      toast(`Saved ${name} (${(blob.size / 1024).toFixed(0)} KB).`, 'ok');
+    }, 'image/png');
+  });
+  $('copy').addEventListener('click', async () => {
+    const text = $('yaml').textContent;
+    try { await navigator.clipboard.writeText(text); toast('Config line copied.', 'ok'); }
+    catch { const r = document.createRange(); r.selectNodeContents($('yaml')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Press Ctrl+C to copy the selected line.', 'warn'); }
+  });
+
+  // ---------- 3D preview ----------
+  const flat = $('flat'), fg = flat.getContext('2d');
+  let renderer = null, scene, camera, cape, tex, texCanvas = document.createElement('canvas');
+  function setupThree() {
+    if (!window.THREE) return;
+    const cv = $('three');
+    renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    scene = new THREE.Scene(); camera = new THREE.PerspectiveCamera(35, 1, .1, 100);
+    scene.add(new THREE.AmbientLight(0xffffff, .75)); const dl = new THREE.DirectionalLight(0xffffff, .55); dl.position.set(-2, 3, -4); scene.add(dl);
+    const body = new THREE.MeshLambertMaterial({ color: 0x2c3a46 }), skin = new THREE.MeshLambertMaterial({ color: 0x3a4b59 });
+    const box = (w, h, d, m, x, y, z) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); scene.add(b); return b; };
+    box(8, 8, 8, skin, 0, 28, 0); box(8, 12, 4, body, 0, 18, 0); box(4, 12, 4, body, -6, 18, 0); box(4, 12, 4, body, 6, 18, 0);
+    box(4, 12, 4, skin, -2, 6, 0); box(4, 12, 4, skin, 2, 6, 0);
+    texCanvas.width = 64; texCanvas.height = 32; tex = new THREE.CanvasTexture(texCanvas); tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
+    const geo = new THREE.BoxGeometry(10, 16, 1), uv = geo.attributes.uv;
+    // faces: +x, -x, +y, -y, +z (outside, facing away from the player), -z (inside)
+    const R = { px: [11, 1, 1, 16], nx: [0, 1, 1, 16], py: [1, 0, 10, 1], ny: [11, 0, 10, 1], pz: [1, 1, 10, 16], nz: [12, 1, 10, 16] };
+    ['px', 'nx', 'py', 'ny', 'pz', 'nz'].forEach((f, fi) => { const [x, y, w, h] = R[f], u0 = x / 64, u1 = (x + w) / 64, vt = 1 - y / 32, vb = 1 - (y + h) / 32;
+      const q4 = [[u0, vt], [u1, vt], [u0, vb], [u1, vb]]; q4.forEach((p, k) => uv.setXY(fi * 4 + k, p[0], p[1])); });
+    uv.needsUpdate = true;
+    cape = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tex, transparent: true }));
+    const pivot = new THREE.Group(); pivot.position.set(0, 24, -2.6); cape.position.set(0, -8, -.5); pivot.add(cape); pivot.rotation.x = .16; scene.add(pivot);
+    cape.userData.pivot = pivot;
+    let yaw = Math.PI * .82, drag = null;
+    cv.addEventListener('pointerdown', (e) => { drag = e.clientX; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
+    cv.addEventListener('pointermove', (e) => { if (drag !== null) { yaw += (e.clientX - drag) * .01; drag = e.clientX; } });
+    cv.addEventListener('pointerup', () => { drag = null; cv.style.cursor = 'grab'; });
+    const resize = () => { const r = cv.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix(); };
+    new ResizeObserver(resize).observe(cv); resize();
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return (now) => {
+      if (drag === null && !reduce) yaw += .004;
+      camera.position.set(Math.sin(yaw) * 58, 22, Math.cos(yaw) * 58); camera.lookAt(0, 16, 0);
+      pivot.rotation.x = .16 + (reduce ? 0 : Math.sin(now / 700) * .04);
+      renderer.render(scene, camera);
+    };
+  }
+  const draw3d = setupThree();
+  let last = performance.now(), acc = 0, idx = 0, thumbT = 0;
+  function loop(now) {
+    const dt = now - last; last = now;
+    if (frames.length) {
+      acc += dt; const ms = S.ms || 100; while (acc >= ms) { acc -= ms; idx = (idx + 1) % frames.length; }
+      const f = frames[idx % frames.length];
+      if (flat.width !== f.width) { flat.width = f.width; flat.height = f.height; }
+      fg.clearRect(0, 0, flat.width, flat.height); fg.drawImage(f, 0, 0);
+      flat.style.width = Math.min(176, f.width * Math.max(1, Math.floor(176 / f.width))) + 'px';
+      if (tex) { if (texCanvas.width !== f.width) { texCanvas.width = f.width; texCanvas.height = f.height; } texCanvas.getContext('2d').drawImage(f, 0, 0); tex.needsUpdate = true; }
+    }
+    thumbT += dt; if (thumbT > 90) { thumbT = 0; const A = hexToRgb($('c1').value), B = hexToRgb($('c2').value), t = (now / 2000) % 1;
+      thumbs.forEach(([c, fx]) => fx.draw(c.getContext('2d'), c.width, c.height, t, A, B)); }
+    if (draw3d) draw3d(now);
+    requestAnimationFrame(loop);
+  }
+  markEffects(); syncMotion(); rebuild(); requestAnimationFrame(loop);
+})();
+</script>

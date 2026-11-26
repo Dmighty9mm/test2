@@ -91,9 +91,14 @@ public final class AdminScreen extends PlebScreen {
 			// coins
 			amount = field(px + 6, y + 4, 54, 10, 10);
 			int bw = (pw - 72 - 8) / 3;
-			button("Give", px + 70, y, bw, 18, () -> coins("give")).style(Style.PRIMARY).tip("Add coins");
-			button("Take", px + 70 + bw + 4, y, bw, 18, () -> coins("take")).tip("Remove coins");
-			button("Set", px + 70 + (bw + 4) * 2, y, bw, 18, () -> coins("set")).tip("Set the balance");
+			// the last one used stays highlighted (and is what Enter does)
+			coinButtons[0] = button("Give", px + 70, y, bw, 18, () -> coins("give"));
+			coinButtons[0].tip = "Add coins";
+			coinButtons[1] = button("Take", px + 70 + bw + 4, y, bw, 18, () -> coins("take"));
+			coinButtons[1].tip = "Remove coins";
+			coinButtons[2] = button("Set", px + 70 + (bw + 4) * 2, y, bw, 18, () -> coins("set"));
+			coinButtons[2].tip = "Set the balance";
+			styleCoinButtons();
 			y += 24;
 			// cosmetics
 			if (!a.items.isEmpty()) {
@@ -151,7 +156,21 @@ public final class AdminScreen extends PlebScreen {
 		reload.icon("reset").tip = "Re-read the shop plugin's config.yml (items, hats, quests)";
 	}
 
+	private static final String[] COIN_OPS = { "give", "take", "set" };
+	private final Button[] coinButtons = new Button[3];
+	private String coinOp = "give";
+
+	private void styleCoinButtons() {
+		for (int i = 0; i < 3; i++) {
+			if (coinButtons[i] != null) {
+				coinButtons[i].style(COIN_OPS[i].equals(coinOp) ? Style.PRIMARY : Style.SECONDARY);
+			}
+		}
+	}
+
 	private void coins(String op) {
+		coinOp = op;
+		styleCoinButtons();
 		Admin.Player p = current();
 		long n;
 		try {
@@ -368,7 +387,7 @@ public final class AdminScreen extends PlebScreen {
 				return;
 			}
 			if (amount != null && amount.isFocused()) {
-				coins("give");
+				coins(coinOp);
 				return;
 			}
 		}

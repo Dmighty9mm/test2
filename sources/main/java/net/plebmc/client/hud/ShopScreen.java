@@ -20,7 +20,11 @@ import net.plebmc.client.cosmetics.Cosmetics;
  */
 public final class ShopScreen extends PlebScreen {
 
+	/** Where the collection tabs start, so the header's subtitle stops before them. */
+	private int tabsLeft = Integer.MAX_VALUE / 2;
+
 	private String category = Cosmetics.HAT;
+	private String collection = Cosmetics.collections().isEmpty() ? Cosmetics.MAIN : Cosmetics.collections().get(0).id;
 	private int page;
 	private String selectedId;
 	private int seenVersion = -1;
@@ -41,12 +45,43 @@ public final class ShopScreen extends PlebScreen {
 	}
 
 	private List<Cosmetics.Item> items() {
-		return Cosmetics.catalog(category);
+		return items(category);
+	}
+
+	/** The "Owned" tab: everything you own in a category, from every collection. */
+	private static final String OWNED = "_owned";
+
+	private List<Cosmetics.Item> items(String cat) {
+		if (OWNED.equals(collection)) {
+			List<Cosmetics.Item> out = new java.util.ArrayList<>();
+			for (Cosmetics.Item it : Cosmetics.catalog(cat)) {
+				if (Cosmetics.owns(it.id)) {
+					out.add(it);
+				}
+			}
+			return out;
+		}
+		return Cosmetics.catalog(cat, collection);
+	}
+
+	/** The shop's collections plus an "Owned" tab, so anything you own can be worn from here. */
+	private static List<Cosmetics.Collection> tabs() {
+		List<Cosmetics.Collection> out = new java.util.ArrayList<>(Cosmetics.collections());
+		out.add(new Cosmetics.Collection(OWNED, "Owned", "check", 0xFF5BD98A, "Everything you own, from every collection"));
+		return out;
+	}
+
+	private static boolean hasTab(String id) {
+		for (Cosmetics.Collection c : tabs()) {
+			if (c.id.equals(id)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static String categoryName(String c) {
-		return Cosmetics.HAT.equals(c) ? "Hats" : Cosmetics.TRAIL.equals(c) ? "Trails"
-				: Character.toUpperCase(c.charAt(0)) + c.substring(1) + "s";
+		return Cosmetics.HAT.equals(c) ? "Hats" : Character.toUpperCase(c.charAt(0)) + c.substring(1) + "s";
 	}
 
 	@Override
@@ -68,10 +103,37 @@ public final class ShopScreen extends PlebScreen {
 		gy = wy + 66;
 		gh = wy + wh - 8 - 44 - gy;
 
+		// collections (PlebMc, Partners, ...) as a switch in the header
+		if (!hasTab(collection)) {
+			collection = tabs().get(0).id;
+		}
+		int segW = 0;
+		for (Cosmetics.Collection col : tabs()) {
+			segW += Ui.width(col.name) + 13 + 14 + 2;
+		}
+		// left of the coin balance and the close button, so they never overlap
+		int coinW = coinChipWidth();
+		int sx = wx + ww - 30 - (coinW > 0 ? coinW + 6 : 0) - segW;
+		tabsLeft = sx;
+		for (Cosmetics.Collection col : tabs()) {
+			int w = Ui.width(col.name) + 13 + 14;
+			Tab t = tab(col.name, Ui.hasIcon(col.icon) ? col.icon : "shop", col.color, sx, wy + 11, w, 16,
+					() -> collection.equals(col.id), () -> {
+						if (!collection.equals(col.id)) {
+							collection = col.id;
+							page = 0;
+							selectedId = null;
+							rebuild();
+						}
+					});
+			t.tip = col.description.isEmpty() ? col.name : col.description;
+			sx += w + 2;
+		}
+
 		// category tabs (every category the shop knows)
 		int tx = gx;
 		for (String c : Cosmetics.CATEGORIES) {
-			List<Cosmetics.Item> all = Cosmetics.catalog(c);
+			List<Cosmetics.Item> all = items(c);
 			int owned = 0;
 			for (Cosmetics.Item it : all) {
 				if (Cosmetics.owns(it.id)) {
@@ -203,7 +265,15 @@ public final class ShopScreen extends PlebScreen {
 				Ui.rect(x + w / 2 - 8, y + 2, 16, 20, 0xFF000000);
 				CloakLayer.thumb(it, x + w / 2 - 7, y + 3, 14, 18);
 			} else {
-				Ui.icon(Cosmetics.HAT.equals(it.category) ? "hat" : "trail", x + w / 2 - 9, y + 3, 2, tint);
+				// the hat itself, turning while you point at it
+				float spin = hover > 0.05f || sel ? (System.currentTimeMillis() % 7200L) / 20f : 0f;
+				CosmeticLayer.thumb(it, x + w / 2f, y + 11f, 1.8f, 35f + spin, System.currentTimeMillis() / 50f);
+			}
+			Cosmetics.Collection col = Cosmetics.collection(it.collection);
+			if (col != null && Cosmetics.collections().indexOf(col) > 0) {
+				int cc = col.color == 0 ? acc : col.color;
+				Ui.pill(col.name.toUpperCase().substring(0, Math.min(7, col.name.length())), x + w - Ui.pillWidth(
+						col.name.toUpperCase().substring(0, Math.min(7, col.name.length()))) - 2, y + 2, Ui.ON_ACCENT, cc);
 			}
 			if (trying) {
 				Ui.icon("eye", x + 4, y + 4, 1, acc);
@@ -244,12 +314,22 @@ public final class ShopScreen extends PlebScreen {
 		}
 	}
 
+	/** What the offline preview wears: the item being tried on, else the equipped one, else the last worn. */
+	private static Cosmetics.Item offlineWorn(String category) {
+		String id = Cosmetics.previewId(category);
+		if (id == null) {
+			id = Cosmetics.equippedId(category);
+		}
+		Cosmetics.Item it = id == null ? null : Cosmetics.item(id);
+		return it != null ? it : Cosmetics.lastWorn(category);
+	}
+
 	// ==================== drawing ====================
 
 	@Override
 	protected void drawContent(int mx, int my, float pt) {
 		Ui.window(wx, wy, ww, wh);
-		header(wx, wy, ww, "shop", "Shop", "Cosmetics everyone on PlebMc can see", true);
+		header(wx, wy, ww, "shop", "Shop", Ui.fit("Cosmetics everyone on PlebMc can see", Math.max(0, tabsLeft - wx - 40)), true);
 
 		// preview
 		Ui.card(pvx, pvy, pvw, pvh, 0xFF0B0F13, Ui.BORDER_SOFT);
@@ -260,12 +340,13 @@ public final class ShopScreen extends PlebScreen {
 			int scale = Math.max(20, Math.min(60, (pvh - 52) * 10 / 21));
 			drawModel(pvx + pvw / 2, pvy + pvh - 24, scale, yaw, this.mc.thePlayer);
 		} else {
-			Ui.centered("Join a world to", pvx + pvw / 2, pvy + pvh / 2 - 6, Ui.FAINT);
-			Ui.centered("see yourself here", pvx + pvw / 2, pvy + pvh / 2 + 4, Ui.FAINT);
+			// not in a world: your own skin, wearing what you're trying on
+			int scale = Math.max(20, Math.min(60, (pvh - 52) * 10 / 21));
+			TitleMenu.drawSkinModel(pvx + pvw / 2f, pvy + pvh - 24, scale, yaw, offlineWorn(Cosmetics.CLOAK), offlineWorn(Cosmetics.HAT));
 		}
 		Ui.icon("drag", pvx + 6, pvy + pvh - 14, 1, Ui.FAINT);
 		Ui.text("Drag to spin", pvx + 18, pvy + pvh - 13, Ui.FAINT);
-		tooltipArea(pvx, pvy + 20, pvw, pvh - 40, "Drag to spin. Trails also show in the world around you while you try one on.");
+		tooltipArea(pvx, pvy + 20, pvw, pvh - 40, "Drag to spin");
 
 		// page counter
 		List<Cosmetics.Item> its = items();
@@ -277,8 +358,16 @@ public final class ShopScreen extends PlebScreen {
 		}
 
 		if (its.isEmpty()) {
-			Ui.icon(Ui.hasIcon(category) ? category : "shop", gx + gw / 2 - 13, gy + 20, 3, Ui.alpha(Ui.accent(), 0x80));
-			Ui.centered("No " + categoryName(category).toLowerCase() + " in the shop yet", gx + gw / 2, gy + 52, Ui.MUTED);
+			Cosmetics.Collection col = Cosmetics.collection(collection);
+			boolean partner = col != null && Cosmetics.collections().indexOf(col) > 0;
+			// the mascot, bobbing a little, keeps the empty page company
+			float bob = (float) Math.sin(System.currentTimeMillis() / 420.0) * 1.2f;
+			Ui.mascot(gx + gw / 2f - 14, gy + 16 + bob, 28, 0.95f);
+			Ui.centered("No " + (partner ? "partner " : "") + categoryName(category).toLowerCase() + " yet",
+					gx + gw / 2, gy + 52, Ui.MUTED);
+			if (partner) {
+				Ui.centered("Cosmetics made with our partners show up here", gx + gw / 2, gy + 64, Ui.FAINT);
+			}
 		}
 
 		// details of the selected item
@@ -292,6 +381,9 @@ public final class ShopScreen extends PlebScreen {
 		} else if (sel != null && sel.category.equals(category)) {
 			Ui.text(Ui.fit(sel.name, gw - 180), gx + 6, ay + 7, Ui.TEXT);
 			String d = sel.description.isEmpty() ? categoryName(sel.category) : sel.description;
+			if (sel.creator != null) {
+				d = "by " + sel.creator + "  \u00b7  " + d;
+			}
 			Ui.text(Ui.fit(d, gw - 180), gx + 6, ay + 19, Ui.MUTED);
 		} else {
 			Ui.text("Pick something to try it on", gx + 6, ay + 7, Ui.TEXT);

@@ -64,7 +64,8 @@ Every hook calls `net.plebmc.client.hud.PlebClient` or `PlebEntities`:
 | `LayerCustomHead.doRenderLayer` | `PlebItems.customHat` | pack hats (QualityArmory hats on quartz) drawn on heads like 1.16 |
 | `GuiButton.drawButton`, `GuiOptionSlider` / `GuiSlider` / `GuiScreenOptionsSounds` | `PlebTheme.drawButton`, `sliderKnob` | PlebClient menu theme (dark glass buttons, accent Join button) |
 | `GuiScreen.drawWorldBackground` / `drawBackground`, `GuiSlot` | `PlebTheme.background`, `slotBackground`, `slotOverlay` | themed backgrounds and lists |
-| `GuiMainMenu.drawScreen` | `PlebTheme.mainMenuTitle`, `splashTranslate` | PLEBCLIENT wordmark instead of the logo |
+| `GuiMainMenu.drawScreen` | `PlebTheme.mainMenuTitle`, `splashTranslate` | PLEBCLIENT wordmark instead of the logo (classic menu only) |
+| `GuiMainMenu.initGui` / `drawScreen` / `mouseClicked` / `keyTyped` | `TitleMenu.init`, `draw`, `click`, `key` | the PlebClient title screen (sidebar, server card, info bar) |
 
 ### Safety rules
 
@@ -117,7 +118,7 @@ open Mods, Quests or the Shop directly instead. Every screen closes with Esc or 
 | Screen | What it does |
 |---|---|
 | **Mods** | Every mod as a card with its state (on, off, or locked when the server blocks it). Click a card to toggle it; right-click it or its gear for its settings page (every option, reset to defaults, "Move on HUD"). Categories on the left (PlebNite, HUD, Gameplay, Performance) with on/total counts, and a search box (start typing anywhere). |
-| **Shop** | Cosmetics only: Hats, Trails and Cloaks tabs (owned/total; cloak cards show the cloak's own art, and the preview turns around to show it), item cards with price, Owned, Equipped or Exclusive (never sold), pages, and your player on the left (drag or arrow keys to spin). Picking a card tries it on (only you see it, until you leave). Buy, Equip and Unequip go to the server. |
+| **Shop** | Cosmetics only: collection tabs (PlebMc, Partners, or what the server sends), then Hats and Cloaks tabs; hat cards show the hat in 3D (owned/total; cloak cards show the cloak's own art, and the preview turns around to show it), item cards with price, Owned, Equipped or Exclusive (never sold), pages, and your player on the left (drag or arrow keys to spin). Picking a card tries it on (only you see it, until you leave). Buy, Equip and Unequip go to the server. |
 | **Quests** | All / General / PlebNite on the left with done/total counts and a dot for new quests; Daily and Weekly sections with reset timers; each quest's progress bar, count and reward; finished quests fold into compact "claimed" rows; the daily login row with streak pips. |
 | **HUD** | The HUD editor (below). |
 | **Account** | plebmc.top login: status, profile (name, ranks), log in with a code, log out. |
@@ -201,7 +202,7 @@ orange "unknown".
 
 ## Cosmetics shop protocol
 
-Cosmetics (hats, trails and cloaks) are bought with the server's coins (on PlebMc: PlebMc Coins, earned from quests, a daily login reward and time online). The server owns the balance, ownership and what is equipped; the client only displays them and sends requests. Messages are UTF-8 JSON objects on the plugin channel `plebmc:shop`. The client sends `REGISTER plebmc:shop` when it joins (Bukkit needs this before it will deliver messages to the client). Open it with Right Shift, then **Shop** or **Quests**. "Try on" works everywhere and is local only.
+Cosmetics (hats and cloaks) are bought with the server's coins (on PlebMc: PlebMc Coins, earned from quests, a daily login reward and time online). The server owns the balance, ownership and what is equipped; the client only displays them and sends requests. Messages are UTF-8 JSON objects on the plugin channel `plebmc:shop`. The client sends `REGISTER plebmc:shop` when it joins (Bukkit needs this before it will deliver messages to the client). Open it with Right Shift, then **Shop** or **Quests**. "Try on" works everywhere and is local only.
 
 **Client to server**
 
@@ -216,8 +217,8 @@ Cosmetics (hats, trails and cloaks) are bought with the server's coins (on PlebM
 
 | Message | Meaning |
 | --- | --- |
-| `{"type":"state","coins":1250,"owned":["tophat"],"equipped":{"hat":"tophat","trail":"flame"},"catalog":[...]}` | Balance, owned ids, equipped slots. Every field is optional; a missing field keeps its last value. `catalog` replaces the built-in list. |
-| `{"type":"players","players":{"<uuid>":{"hat":"crown","trail":"rainbow"},"<uuid2>":null}}` | What other players wear (so everyone sees each other's cosmetics). `null` or `{}` removes a player. `"clear":true` drops everyone first (send on world change). |
+| `{"type":"state","coins":1250,"owned":["tophat"],"equipped":{"hat":"tophat","cloak":"red_cloak"},"catalog":[...]}` | Balance, owned ids, equipped slots. Every field is optional; a missing field keeps its last value. `catalog` replaces the built-in list. |
+| `{"type":"players","players":{"<uuid>":{"hat":"crown","cloak":"red_cloak"},"<uuid2>":null}}` | What other players wear (so everyone sees each other's cosmetics). `null` or `{}` removes a player. `"clear":true` drops everyone first (send on world change). |
 | `{"type":"result","ok":false,"message":"Not enough coins","coins":100}` | Answer to buy/equip, shown in the shop. `coins` is optional. |
 | `{"type":"texture","id":"5707c10a4d93e2b1","part":0,"parts":3,"data":"iVBORw0..."}` | One part of a cloak PNG, base64 (parts are joined in order, then decoded). The id is a content hash, so the client keeps the image across servers. |
 | `{"type":"notify","title":"§aQuest complete!","message":"Get 3 kills: +75 PlebMc Coins","coins":425}` | A popup (top right, like Apollo notifications). `coins` optional. |
@@ -234,7 +235,7 @@ Cosmetics (hats, trails and cloaks) are bought with the server's coins (on PlebM
 
 Catalog items that are never sold (given by staff or events) carry `"forSale":false` (and, for older clients, a price nobody can reach); the shop shows them as Exclusive.
 
-Catalog item: `{"id":"gold_tophat","name":"Gold Top Hat","category":"hat","render":"tophat","price":900,"color":"#FFD700","description":"..."}`. `category` is `hat`, `trail` or `cloak`. A cloak has `"render":"cloak"` and either a `"texture"` id (plus `"textureWidth"`) for an image the client downloads with `texture`, or just a `color` for a plain cloak. Cloak images use the vanilla cape layout (64x32) at any multiple up to 4096x2048; the model's UVs are fractions of the image, so a 512x256 cloak draws at 8x detail. `render` is the look the client draws: hats `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`; trails `flame`, `hearts`, `notes`, `rainbow`, `cloud`, `portal`, `emerald`, `snow`. `color` tints a hat (optional). A 3D model hat has `"render":"model"`, a `"model"` id and a `"texture"` id (plus `"textureWidth"`/`"textureHeight"`); the client downloads both with `texture` (the model as `{"v":1,"quads":[x,y,z,u,v ×4, ...]}` in head pixels, y up, top of the head at y 8) and draws it on the head. Items with a `render` this client doesn't know are hidden, so newer items don't break older clients. Without a catalog the client shows the built-in one (ids equal to the render names, prices 250 to 2,500).
+Catalog item: `{"id":"gold_tophat","name":"Gold Top Hat","category":"hat","render":"tophat","price":900,"color":"#FFD700","description":"..."}`. `category` is `hat` or `cloak` (trails were removed; clients drop them). `collection` puts the item under a shop tab (default `plebmc`) and `creator` shows "by <creator>" in the details. `state` can carry `"collections":[{"id":"plebmc","name":"PlebMc"},{"id":"partners","name":"Partners","icon":"partner","color":"#FF7AC6"}]` (the default when it doesn't); items in a collection that isn't listed show under the first one. A cloak has `"render":"cloak"` and either a `"texture"` id (plus `"textureWidth"`) for an image the client downloads with `texture`, or just a `color` for a plain cloak. Cloak images use the vanilla cape layout (64x32) at any multiple up to 4096x2048; the model's UVs are fractions of the image, so a 512x256 cloak draws at 8x detail. An animated cloak stacks its frames top to bottom (the image is `textureWidth` wide and a multiple of `textureWidth/2` tall); the catalog item then has `"frames":16,"frameTime":90` (ms per frame, 20 to 10000). The client slices the frames into separate textures (at most 64 frames and 8,388,608 pixels) and shows frame `(now / frameTime) % frames`. `tools/cloak-maker/index.html` builds these images. `render` is the look the client draws: hats `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`, `cap`, `headphones`, `bunny`, `wizard`, `viking`, `cowboy`, `propeller`, `chef`. `color` tints a hat (optional). A 3D model hat has `"render":"model"`, a `"model"` id and a `"texture"` id (plus `"textureWidth"`/`"textureHeight"`); the client downloads both with `texture` (the model as `{"v":1,"quads":[x,y,z,u,v ×4, ...]}` in head pixels, y up, top of the head at y 8) and draws it on the head. Items with a `render` this client doesn't know are hidden, so newer items don't break older clients. Without a catalog the client shows the built-in one (ids equal to the render names, prices 250 to 2,500).
 
 ### Server plugins
 
@@ -407,6 +408,20 @@ Setting: **Settings > Behavior > Custom item models** (on by default). Code: `it
 ## Cosmetic crown
 
 The Crown hat is the "goldcrown-king" Blockbench model: `cosmetics/CrownModel.java` (boxes and UVs, generated from the .bbmodel) and `assets/plebitems/textures/cosmetics/crown.png`, drawn by `CosmeticLayer`. The other hats are still plain colored boxes.
+
+## Title screen
+
+The browser client builds on EaglercraftX u53; see `client-u53/README.md`.
+
+
+With the PlebClient menus on, `hud/TitleMenu.java` replaces the vanilla title screen. The background is the PlebMc wallpaper (`assets/plebitems/textures/gui/wallpaper.jpg`, scaled to cover the screen with a slight mouse parallax) or the Minecraft panorama. On top of it there is a transparent sidebar (the mascot head from `assets/plebitems/textures/gui/mascot.png`, 11x11 `nav_*` icons from `Ui`, labels that slide in while you point at it, a translucent accent hover wash, a thin accent divider and a small accent indicator) and a faint version line. Arrow keys and Enter move through the sidebar, and 1-9 open an entry. `TitleActions` holds what each entry opens and differs per client (browser: Edit Profile, Language and Credits; Forge: Forge Mods and Quit).
+
+- **Showcase**: your own skin in 3D (the browser uses the Eagler profile skin, Forge the session's skin), turning slowly and following the mouse, wearing the hat and cloak you last wore on PlebMc, with your name and a `store.plebmc.top` pill under it. Clicking the player or the pill opens https://store.plebmc.top.
+- **Coins** (top right): your Pleb Coins from the last time you were on PlebMc (`--` until then). Clicking opens the cosmetics shop. The last balance and outfit are kept in the client's storage (`lastLook`, written by `Cosmetics.lookJson()` and read back with `Cosmetics.loadLook()`).
+- **Mini mascot** (bottom right): the chibi mascot (`buddy.png`, a 5x4 sheet of 108px frames) bobs, hops when you point at him and says a short tip in a speech bubble, and explodes when clicked, then pops back.
+- **Particles**: snow (default), embers or fireflies drift over the background. Each particle is computed from its index and the time, so nothing is stored.
+
+**Settings > Title screen** (the sidebar's Customize entry) sets the sidebar (opens on hover, always open, icons only), the background (wallpaper or panorama), how much it is darkened, the mini mascot, the particles, the mascot head, a clock, the splash text and the accent color (12 colors). Turning the PlebClient menus off brings back the classic menu.
 
 ## Menu theme
 

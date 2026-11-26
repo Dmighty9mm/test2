@@ -178,6 +178,31 @@ public final class PlebTheme {
 	/** The animated menu background (also behind lists and loading screens). */
 	public static void background(int w, int h, boolean grid) {
 		float t = time();
+		int acc0 = Ui.accent();
+		switch (ClientPrefs.get().menuBackground) {
+		case 0: // the wallpaper, blurred and dimmed
+			if (TitleMenu.menuWallpaper(w, h, true, 0x88)) {
+				glow(w / 2f, -h * 0.2f, w * 0.6f, Ui.alpha(acc0, 0x22));
+				return;
+			}
+			break;
+		case 1: // the wallpaper, sharp and lightly dimmed
+			if (TitleMenu.menuWallpaper(w, h, false, 0x8C)) {
+				return;
+			}
+			break;
+		case 2: // plain and dark
+			gradient(0, 0, w, h, 0xFF0B0F15, 0xFF06080C);
+			return;
+		case 4: // the old animated grid
+			break;
+		default: // soft glows, no grid
+			grid = false;
+			break;
+		}
+		if (ClientPrefs.get().menuBackground != 4) {
+			grid = false;
+		}
 		gradient(0, 0, w, h, SKY_TOP, SKY_BOTTOM);
 		int acc = Ui.accent();
 		float gx = w * (0.22f + 0.06f * (float) Math.sin(t * 0.21));

@@ -39,6 +39,21 @@ public final class ModRegistry {
         public final Mods.Supplies supplies = add(new Mods.Supplies());
         public final Mods.LowHealth lowHealth = add(new Mods.LowHealth());
         public final Mods.FpsBoost fpsBoost = add(new Mods.FpsBoost());
+        public final MoreMods.Speed speed = add(new MoreMods.Speed());
+        public final MoreMods.DayCounter dayCounter = add(new MoreMods.DayCounter());
+        public final MoreMods.Biome biome = add(new MoreMods.Biome());
+        public final MoreMods.Server serverAddress = add(new MoreMods.Server());
+        public final MoreMods.Arrows arrows = add(new MoreMods.Arrows());
+        public final MoreMods.LightLevel lightLevel = add(new MoreMods.LightLevel());
+        public final MoreMods.SessionTimer sessionTimer = add(new MoreMods.SessionTimer());
+        public final MoreMods.Crosshair crosshair = add(new MoreMods.Crosshair());
+        public final MoreMods.Scoreboard scoreboard = add(new MoreMods.Scoreboard());
+        public final MoreMods.Chat chat = add(new MoreMods.Chat());
+        public final MoreMods.HurtCam hurtCam = add(new MoreMods.HurtCam());
+        public final MoreMods.BlockOutline blockOutline = add(new MoreMods.BlockOutline());
+        public final MoreMods.ClearWeather clearWeather = add(new MoreMods.ClearWeather());
+        public final MoreMods.Overlays overlays = add(new MoreMods.Overlays());
+        public final MoreMods.DeathCoords deathCoords = add(new MoreMods.DeathCoords());
 
         private <T extends Mod> T add(T m) {
                 mods.add(m);
@@ -83,6 +98,13 @@ public final class ModRegistry {
                         if (s.get("opts") instanceof Map) {
                                 Map<?, ?> o = (Map<?, ?>) s.get("opts");
                                 for (Mod.Setting st : m.settings()) {
+                                        if (!o.containsKey(st.key)) {
+                                                continue; // not in this save (or import): keep what it is
+                                        }
+                                        if (st.isText()) {
+                                                st.setText(o.get(st.key) instanceof String ? (String) o.get(st.key) : null);
+                                                continue;
+                                        }
                                         double v = ProtoValues.asNumber(o.get(st.key), st.def);
                                         st.set(Double.isNaN(v) ? st.def : (int) v);
                                 }
@@ -102,7 +124,7 @@ public final class ModRegistry {
                         if (!m.settings().isEmpty()) {
                                 Map<String, Object> o = new LinkedHashMap<>();
                                 for (Mod.Setting st : m.settings()) {
-                                        o.put(st.key, (double) st.get());
+                                        o.put(st.key, st.isText() ? (Object) st.text() : (Object) (double) st.get());
                                 }
                                 s.put("opts", o);
                         }
