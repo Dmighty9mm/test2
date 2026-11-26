@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Map;
 
 import net.plebmc.client.cosmetics.ClientSession;
+import net.plebmc.client.cosmetics.UpdateCheck;
+import net.plebmc.client.mods.ClientInfo;
 import net.plebmc.client.mods.SettingsStore;
 
 /**
@@ -143,6 +145,35 @@ public class ClientSessionTest {
 		check(ClientSession.signedIn() && "Steve".equals(ClientSession.name()), "fixed name signs in");
 		ClientSession.fixName("Alex");
 		check(!ClientSession.signedIn(), "saved sign-in for another launcher name is not used");
+
+		// update checker: asks once, with this version and the platform
+		ClientSession.fixName(null);
+		start(store());
+		UpdateCheck.reset();
+		posts.clear();
+		status = 200;
+		reply = "{\"ok\":true,\"latest\":\"9.0\",\"minimum\":\"1.0\",\"url\":\"https://client.plebmc.top/download\",\"message\":\"New!\",\"outdated\":true,\"required\":false}";
+		UpdateCheck.check("web");
+		check(posts.size() == 1 && posts.get(0)[0].endsWith("/api/client/version"), "update check posts to the panel");
+		check(posts.get(0)[1].contains("\"version\":\"" + ClientInfo.VERSION + "\"") && posts.get(0)[1].contains("\"platform\":\"web\""),
+				"update check sends version and platform");
+		check(UpdateCheck.outdated && !UpdateCheck.required && UpdateCheck.shouldShow(), "outdated client is told");
+		check("9.0".equals(UpdateCheck.latest) && "https://client.plebmc.top/download".equals(UpdateCheck.url), "latest and link kept");
+		UpdateCheck.check("web");
+		check(posts.size() == 1, "asks only once per start");
+		UpdateCheck.dismissed = true;
+		check(!UpdateCheck.shouldShow(), "Later hides it for the session");
+		UpdateCheck.reset();
+		reply = "{\"ok\":true,\"latest\":\"9.0\",\"url\":\"javascript:alert(1)\",\"outdated\":true,\"required\":true}";
+		UpdateCheck.check("wasm");
+		UpdateCheck.dismissed = true;
+		check(UpdateCheck.required && UpdateCheck.shouldShow(), "required update can't be dismissed");
+		check(UpdateCheck.url.startsWith("https://client.plebmc.top"), "non-web link replaced with the panel");
+		UpdateCheck.reset();
+		status = 0;
+		reply = null;
+		UpdateCheck.check("web");
+		check(!UpdateCheck.known && !UpdateCheck.shouldShow(), "panel down: client works as before");
 
 		System.out.println(checks - failures + "/" + checks + " client sign-in checks passed");
 		System.exit(failures == 0 ? 0 : 1);

@@ -257,11 +257,11 @@ public final class ClientSession {
 		version++;
 	}
 
-	private interface Answer {
+	interface Answer {
 		void answer(int status, Map<?, ?> json);
 	}
 
-	private static void post(String route, Map<String, Object> b, Answer a) {
+	static void post(String route, Map<String, Object> b, Answer a) {
 		Http h = http;
 		if (h == null) {
 			a.answer(0, null);

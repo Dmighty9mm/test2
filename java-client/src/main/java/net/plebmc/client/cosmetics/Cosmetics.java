@@ -757,23 +757,9 @@ public final class Cosmetics {
 		return send(m);
 	}
 
-	/** Asks the server for this player's plebmc.top login. */
+	/** Asks the server what this player's account may do (admin menu). */
 	public static boolean requestAccount() {
 		return send(obj("type", "account"));
-	}
-
-	/** Logs in with the code from plebmc.top (Connections > Minecraft > Link). */
-	public static boolean link(String code) {
-		account.pending = true;
-		account.version++;
-		return send(obj("type", "link", "code", code));
-	}
-
-	/** Logs out: the server unlinks this Minecraft account from the website account. */
-	public static boolean logout() {
-		account.pending = true;
-		account.version++;
-		return send(obj("type", "logout"));
 	}
 
 	// ==================== PlebMc account sign-in ====================
@@ -862,7 +848,7 @@ public final class Cosmetics {
 		return send(m);
 	}
 
-	/** The plebmc.top login, as the server last reported it. */
+	/** The account role, as the server last reported it. */
 	public static Account account() {
 		return account;
 	}

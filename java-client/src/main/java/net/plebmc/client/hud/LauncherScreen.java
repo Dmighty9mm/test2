@@ -4,7 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.client.gui.GuiScreen;
-import net.plebmc.client.cosmetics.Account;
+import net.plebmc.client.cosmetics.ClientSession;
+import net.plebmc.client.cosmetics.PlebAccount;
 import net.plebmc.client.cosmetics.Cosmetics;
 import net.plebmc.client.mods.ClientInfo;
 import net.plebmc.client.mods.ClientPrefs;
@@ -40,7 +41,6 @@ public final class LauncherScreen extends PlebScreen {
 		doors.add(new Door("HUD", "hud", "Move, resize and recolor your HUD", () -> new HudEditorScreen(this)));
 		doors.add(new Door("Sign in", "lock", "Your PlebMc account: sign in so nobody else can spend your coins",
 				() -> new SignInScreen(this)));
-		doors.add(new Door("Account", "account", "Your plebmc.top login and profile", () -> new AccountScreen(this)));
 		doors.add(new Door("Settings", "settings", "Client preferences", () -> new SettingsScreen(this)));
 		if (ClientPrefs.get().developer) {
 			doors.add(new Door("Debug", "debug", "Apollo diagnostics (developer)", () -> new ApolloDebugScreen(this)));
@@ -160,8 +160,10 @@ public final class LauncherScreen extends PlebScreen {
 		// status strip
 		int sy = y + tile + 12;
 		StringBuilder status = new StringBuilder();
-		Account a = Cosmetics.account();
-		String who = a.linked ? a.displayName + (a.rank().isEmpty() ? "" : " §8·§7 " + a.rank()) : "Not logged in";
+		PlebAccount a = Cosmetics.plebAccount();
+		boolean in = ClientSession.signedIn();
+		String role = Cosmetics.account().role;
+		String who = in ? ClientSession.name() + (role.isEmpty() || "player".equals(role) ? "" : " §8·§7 " + role) : "Not signed in";
 		String coins = Cosmetics.coins() >= 0 ? Ui.num(Cosmetics.coins()) + " " + Cosmetics.currency() : null;
 		status.append(who);
 		int w1 = Ui.width(who) + 14;
@@ -169,9 +171,9 @@ public final class LauncherScreen extends PlebScreen {
 		int total = w1 + (coins == null ? 0 : w2 + 6);
 		int sx = this.width / 2 - total / 2;
 		Ui.card(sx, sy, w1, 16, Ui.BASE, Ui.BORDER);
-		Ui.round(sx + 4, sy + 6, 4, 4, a.linked ? Ui.GOOD : Ui.FAINT);
-		Ui.text(who, sx + 11, sy + 4, a.linked ? Ui.TEXT : Ui.MUTED);
-		tooltipArea(sx, sy, w1, 16, a.linked ? "Logged in with plebmc.top" : "Log in from Account (5)");
+		Ui.round(sx + 4, sy + 6, 4, 4, in ? Ui.GOOD : Ui.FAINT);
+		Ui.text(who, sx + 11, sy + 4, in ? Ui.TEXT : Ui.MUTED);
+		tooltipArea(sx, sy, w1, 16, in ? (a.signedIn ? "Signed in to your PlebMc account" : "Signed in to your PlebMc account (the server is checking it)") : "Sign in from Sign in (5)");
 		if (coins != null) {
 			int cx = sx + w1 + 6;
 			Ui.card(cx, sy, w2, 16, Ui.BASE, Ui.alpha(Ui.GOLD, 0x60));

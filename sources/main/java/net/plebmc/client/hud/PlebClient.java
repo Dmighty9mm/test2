@@ -115,6 +115,8 @@ public final class PlebClient {
 							net.lax1dude.eaglercraft.v1_8.profile.EaglerProfile.save();
 						}
 					});
+			// tells outdated clients to update (the owner sets the latest version on the panel)
+			net.plebmc.client.cosmetics.UpdateCheck.check(PlebClient.platformName());
 			net.plebmc.client.cosmetics.Cosmetics.init(new PluginChannels.Log() {
 				@Override
 				public void info(String msg) {
@@ -630,5 +632,21 @@ public final class PlebClient {
 
 	static EntityPlayerSP player() {
 		return mc == null ? null : mc.thePlayer;
+	}
+
+	/** "web", "wasm" or "desktop", for the panel's version stats. */
+	static String platformName() {
+		try {
+			String t = String.valueOf(net.lax1dude.eaglercraft.v1_8.EagRuntime.getPlatformType());
+			if (t.contains("WASM")) {
+				return "wasm";
+			}
+			if (t.contains("JAVASCRIPT")) {
+				return "web";
+			}
+			return t.toLowerCase();
+		} catch (RuntimeException e) {
+			return "unknown";
+		}
 	}
 }

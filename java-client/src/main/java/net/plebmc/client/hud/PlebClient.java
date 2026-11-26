@@ -113,6 +113,8 @@ public final class PlebClient {
 			net.plebmc.client.cosmetics.ClientSession.setup((url, json, done) -> net.plebmc.forge.compat.PlatformPlebHttp
 					.post(url, json, (status, body) -> done.done(status, body)), STORE, name -> {
 					});
+			// tells outdated clients to update (the owner sets the latest version on the panel)
+			net.plebmc.client.cosmetics.UpdateCheck.check("forge");
 			net.plebmc.client.cosmetics.Cosmetics.init(new PluginChannels.Log() {
 				@Override
 				public void info(String msg) {

@@ -7,6 +7,8 @@ package net.plebmc.client.mods;
 public final class ClientInfo {
 
         public static final String NAME = "PlebClient";
+        /** The version of this build. Raise it for each release and set "latest" on the panel to match. */
+        public static final String VERSION = "2.0";
 
         private ClientInfo() {
         }
