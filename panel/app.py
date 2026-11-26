@@ -26,6 +26,9 @@ Commands
   python3 app.py set-role NAME owner|admin|player
   python3 app.py reset-password NAME
   python3 app.py unlock NAME
+  python3 app.py add-build KIND VERSION FILE [--publish]
+                                         put a build on the Downloads page from the
+                                         command line (kinds: see BUILD_KINDS)
 """
 
 import base64
@@ -37,6 +40,8 @@ import mimetypes
 import os
 import re
 import secrets
+import shutil
+import tempfile
 import sqlite3
 import sys
 import threading
@@ -65,6 +70,20 @@ COMMAND_ACTIONS = ("coins", "give", "remove", "equip", "kick", "signout")
 CATEGORIES = ("hat", "trail", "cloak", "wings")
 RANK_NAME = re.compile(r"[a-z0-9_-]{1,36}")
 PERM_NODE = re.compile(r"[A-Za-z0-9_.*-]{1,200}")
+# builds the panel hosts: kind -> (name, who can download it, file types).
+# "public" ones are on the Downloads page for everyone; "staff" ones only admins see.
+BUILD_KINDS = {
+    "windows": ("PlebClient for Windows", "public", (".zip", ".exe")),
+    "wasm": ("PlebClient web (WASM)", "public", (".zip",)),
+    "offline": ("PlebClient offline (one HTML file)", "public", (".html", ".zip")),
+    "forge-1.8.9": ("PlebMc for Forge 1.8.9", "public", (".zip", ".jar")),
+    "forge-1.21.1": ("PlebMc for Forge 1.21.1", "public", (".zip", ".jar")),
+    "plebcolors": ("PlebColors plugin", "staff", (".zip", ".jar")),
+    "plebioapi": ("PlebioAPI plugin", "staff", (".zip", ".jar")),
+    "panel": ("PlebMc Panel", "staff", (".zip",)),
+}
+CLIENT_BUILD_KINDS = ("windows", "wasm", "offline", "forge-1.8.9", "forge-1.21.1")
+BUILD_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,31}$")
 
 
 def clean_ranks(r):
@@ -137,6 +156,11 @@ class Config:
         self.secure_cookies = (secure == "1") if secure is not None else self.public_url.startswith("https://")
         # scrypt cost; tests turn it down
         self.scrypt_n = int(env("PANEL_SCRYPT_N", str(2 ** 14)))
+        # where uploaded builds are kept (next to the database, so the Docker volume keeps them)
+        db_dir = os.path.dirname(os.path.abspath(self.db)) if self.db != ":memory:" else tempfile.gettempdir()
+        self.builds = env("PANEL_BUILDS", os.path.join(db_dir, "builds"))
+        # the biggest build an owner can upload, in MB
+        self.max_build_mb = int(env("PANEL_MAX_BUILD_MB", "500"))
 
 
 CFG = Config()
@@ -294,6 +318,22 @@ CREATE TABLE IF NOT EXISTS notes (
   text TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS notes_name ON notes(name_key);
+CREATE TABLE IF NOT EXISTS builds (
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL,
+  version TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  stored TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  sha256 TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  by_name TEXT NOT NULL,
+  uploaded_at INTEGER NOT NULL,
+  live INTEGER NOT NULL DEFAULT 0,
+  published_at INTEGER,
+  downloads INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS builds_kind ON builds(kind, id);
 CREATE TABLE IF NOT EXISTS client_seen (
   day INTEGER NOT NULL,
   version TEXT NOT NULL,
@@ -914,7 +954,8 @@ class Panel:
         st = self.server_status()
         return {"site": self.cfg.site_name, "openRegistration": self.cfg.open_registration,
                 "server": {"connected": st["connected"], "online": st["online"], "currency": st["currency"]},
-                "client": self.client_release(), "announcement": self.db.get_kv("announcement", None)}
+                "client": self.client_release(), "announcement": self.db.get_kv("announcement", None),
+                "downloads": self.downloads()}
 
     # ---------- player notes (admins) ----------
 
@@ -1005,6 +1046,140 @@ class Panel:
                            since)
         rows.sort(key=lambda r: (version_key(r["version"]), r["n"]), reverse=True)
         return rows[:30]
+
+    # ---------- builds (the Downloads page) ----------
+
+    @staticmethod
+    def build_out(b):
+        name, who, _ = BUILD_KINDS.get(b["kind"], (b["kind"], "staff", ()))
+        return {"id": b["id"], "kind": b["kind"], "kindName": name, "audience": who, "version": b["version"],
+                "filename": b["filename"], "size": b["size"], "sha256": b["sha256"], "notes": b["notes"],
+                "by": b["by_name"], "uploadedAt": b["uploaded_at"], "live": bool(b["live"]),
+                "publishedAt": b["published_at"], "downloads": b["downloads"],
+                "url": "/download/" + b["kind"] if b["live"] else "/download/build/%d" % b["id"]}
+
+    def downloads(self, staff=False):
+        """The published build of each kind: everyone sees the client ones, admins also the plugins."""
+        rows = self.db.all("SELECT * FROM builds WHERE live=1")
+        order = list(BUILD_KINDS)
+        rows = [r for r in rows if r["kind"] in BUILD_KINDS and (staff or BUILD_KINDS[r["kind"]][1] == "public")]
+        rows.sort(key=lambda r: order.index(r["kind"]))
+        return [self.build_out(r) for r in rows]
+
+    def admin_builds(self):
+        rows = self.db.all("SELECT * FROM builds ORDER BY id DESC LIMIT 300")
+        kinds = [{"kind": k, "name": v[0], "audience": v[1], "types": list(v[2])} for k, v in BUILD_KINDS.items()]
+        return {"kinds": kinds, "builds": [self.build_out(r) for r in rows], "maxMb": self.cfg.max_build_mb}
+
+    def add_build(self, actor_name, kind, version, filename, src, notes=""):
+        """Stores a build. src is a readable file object (the upload) or a path; it is copied in."""
+        if kind not in BUILD_KINDS:
+            raise ApiError(400, "Pick what this build is.")
+        version = str(version or "").strip()
+        if not BUILD_VERSION.match(version):
+            raise ApiError(400, "Give a version like 2.0 or 2.0.1.")
+        filename = os.path.basename(str(filename or "").replace("\\", "/")).strip()
+        filename = re.sub(r"[^A-Za-z0-9._ +()-]", "_", filename)[:120]
+        if not filename or not filename.lower().endswith(BUILD_KINDS[kind][2]):
+            raise ApiError(400, "%s must be a %s file." % (BUILD_KINDS[kind][0], " or ".join(BUILD_KINDS[kind][2])))
+        notes = str(notes or "").strip()[:300]
+        os.makedirs(self.cfg.builds, exist_ok=True)
+        limit = self.cfg.max_build_mb * 1024 * 1024
+        fd, tmp = tempfile.mkstemp(prefix=".upload-", dir=self.cfg.builds)
+        digest = hashlib.sha256()
+        size = 0
+        try:
+            with os.fdopen(fd, "wb") as out:
+                if isinstance(src, str):
+                    src = open(src, "rb")
+                    close = True
+                else:
+                    close = False
+                try:
+                    reader, remaining = (src[0], src[1]) if isinstance(src, tuple) else (src, None)
+                    while True:
+                        want = 1024 * 1024 if remaining is None else min(1024 * 1024, remaining)
+                        if want <= 0:
+                            break
+                        chunk = reader.read(want)
+                        if not chunk:
+                            break
+                        size += len(chunk)
+                        if size > limit:
+                            raise ApiError(413, "That build is bigger than %d MB (PANEL_MAX_BUILD_MB)." % self.cfg.max_build_mb)
+                        digest.update(chunk)
+                        out.write(chunk)
+                        if remaining is not None:
+                            remaining -= len(chunk)
+                    if remaining:
+                        raise ApiError(400, "The upload was cut off. Try again.")
+                finally:
+                    if close:
+                        src.close()
+            if size == 0:
+                raise ApiError(400, "That file is empty.")
+            cur = self.db.run("INSERT INTO builds(kind,version,filename,stored,size,sha256,notes,by_name,uploaded_at) "
+                              "VALUES(?,?,?,?,?,?,?,?,?)", kind, version, filename, "", size, digest.hexdigest(), notes,
+                              actor_name, self.now())
+            bid = cur.lastrowid
+            stored = "%d-%s" % (bid, filename.replace(" ", "_"))
+            os.replace(tmp, os.path.join(self.cfg.builds, stored))
+            tmp = None
+            self.db.run("UPDATE builds SET stored=? WHERE id=?", stored, bid)
+        finally:
+            if tmp and os.path.exists(tmp):
+                os.remove(tmp)
+        self.audit(actor_name, "build-upload", "%s %s (%s, %d bytes)" % (kind, version, filename, size))
+        return {"ok": True, "build": self.build_out(self.db.one("SELECT * FROM builds WHERE id=?", bid))}
+
+    def build(self, bid):
+        b = self.db.one("SELECT * FROM builds WHERE id=?", int(bid or 0))
+        if not b:
+            raise ApiError(404, "No such build.")
+        return b
+
+    def publish_build(self, actor, bid, notify=False):
+        """Makes this build the one on the Downloads page for its kind (the one before is kept, unpublished)."""
+        b = self.build(bid)
+        with self.db.tx():
+            self.db.run("UPDATE builds SET live=0 WHERE kind=?", b["kind"])
+            self.db.run("UPDATE builds SET live=1, published_at=? WHERE id=?", self.now(), b["id"])
+        detail = "%s %s" % (b["kind"], b["version"])
+        if notify and b["kind"] in CLIENT_BUILD_KINDS:
+            if not VERSION_RE.match(b["version"]):
+                raise ApiError(400, "Published, but clients weren't told: the update checker needs a version like 2.1.")
+            r = self.client_release()
+            if r["minimum"] and version_key(r["minimum"]) > version_key(b["version"]):
+                raise ApiError(400, "Published, but clients weren't told: Oldest allowed is newer than this version.")
+            self.db.set_kv("client_release", {"latest": b["version"], "minimum": r["minimum"],
+                                              "url": self.cfg.public_url + "/#downloads", "message": r["message"],
+                                              "at": self.now()})
+            detail += ", clients told to update"
+        self.audit(actor["name"], "build-publish", detail)
+        return {"ok": True}
+
+    def unpublish_build(self, actor, bid):
+        b = self.build(bid)
+        self.db.run("UPDATE builds SET live=0 WHERE id=?", b["id"])
+        self.audit(actor["name"], "build-unpublish", "%s %s" % (b["kind"], b["version"]))
+        return {"ok": True}
+
+    def delete_build(self, actor, bid):
+        b = self.build(bid)
+        if b["live"]:
+            raise ApiError(400, "Unpublish it first, or publish another build in its place.")
+        path = os.path.join(self.cfg.builds, b["stored"])
+        self.db.run("DELETE FROM builds WHERE id=?", b["id"])
+        if b["stored"] and os.path.isfile(path):
+            os.remove(path)
+        self.audit(actor["name"], "build-delete", "%s %s (%s)" % (b["kind"], b["version"], b["filename"]))
+        return {"ok": True}
+
+    def build_file(self, b):
+        path = os.path.join(self.cfg.builds, b["stored"]) if b and b["stored"] else None
+        if not path or not os.path.isfile(path):
+            raise ApiError(404, "That build's file is missing on the panel.")
+        return path
 
     # ---------- designs (hat and cloak makers) ----------
 
@@ -1369,6 +1544,8 @@ class Handler(BaseHTTPRequestHandler):
                 if method == "POST":
                     self.same_origin()
                 return self.web_api(method, path[len("/api/"):], url)
+            if method == "GET" and path.startswith("/download/"):
+                return self.download(path[len("/download/"):])
             if method == "GET":
                 return self.static(path)
             raise ApiError(404, "Not found.")
@@ -1404,6 +1581,39 @@ class Handler(BaseHTTPRequestHandler):
         self.security_headers()
         self.end_headers()
         self.wfile.write(data)
+
+    def download(self, rest):
+        """/download/<kind> = the published build; /download/build/<id> = any build (admins)."""
+        p = self.panel
+        if rest.startswith("build/"):
+            self.web_user(role="admin")
+            try:
+                b = p.build(int(rest[len("build/"):]))
+            except ValueError:
+                raise ApiError(404, "Not found.")
+        else:
+            kind = rest.strip("/")
+            if kind not in BUILD_KINDS:
+                raise ApiError(404, "Not found.")
+            if BUILD_KINDS[kind][1] != "public":
+                self.web_user(role="admin")
+            b = p.db.one("SELECT * FROM builds WHERE kind=? AND live=1", kind)
+            if not b:
+                raise ApiError(404, "Nothing is published for that yet.")
+        path = p.build_file(b)
+        p.db.run("UPDATE builds SET downloads=downloads+1 WHERE id=?", b["id"])
+        size = os.path.getsize(path)
+        self.send_response(200)
+        # always a download, never shown in the page (the offline client is an HTML file)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Disposition", 'attachment; filename="%s"' % b["filename"].replace('"', ""))
+        self.send_header("Content-Length", str(size))
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("X-Checksum-SHA256", b["sha256"])
+        self.security_headers()
+        self.end_headers()
+        with open(path, "rb") as fh:
+            shutil.copyfileobj(fh, self.wfile, 1024 * 1024)
 
     def web_api(self, method, route, url):
         p = self.panel
@@ -1525,6 +1735,33 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST" and route == "admin/ranks":
             actor = self.web_user(role="owner")
             return self.send_json(200, p.rank_change(actor, self.body()))
+        # ---------- builds ----------
+        if method == "GET" and route == "downloads":
+            acc = self.web_user(required=False)
+            staff = bool(acc) and ROLES.index(acc["role"]) >= ROLES.index("admin")
+            return self.send_json(200, {"ok": True, "builds": p.downloads(staff)})
+        if method == "GET" and route == "admin/builds":
+            self.web_user(role="admin")
+            return self.send_json(200, {"ok": True, **p.admin_builds()})
+        if method == "POST" and route == "admin/builds/upload":
+            actor = self.web_user(role="owner")
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > p.cfg.max_build_mb * 1024 * 1024:
+                raise ApiError(413, "That build is bigger than %d MB (PANEL_MAX_BUILD_MB)." % p.cfg.max_build_mb)
+            r = p.add_build(actor["name"], one("kind"), one("version"), one("name"), (self.rfile, n), one("notes"))
+            if one("publish") == "1":
+                p.publish_build(actor, r["build"]["id"], one("notify") == "1")
+                r["build"] = p.build_out(p.build(r["build"]["id"]))
+            return self.send_json(200, r)
+        if method == "POST" and route in ("admin/builds/publish", "admin/builds/unpublish", "admin/builds/delete"):
+            actor = self.web_user(role="owner")
+            b = self.body()
+            bid = int(b.get("id") or 0)
+            if route.endswith("publish") and not route.endswith("unpublish"):
+                return self.send_json(200, p.publish_build(actor, bid, bool(b.get("notify"))))
+            if route.endswith("unpublish"):
+                return self.send_json(200, p.unpublish_build(actor, bid))
+            return self.send_json(200, p.delete_build(actor, bid))
         if method == "GET" and route == "admin/audit":
             self.web_user(role="admin")
             before = one("before")
@@ -1636,6 +1873,12 @@ def main(argv):
                 sys.exit("No such account.")
             panel.set_password(acc, ask_password(), "console")
             print("Password changed; %s was signed out everywhere." % acc["name"])
+        elif cmd == "add-build" and len(args) >= 3:
+            r = panel.add_build("console", args[0], args[1], os.path.basename(args[2]), args[2])
+            if "--publish" in args[3:]:
+                panel.publish_build({"name": "console"}, r["build"]["id"])
+            print("Added %s %s (%s)%s." % (args[0], args[1], r["build"]["filename"],
+                                            ", published" if "--publish" in args[3:] else ""))
         elif cmd == "unlock" and args:
             acc = panel.account(args[0])
             if not acc:
