@@ -361,6 +361,18 @@ public class ShopTest {
         check("horns".equals(eq.get("hat")), "auto-equipped");
         String saved = new String(Files.readAllBytes(new File(dir, "players.yml").toPath()), StandardCharsets.UTF_8);
         check(saved.contains("horns") && saved.contains("coins: 6500"), "saved right away");
+        // ---- coin wipe ----
+        cmd("coins", "wipe");
+        check(mighty.coins() == 6500, "wipe without confirm changes nothing");
+        cmd("coins", "wipe", "confirm");
+        check(mighty.coins() == 0, "wipe confirm: coins 0 and sent to the client");
+        File[] backups = dir.listFiles((d, n) -> n.startsWith("players.yml.before-wipe-"));
+        check(backups != null && backups.length == 1 && new String(Files.readAllBytes(backups[0].toPath()), StandardCharsets.UTF_8).contains("coins: 6500"),
+                "backup keeps the old coins");
+        String wiped = new String(Files.readAllBytes(new File(dir, "players.yml").toPath()), StandardCharsets.UTF_8);
+        check(wiped.contains("horns") && !wiped.contains("coins: 6500"), "cosmetics kept, coins gone on disk");
+        backups[0].delete();
+        cmd("coins", "set", "Mighty", "6500");
         core.fromClient(mighty.id, "{\"type\":\"buy\",\"id\":\"halo\"}");
         check(mighty.coins() == 6500, "cooldown blocks a second action");
         sleepCooldown();

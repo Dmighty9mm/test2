@@ -111,6 +111,7 @@ Passwords never go through the game, and the API key never leaves the proxy.
 | `/plebshop quests` | Today's and this week's quests in every category |
 | `/plebshop list` | Items, prices and looks |
 | `/plebshop coins <give\|take\|set> <player> <amount>` | Change someone's PlebMc Coins |
+| `/plebshop coins wipe confirm` | Sets **every** player's coins to 0 (cosmetics stay). Saves `players.yml.before-wipe-<time>` first |
 | `/plebshop balance <player>` / `info <player>` | Someone's coins (and what they own) |
 | `/plebshop progress <player> <type> [amount]` | Count quest progress on the server they're on |
 | `/plebshop give <player> <item>` / `remove` | Give or take an item for free |

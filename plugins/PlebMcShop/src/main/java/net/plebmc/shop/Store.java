@@ -128,6 +128,35 @@ final class Store {
 		return version;
 	}
 
+	/**
+	 * Sets every player's coins to 0 (cosmetics, quests and streaks stay) after
+	 * copying players.yml to players.yml.before-wipe-<time>. Returns how many
+	 * players had coins, or -1 if the backup couldn't be made.
+	 */
+	synchronized int wipeCoins() {
+		save();
+		if (file.exists()) {
+			File backup = new File(file.getPath() + ".before-wipe-" + System.currentTimeMillis());
+			try {
+				java.nio.file.Files.copy(file.toPath(), backup.toPath());
+			} catch (IOException e) {
+				log.severe("Coin wipe stopped: could not back up " + file + ": " + e);
+				return -1;
+			}
+			log.info("Coin wipe: backup saved to " + backup.getName());
+		}
+		int n = 0;
+		for (Data d : players.values()) {
+			if (d.coins != 0) {
+				n++;
+				d.coins = 0;
+			}
+		}
+		changed();
+		save();
+		return n;
+	}
+
 	void saveIfDirty() {
 		if (dirty) {
 			save();

@@ -1232,6 +1232,24 @@ final class ShopCore {
 			return;
 		}
 		case "coins": {
+			if (a.length >= 2 && "wipe".equalsIgnoreCase(a[1])) {
+				if (a.length < 3 || !"confirm".equalsIgnoreCase(a[2])) {
+					s.reply(prefix + color("&eThis sets EVERY player's " + currency
+							+ " to 0 (cosmetics stay). A backup of players.yml is saved first. Type: /" + label
+							+ " coins wipe confirm"));
+					return;
+				}
+				int n = store.wipeCoins();
+				if (n < 0) {
+					s.reply(prefix + color("&cStopped: couldn't back up players.yml (see the console). Nothing was changed."));
+					return;
+				}
+				for (UUID id : net.online()) {
+					sendState(id, false);
+				}
+				s.reply(prefix + color("&aWiped " + currency + " for " + n + " players. Everyone is at 0 now."));
+				return;
+			}
 			if (a.length < 4) {
 				s.reply(prefix + color("&cUsage: /" + label + " coins <give|take|set> <player> <amount>"));
 				return;
@@ -1295,7 +1313,7 @@ final class ShopCore {
 		}
 		default:
 			s.reply(prefix + color("&fPlebMc Coins, quests and cosmetics"));
-			for (String line : Arrays.asList("reload", "quests", "list", "coins <give|take|set> <player> <amount>",
+			for (String line : Arrays.asList("reload", "quests", "list", "coins <give|take|set> <player> <amount>", "coins wipe confirm",
 					"balance <player>", "info <player>", "progress <player> <type> [amount]", "give <player> <item>",
 					"remove <player> <item>", "equip <player> <hat|cloak> <item|none>")) {
 				s.reply(color("&7/" + label + " " + line));
