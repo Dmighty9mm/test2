@@ -509,6 +509,11 @@ public final class PlebClient {
 		} catch (Throwable t) {
 			LOG.warn("HUD render failed: " + t);
 		}
+		try {
+			VoteAlert.render(guiW, guiH);
+		} catch (Throwable t) {
+			LOG.warn("vote alert failed: " + t);
+		}
 	}
 
 	/** Draws one HUD box at its saved position; returns {x, y, w, h}. */

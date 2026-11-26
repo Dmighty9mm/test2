@@ -393,6 +393,10 @@ final class ShopCore {
 		boolean first = clients.add(p);
 		if (first) {
 			broadcastSlots(p); // everyone here now sees the Pleb head by this player's name
+			Long votes = unseenVotes.remove(p);
+			if (votes != null) {
+				voteAlert(p, votes); // voted while away: thank them now
+			}
 		}
 		if ("signin".equals(type) || "signout".equals(type)) {
 			// PlebMc account sign-in (SignIn); answered off-thread
@@ -1037,20 +1041,33 @@ final class ShopCore {
 		return "gave " + who + " " + fmt(voteReward) + " " + currency;
 	}
 
+	/** Vote coins a player was paid while not on the PlebMc client (shown when they next are). */
+	private final Map<UUID, Long> unseenVotes = new HashMap<>();
+
 	private void payVote(UUID p, String service) {
 		Store.Data d = store.get(p);
 		d.coins += voteReward;
 		store.changed();
 		store.save();
 		if (net.online().contains(p)) {
-			String text = "+" + fmt(voteReward) + " " + currency + " for voting. Thanks!";
-			if (clients.contains(p)) {
-				notify(p, color(config.str("voting.title", "&a&lThanks for voting")), text);
-				sendState(p, false);
-			} else {
-				net.chat(p, prefix + color("&a" + text));
-			}
+			net.chat(p, prefix + color("&a+" + fmt(voteReward) + " " + currency + " for voting. Thanks!"));
 		}
+		if (clients.contains(p)) {
+			voteAlert(p, voteReward);
+		} else {
+			unseenVotes.merge(p, voteReward, Long::sum);
+		}
+	}
+
+	/** The PlebMc client's big "thanks for voting" banner (with a sound). */
+	private void voteAlert(UUID p, long amount) {
+		Map<String, Object> m = new LinkedHashMap<>();
+		m.put("type", "vote");
+		m.put("amount", amount);
+		m.put("currency", currency);
+		m.put("coins", store.get(p).coins);
+		send(p, m);
+		sendState(p, false);
 	}
 
 	synchronized int announce(String text) {

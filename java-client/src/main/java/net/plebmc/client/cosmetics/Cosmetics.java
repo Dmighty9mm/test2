@@ -626,6 +626,14 @@ public final class Cosmetics {
 					}
 				}
 			}
+		} else if ("vote".equals(type)) {
+			// a vote on a server list was paid: the HUD shows a big thank-you
+			if (m.containsKey("coins")) {
+				coins = Math.max(0, num(m.get("coins"), 0));
+				rememberLook();
+			}
+			voteAlert = Math.max(0, num(m.get("amount"), voteReward));
+			voteAlertCurrency = str(m.get("currency"), currency);
 		} else if ("texture".equals(type)) {
 			textureChunk(m);
 		} else if ("account".equals(type)) {
@@ -1232,6 +1240,20 @@ public final class Cosmetics {
 	public static final String VOTE_URL = "https://eaglercraftservers.com/server/plebmc";
 	private static String voteUrl = VOTE_URL;
 	private static long voteReward = 100;
+
+	private static long voteAlert = -1;
+	private static String voteAlertCurrency = "";
+
+	/** Coins from a vote that the player hasn't been shown yet (and forgets it), or -1. */
+	public static long takeVoteAlert() {
+		long v = voteAlert;
+		voteAlert = -1;
+		return v;
+	}
+
+	public static String voteAlertCurrency() {
+		return voteAlertCurrency.isEmpty() ? currency : voteAlertCurrency;
+	}
 
 	public static String voteUrl() {
 		return voteUrl;

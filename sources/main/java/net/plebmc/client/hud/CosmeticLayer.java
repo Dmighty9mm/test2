@@ -199,7 +199,11 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 	 */
 	public static void wings(Cosmetics.Item it, float time, float speed, float amount) {
 		boolean model = Cosmetics.MODEL.equals(it.render);
-		float flap = 20f + 11f * amount * (float) Math.sin(time * 0.13f * speed);
+		// a real flap: the wings sweep back and forth (about a second and a half per beat,
+		// faster in the air) and the tips rise and dip with it
+		float beat = (float) Math.sin(time * 0.22f * speed);
+		float flap = 30f + 24f * amount * beat;
+		float lift = 9f * amount * beat;
 		for (int side = -1; side <= 1; side += 2) {
 			GlStateManager.pushMatrix();
 			try {
@@ -213,6 +217,7 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 					GlStateManager.translate(0.6f, 0f, 0f);
 				}
 				GlStateManager.rotate(-flap, 0f, 1f, 0f);
+				GlStateManager.rotate(model ? lift : -lift, 0f, 0f, 1f);
 				if (model) {
 					model(it);
 				} else {

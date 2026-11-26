@@ -253,7 +253,6 @@ voting:
   url: 'https://eaglercraftservers.com/server/plebmc'
   announce: true
   announce-message: '&b%player% &7voted for PlebMc and got &e%amount% %currency%&7! Vote too: &f/vote'
-  title: '&a&lThanks for voting'
   votifier:
     enabled: true
     host: 0.0.0.0

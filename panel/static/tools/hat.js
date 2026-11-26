@@ -78,17 +78,20 @@
   const mats = {};
   const matFor = c => mats[c] || (mats[c] = new THREE.MeshLambertMaterial({ color: new THREE.Color(c) }));
   const group = new THREE.Group(); scene.add(group);
+  // wings mode: each side turns around the spine (x 0, the back z 0) so you can watch them flap
+  const rightG = new THREE.Group(), leftG = new THREE.Group(); group.add(rightG, leftG);
+  let flap = true;
   const meshes = new Map();
 
   function rebuild() {
-    for (const m of meshes.values()) group.remove(m);
+    for (const m of meshes.values()) m.parent.remove(m);
     meshes.clear();
     for (const [k, c] of vox) {
       const [x,y,z] = k.split(',').map(Number);
       const m = new THREE.Mesh(boxGeo, matFor(c));
       m.position.set(x + .5, y + .5, z + .5);
       m.userData.k = k;
-      group.add(m); meshes.set(k, m);
+      (x < 0 ? leftG : rightG).add(m); meshes.set(k, m);
     }
     $('count').textContent = vox.size + (vox.size === 1 ? ' block' : ' blocks');
     renderCfg();
@@ -217,6 +220,7 @@
   const toggle = (id, on) => { $(id).setAttribute('aria-pressed', String(on)); return on; };
   $('mirror').onclick = () => { if (mode === 'wings') { status('Wings are always mirrored: you build the right one, the game copies it.'); return; } mirror = toggle('mirror', !mirror); };
   $('spin').onclick = () => { spin = toggle('spin', !spin); };
+  $('flap').onclick = () => { flap = toggle('flap', !flap); };
   const ghostOn = () => $('ghost').getAttribute('aria-pressed') === 'true';
   function showGhost() {
     const on = ghostOn();
@@ -326,6 +330,7 @@
       ? 'Build on the back. You build both sides here, the game uses the right one (x 0 and up) and mirrors it, then flaps them.'
       : 'Build a hat out of blocks on the head. One block is one pixel of a Minecraft head.';
     $('flip').hidden = mode === 'wings';
+    $('flap').hidden = mode !== 'wings';
     drawTemplates();
     showGhost();
     yaw = mode === 'wings' ? 0.5 : Math.PI - 0.6;
@@ -525,6 +530,10 @@
   resize();
   (function loop() {
     if (spin) yaw += 0.008;
+    // the same beat as the game: about a second and a half, sweeping back 6..54 degrees
+    const beat = mode === 'wings' && flap ? Math.sin(performance.now() / 50 * 0.22) : null;
+    const a = beat === null ? 0 : (30 + 24 * beat) * Math.PI / 180;
+    rightG.rotation.y = -a; leftG.rotation.y = a;
     placeCam();
     renderer.render(scene, cam);
     requestAnimationFrame(loop);

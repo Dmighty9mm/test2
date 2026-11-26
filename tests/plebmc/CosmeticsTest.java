@@ -75,6 +75,9 @@ public class CosmeticsTest {
 				"other player's wings");
 		Cosmetics.handle("{\"type\":\"players\",\"players\":{\"" + other + "\":null}}");
 		check(!Cosmetics.isPleb(other), "Pleb mark cleared");
+		Cosmetics.handle("{\"type\":\"vote\",\"amount\":100,\"currency\":\"Pleb Coins\",\"coins\":1250}");
+		check(Cosmetics.coins() == 1250 && Cosmetics.takeVoteAlert() == 100 && Cosmetics.takeVoteAlert() == -1
+				&& "Pleb Coins".equals(Cosmetics.voteAlertCurrency()), "vote banner shown once");
 
 		Cosmetics.handle("{\"type\":\"state\",\"catalog\":[{\"id\":\"gold_tophat\",\"name\":\"Gold Top Hat\","
 				+ "\"category\":\"hat\",\"render\":\"tophat\",\"price\":900,\"color\":\"#FFD700\"},"

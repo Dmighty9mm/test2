@@ -511,12 +511,14 @@ public class ShopTest {
         // ---- voting ----
         long beforeVote = poor.coins();
         check(core.vote("poor", "eaglercraftservers.com").startsWith("gave") && poor.coins() == beforeVote + 100, "a vote pays 100");
+        check(poor.last("vote") != null && ((Number) poor.last("vote").get("amount")).longValue() == 100, "the client gets the vote banner");
         check(core.vote("Poor", "eaglercraftservers.com").contains("already") && poor.coins() == beforeVote + 100, "a repeated vote isn't paid twice");
         check("voteUrl reward".length() > 0 && poor.last("state") != null && "https://eaglercraftservers.com/server/plebmc".equals(poor.last("state").get("voteUrl"))
                 && ((Number) poor.last("state").get("voteReward")).longValue() == 100, "the client gets the vote link and reward");
         check(core.vote("NewKid", "eaglercraftservers.com").contains("hasn't joined"), "a vote before joining waits");
         P kid = join("NewKid", "lobby", true);
         check(kid.coins() >= 100, "paid when they join: " + kid.coins());
+        check(kid.last("vote") != null, "and sees the vote banner when their client says hello");
         admin.clear();
         cmd("vote", "Mighty");
         check(admin.get(0).contains("gave"), "pleb vote <player>: " + admin);
