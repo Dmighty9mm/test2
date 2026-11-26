@@ -57,7 +57,6 @@ const ICONS = {
   note: "M5 4h14v16H5zM9 8h6M9 12h6M9 16h3",
   edit: "M4 20h4L20 8l-4-4L4 16v4z",
   crown: "M3 18h18M4 18L3 7l5 4 4-6 4 6 5-4-1 11",
-  box: "M21 8l-9-5-9 5v8l9 5 9-5V8zM3 8l9 5 9-5M12 13v8",
   key: "M15 7a4 4 0 11-3.5 6L5 19.5V22H2v-3h2v-2h2l3.5-3.5A4 4 0 0115 7zM16 9h.01",
 };
 function icon(name) {
@@ -207,9 +206,9 @@ function pager(container, load, render, opts = {}) {
 // ==================== shell ====================
 
 const NAV = [
-  ["General", [["home", "Home", "home"], ["downloads", "Downloads", "download"], ["leaderboard", "Leaderboard", "trophy"], ["shop", "Shop", "bag"]]],
+  ["General", [["home", "Home", "home"], ["leaderboard", "Leaderboard", "trophy"], ["shop", "Shop", "bag"]]],
   ["You", [["me", "My account", "user", true]]],
-  ["Admin", [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["announce", "Announcements", "megaphone"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["builds", "Builds", "box"], ["client", "Client updates", "refresh"], ["audit", "Admin log", "list"]], "admin"],
+  ["Admin", [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["announce", "Announcements", "megaphone"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Client updates", "refresh"], ["audit", "Admin log", "list"]], "admin"],
 ];
 
 function setNav(view) {
@@ -267,8 +266,7 @@ async function homeView() {
         me ? h("a", { class: "btn primary", href: "#me" }, icon("user"), "My account") : h("a", { class: "btn primary", href: "#register" }, icon("plus"), "Create account"),
         me ? null : h("a", { class: "btn", href: "#login" }, "Sign in"),
         isAdmin() ? h("a", { class: "btn", href: "#makers" }, icon("hammer"), "Cosmetic makers") : null,
-        (info.downloads || []).length ? h("a", { class: "btn", href: "#downloads" }, icon("download"), "Get PlebClient" + (c.latest ? " " + c.latest : ""))
-          : c.url ? h("a", { class: "btn", href: c.url, target: "_blank", rel: "noopener" }, icon("download"), "Get PlebClient" + (c.latest ? " " + c.latest : "")) : null))));
+        c.url ? h("a", { class: "btn", href: c.url, target: "_blank", rel: "noopener" }, icon("download"), "Get PlebClient" + (c.latest ? " " + c.latest : "")) : null))));
   wrap.append(h("div", { class: "tiles" },
     tile("online", "Server", h("span", {}, h("span", { class: "dot" + (s.connected ? " on" : "") }), s.connected ? "Online" : "Offline"), s.connected ? fmt(s.online) + " playing now" : "The panel can't see the server right now"),
     tile("refresh", "Latest PlebClient", c.latest || "–", c.minimum ? "Oldest allowed: " + c.minimum : "Your client tells you when it's out of date"),
@@ -553,11 +551,10 @@ async function dashboardView() {
       h("a", { class: "btn", href: "#players" }, icon("users"), "Players"),
       h("a", { class: "btn", href: "#announce" }, icon("megaphone"), "Announce"),
       h("a", { class: "btn", href: "#publish" }, icon("upload"), "Publish to shop"),
-      h("a", { class: "btn", href: "#builds" }, icon("box"), "Builds"),
       h("a", { class: "btn", href: "#makers" }, icon("hammer"), "Cosmetic makers"),
       h("a", { class: "btn", href: "#audit" }, icon("list"), "Admin log")))));
   wrap.append(h("div", { style: "height:18px" }));
-  wrap.append(h("div", { class: "grid g2" }, giveAllCard(), liveBuildsCard()));
+  wrap.append(giveAllCard());
   return wrap;
 }
 
@@ -1058,183 +1055,6 @@ async function publishView() {
       h("div", { class: "scroll" }, h("table", {}, cmds))));
 }
 
-// ==================== builds (Downloads page and admin Builds page) ====================
-
-function size(n) {
-  if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + " MB";
-  if (n >= 1024) return Math.round(n / 1024) + " KB";
-  return n + " B";
-}
-
-const BUILD_HELP = {
-  windows: "Unzip it and run PlebClient.",
-  wasm: "The fast web client. Unzip it and open index.html, or host the folder.",
-  offline: "One HTML file. Open it in your browser, no install.",
-  "forge-1.8.9": "Install Forge 1.8.9, then put the jar in your mods folder.",
-  "forge-1.21.1": "Install Forge 1.21.1 (52.1.x), then put the jar in your mods folder.",
-  plebcolors: "Server plugin (staff only).",
-  plebioapi: "Proxy plugin (staff only).",
-  panel: "This panel (staff only).",
-};
-
-function liveBuildsCard() {
-  const list = h("div", { class: "list" }, h("div", { class: "muted" }, "Loading…"));
-  api("downloads").then((r) => {
-    list.replaceChildren(...(r.builds.length ? r.builds.map((b) => h("div", { class: "li" },
-      h("span", {}, b.kindName, " ", h("small", { class: "muted" }, b.version)), h("b", {}, fmt(b.downloads), h("small", { class: "muted" }, " downloads"))))
-      : [empty("box", "No builds published yet.")]));
-  }).catch((e) => list.replaceChildren(h("div", { class: "muted" }, e.message)));
-  return card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "Published builds"), h("span", { class: "spacer" }), h("a", { href: "#builds" }, "Manage builds")), list);
-}
-
-async function downloadsView() {
-  const r = await api("downloads");
-  const c = info.client || {};
-  const rows = r.builds.map((b) => h("div", { class: "card build" },
-    h("div", { class: "row", style: "width:100%" }, icon(b.audience === "public" ? "download" : "shield"),
-      h("div", {}, h("h2", {}, b.kindName), h("div", { class: "muted" }, "Version " + b.version + (b.link ? "" : " · " + size(b.size)) + " · " + ago(b.publishedAt))),
-      h("span", { class: "spacer" }),
-      h("a", { class: "btn primary", href: b.url, download: b.filename }, icon("download"), "Download")),
-    h("p", { class: "muted" }, BUILD_HELP[b.kind] || ""),
-    b.notes ? h("p", {}, b.notes) : null,
-    h("details", {}, h("summary", { class: "muted" }, "File details"), h("p", { class: "muted wrap" }, b.filename, h("br"), b.link ? "From " + new URL(b.link).host : "SHA-256 " + b.sha256))));
-  return h("div", {},
-    card("Downloads", h("p", { class: "muted" }, "The latest PlebClient builds" + (c.latest ? " (PlebClient " + c.latest + ")" : "") + ". Sign in on the start screen with your PlebMc account.")),
-    h("div", { style: "height:18px" }),
-    rows.length ? h("div", { class: "grid g2" }, rows) : card(null, empty("download", "Nothing to download yet. Check back soon.")));
-}
-
-function uploadBuild(q, file, onProgress) {
-  return new Promise((resolve, reject) => {
-    const x = new XMLHttpRequest();
-    x.open("POST", "/api/admin/builds/upload?" + new URLSearchParams(q));
-    x.setRequestHeader("X-Requested-With", "PlebPanel");
-    x.setRequestHeader("Content-Type", "application/octet-stream");
-    x.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
-    x.onload = () => {
-      if (x.status === 413) return reject(new Error("That's too big for the panel's web server. Raise client_max_body_size in nginx (see the README)."));
-      let j = {};
-      try { j = JSON.parse(x.responseText); } catch (e) { /* not JSON */ }
-      if (x.status >= 400 || j.ok === false) return reject(new Error(j.error || "Upload failed (" + x.status + ")."));
-      resolve(j);
-    };
-    x.onerror = () => reject(new Error("The upload stopped. Check your connection and try again."));
-    x.send(file);
-  });
-}
-
-async function buildsView() {
-  const r = await api("admin/builds");
-  const ro = !isOwner();
-  const clientKinds = ["windows", "wasm", "offline", "forge-1.8.9", "forge-1.21.1"];
-  const wrap = h("div");
-  if (!ro) {
-    const out = h("div");
-    const kind = select("bkind", r.kinds.map((k) => [k.kind, k.name + (k.audience === "staff" ? " (staff only)" : "")]), "windows");
-    const version = h("input", { id: "bver", placeholder: "2.0", maxlength: 32, value: (info.client || {}).latest || "" });
-    const file = h("input", { id: "bfile", type: "file" });
-    const link = h("input", { id: "blink", type: "url", placeholder: "https://github.com/you/plebmc/releases/download/v2.0/PlebClient-Windows.zip", maxlength: 1000 });
-    const modeFile = h("input", { type: "radio", name: "bmode", value: "file" });
-    const modeLink = h("input", { type: "radio", name: "bmode", value: "link", checked: true });
-    const fileBox = h("div", {}, h("label", { for: "bfile" }, "File (up to " + r.maxMb + " MB, stored on the panel)"), file);
-    const linkBox = h("div", {}, h("label", { for: "blink" }, "Download link (the file stays where it is; the panel only sends people there)"), link);
-    const syncMode = () => { fileBox.hidden = !modeFile.checked; linkBox.hidden = modeFile.checked; btnLabel.textContent = modeFile.checked ? "Upload" : "Add"; };
-    const btnLabel = h("span", {}, "Add");
-    modeFile.addEventListener("change", syncMode);
-    modeLink.addEventListener("change", syncMode);
-    const notes = h("input", { id: "bnotes", maxlength: 300, placeholder: "optional, e.g. New: wings and video settings" });
-    const publish = h("input", { type: "checkbox", id: "bpub", checked: true });
-    const notify = h("input", { type: "checkbox", id: "bnotify" });
-    const notifyRow = h("label", { class: "check" }, notify, "Also tell PlebClient players to update to this version");
-    const types = () => (r.kinds.find((k) => k.kind === kind.value) || {}).types || [];
-    const sync = () => {
-      file.setAttribute("accept", types().join(","));
-      notifyRow.hidden = !clientKinds.includes(kind.value) || !publish.checked;
-    };
-    kind.addEventListener("change", sync);
-    publish.addEventListener("change", sync);
-    sync();
-    const bar = h("i");
-    bar.style.width = "0%";
-    const meter = h("div", { class: "meter" }, bar);
-    meter.hidden = true;
-    const btn = h("button", { class: "primary", onclick: async () => {
-      const opts = { publish: publish.checked, notify: publish.checked && notify.checked && clientKinds.includes(kind.value) };
-      if (modeLink.checked) {
-        if (!/^https:\/\/\S+$/.test(link.value.trim())) return message(out, "Paste the full download link, starting with https://");
-        btn.disabled = true;
-        try {
-          await api("admin/builds/link", { kind: kind.value, version: version.value.trim(), url: link.value.trim(), notes: notes.value.trim(), ...opts });
-          info = await api("info");
-          toast(publish.checked ? "Added and published." : "Added. Publish it when you're ready.");
-          route();
-        } catch (e) { message(out, e.message); btn.disabled = false; }
-        return;
-      }
-      const f = file.files[0];
-      if (!f) return message(out, "Pick the build file.");
-      if (!types().some((t) => f.name.toLowerCase().endsWith(t))) return message(out, "That build must be a " + types().join(" or ") + " file.");
-      if (f.size > r.maxMb * 1024 * 1024) return message(out, "That file is bigger than " + r.maxMb + " MB.");
-      btn.disabled = true;
-      meter.hidden = false;
-      message(out, "Uploading " + f.name + " (" + size(f.size) + ")…", true);
-      try {
-        await uploadBuild({ kind: kind.value, version: version.value.trim(), name: f.name, notes: notes.value.trim(),
-          publish: publish.checked ? "1" : "0", notify: publish.checked && notify.checked && clientKinds.includes(kind.value) ? "1" : "0" },
-        f, (x) => { bar.style.width = Math.round(x * 100) + "%"; });
-        info = await api("info");
-        toast(publish.checked ? "Uploaded and published." : "Uploaded. Publish it when you're ready.");
-        route();
-      } catch (e) {
-        message(out, e.message);
-        btn.disabled = false;
-        meter.hidden = true;
-      }
-    } }, icon("upload"), btnLabel);
-    syncMode();
-    wrap.append(card("Add a build",
-      h("p", { class: "muted" }, "Link to where the file is hosted (GitHub Releases, Google Drive, a CDN...) so it never sits on the panel's server, or upload it here. Publishing puts the build on the Downloads page (staff-only builds show only to admins). The build it replaces is kept here, so you can publish it again to go back."),
-      h("div", { class: "grid g2" }, h("div", {}, h("label", { for: "bkind" }, "What is it"), kind), h("div", {}, h("label", { for: "bver" }, "Version"), version)),
-      h("div", { class: "row" }, h("label", { class: "check" }, modeLink, "Link to a file hosted somewhere else"), h("label", { class: "check" }, modeFile, "Upload the file to the panel")),
-      linkBox, fileBox,
-      h("label", { for: "bnotes" }, "Notes on the Downloads page"), notes,
-      h("label", { class: "check" }, publish, "Publish it now"), notifyRow,
-      h("div", { style: "height:10px" }), h("div", { class: "row" }, btn), h("div", { style: "height:10px" }), meter, out));
-    wrap.append(h("div", { style: "height:18px" }));
-  }
-  const act = async (path, b, done) => {
-    try {
-      await api(path, { id: b.id, notify: false });
-      info = await api("info");
-      toast(done);
-      route();
-    } catch (e) { toast(e.message, false); }
-  };
-  for (const k of r.kinds) {
-    const mine = r.builds.filter((b) => b.kind === k.kind);
-    const rows = mine.map((b) => h("tr", {},
-      h("td", {}, h("b", {}, b.version), " ", b.live ? h("span", { class: "pill good" }, "live") : null),
-      h("td", { class: "wrap" }, b.filename, h("br"), h("small", { class: "muted" }, (b.link ? "link to " + new URL(b.link).host : size(b.size)) + (b.notes ? " · " + b.notes : ""))),
-      h("td", { title: when(b.uploadedAt) }, ago(b.uploadedAt), h("br"), h("small", { class: "muted" }, "by " + b.by)),
-      h("td", { class: "num" }, fmt(b.downloads)),
-      h("td", { class: "num" }, h("div", { class: "row", style: "justify-content:flex-end" },
-        h("a", { class: "btn small", href: "/download/build/" + b.id, title: "Download" }, icon("download")),
-        ro ? null : b.live ? h("button", { class: "small", onclick: () => act("admin/builds/unpublish", b, "Unpublished.") }, "Unpublish")
-          : h("button", { class: "small primary", onclick: () => {
-            if (confirm("Publish " + k.name + " " + b.version + "? It replaces the one on the Downloads page.")) act("admin/builds/publish", b, "Published.");
-          } }, "Publish"),
-        ro || b.live ? null : h("button", { class: "ghost small", title: "Delete", onclick: () => {
-          if (confirm("Delete " + b.filename + " for good?")) act("admin/builds/delete", b, "Deleted.");
-        } }, icon("trash"))))));
-    wrap.append(card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, k.name), " ", k.audience === "staff" ? h("span", { class: "pill" }, "staff only") : null),
-      rows.length ? h("div", { class: "scroll" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Version"), h("th", {}, "File"), h("th", {}, "Uploaded"), h("th", { class: "num" }, "Downloads"), h("th", {}, ""))), h("tbody", {}, rows)))
-        : empty("box", "Nothing uploaded yet.")));
-    wrap.append(h("div", { style: "height:18px" }));
-  }
-  if (ro) wrap.prepend(h("p", { class: "muted" }, "Only owners can upload and publish builds."));
-  return wrap;
-}
-
 // ==================== admin: client updates ====================
 
 /** True when version a is older than b ("2.0" vs "2.0.1"; "2.0" and "2.0.0" are the same). */
@@ -1300,7 +1120,6 @@ async function auditView() {
 
 const VIEWS = {
   home: ["Home", homeView],
-  downloads: ["Downloads", downloadsView],
   leaderboard: ["Leaderboard", leaderboardView],
   shop: ["Shop", shopView],
   makers: ["Cosmetic makers", makersView, "admin"],
@@ -1314,7 +1133,6 @@ const VIEWS = {
   rank: ["Rank", rankView, "admin"],
   announce: ["Announcements", announceView, "admin"],
   publish: ["Publish to shop", publishView, "admin"],
-  builds: ["Builds", buildsView, "admin"],
   client: ["Client updates", clientView, "admin"],
   audit: ["Admin log", auditView, "admin"],
 };
