@@ -204,6 +204,12 @@ public class FontRenderer implements IResourceManagerReloadListener {
 		if (parChar1 == 32) {
 			return 4.0F;
 		} else {
+			if (!this.unicodeFlag && parChar1 >= 0x100) {
+				float pleb = net.plebmc.client.hud.ModernFont.draw(parChar1, this.posX, this.posY, parFlag);
+				if (pleb >= 0) {
+					return pleb;
+				}
+			}
 			int i = FontMappingHelper.lookupChar(parChar1, false);
 			return i != -1 && !this.unicodeFlag ? this.renderDefaultChar(i, parFlag)
 					: this.renderUnicodeChar(parChar1, parFlag);
@@ -427,7 +433,7 @@ public class FontRenderer implements IResourceManagerReloadListener {
 				}
 
 				float f1 = this.unicodeFlag ? 0.5F : 1.0F;
-				boolean flag = (c0 == 0 || j == -1 || this.unicodeFlag) && parFlag;
+				boolean flag = (c0 == 0 || (j == -1 && net.plebmc.client.hud.ModernFont.width(c0) < 0) || this.unicodeFlag) && parFlag;
 				if (flag) {
 					this.posX -= f1;
 					this.posY -= f1;
@@ -589,6 +595,12 @@ public class FontRenderer implements IResourceManagerReloadListener {
 	 */
 	public int getCharWidth(char character) {
 		character = net.plebmc.client.text.ModernText.fold(character);
+		if (!this.unicodeFlag && character >= 0x100) {
+			int pleb = net.plebmc.client.hud.ModernFont.width(character);
+			if (pleb >= 0) {
+				return pleb;
+			}
+		}
 		if (character == 167) {
 			return -1;
 		} else if (character == 32) {

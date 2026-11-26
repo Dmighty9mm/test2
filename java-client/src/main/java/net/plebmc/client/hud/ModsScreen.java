@@ -16,7 +16,6 @@ import net.plebmc.client.mods.Mod;
 public final class ModsScreen extends PlebScreen {
 
 	static final String[] CATEGORIES = { null, Mod.PLEBNITE, Mod.HUD, Mod.GAMEPLAY, Mod.VISUAL, Mod.PERFORMANCE };
-	private static final String SECRET = "fpslarp";
 
 	private String category;
 	private GuiTextField search;
@@ -206,10 +205,13 @@ public final class ModsScreen extends PlebScreen {
 
 	@Override
 	protected void typed() {
-		if (search.getText().trim().equalsIgnoreCase(SECRET)) {
+		String secret = EasterEggs.modSearch(search.getText());
+		if (secret != null) {
 			search.setText("");
-			EasterEggs.found("fpslarp", "FPS Larp unlocked", "Big numbers, zero effort");
-			this.mc.displayGuiScreen(new FpsLarpScreen(this));
+			PlebClient.saveSettings();
+			if ("fpslarp".equals(secret)) {
+				this.mc.displayGuiScreen(new FpsLarpScreen(this));
+			}
 			return;
 		}
 		scroll.reset();

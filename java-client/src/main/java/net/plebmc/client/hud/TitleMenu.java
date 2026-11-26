@@ -666,7 +666,15 @@ public final class TitleMenu {
 	private static float buddyHover;
 	private static int budX, budY, budS;
 
+	private static long helloAt;
+	private static int lastMx = -1, lastMy = -1;
+
 	private static void buddy(int w, int h, int mx, int my, long now, float in) {
+		if (mx != lastMx || my != lastMy) {
+			lastMx = mx;
+			lastMy = my;
+			EasterEggs.activity();
+		}
 		budS = Math.max(28, Math.min(40, h / 7));
 		budX = w - 8 - budS;
 		budY = h - 16 - budS;
@@ -704,6 +712,17 @@ public final class TitleMenu {
 		}
 		float bob = buddyStart == 0 && animations() ? (float) Math.abs(Math.sin(now / 380.0)) * -1.5f : 0f;
 		float hop = -3f * ease(buddyHover);
+		if (EasterEggs.takeHello()) {
+			helloAt = now;
+		}
+		if (helloAt != 0) {
+			float k = (now - helloAt) / 700f;
+			if (k >= 1f) {
+				helloAt = 0;
+			} else {
+				hop -= 14f * (float) Math.sin(Math.PI * k);
+			}
+		}
 		float s = budS * pop;
 		float x = budX + (budS - s) / 2f, y = budY + (budS - s) + bob + hop;
 		try {
@@ -715,11 +734,7 @@ public final class TitleMenu {
 		GlStateManager.enableTexture2D();
 		GlStateManager.enableBlend();
 		GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
-		if (EasterEggs.goldenBuddy()) {
-			GlStateManager.color(1f, 0.84f, 0.25f, in);
-		} else {
-			GlStateManager.color(1f, 1f, 1f, in);
-		}
+		GlStateManager.color(1f, 1f, 1f, in);
 		WorldRenderer r = Tessellator.getInstance().getWorldRenderer();
 		r.begin(7, DefaultVertexFormats.POSITION_TEX);
 		r.pos(x, y + s, 0).tex(u0, v1).endVertex();
@@ -781,10 +796,10 @@ public final class TitleMenu {
 		return ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) / (double) 0x7fffffff;
 	}
 
-	/** What the mini mascot says when you point at him (a new line each time). */
+	/** What Plebio (the mini mascot) says when you point at him (a new line each time). */
 	private static final String[] BUDDY_LINES = {
 			// tips
-			"Click me. I dare you.", "Pleb Coins come from quests!", "Daily login = free coins",
+			"Hi, I'm Plebio!", "Click me. I dare you.", "Pleb Coins come from quests!", "Daily login = free coins",
 			"New cloaks in the shop!", "Right Shift opens the mods", "I like TNT. A lot.",
 			// Mighty
 			"Mighty coded me at 3 AM", "Mighty owes me 5 Pleb Coins", "Mighty's aim? Never met it",
@@ -797,7 +812,7 @@ public final class TitleMenu {
 			"Lucky tried to bridge. RIP.", "Lucky asked me for PvP tips",
 			// more Mighty
 			"Mighty fixes one bug, adds three", "Mighty's code runs on vibes", "Mighty AFK'd in a lava pool",
-			"Mighty named me. No regrets.",
+			"Mighty named me Plebio. No regrets.",
 			// ArchMc
 			"ArchMc? Never heard of it.", "ArchMc called. Nobody answered.", "ArchMc's TPS is a rumor",
 			"ArchMc players come here to cry", "ArchMc is just PlebMc at home", "Even ArchMc's lobby is lagging",
@@ -812,7 +827,8 @@ public final class TitleMenu {
 	private static float buddyBubble;
 
 	private static void bubble(long now, float in) {
-		boolean show = buddyHover > 0.5f && buddyStart == 0;
+		boolean sleepy = EasterEggs.plebioAsleep();
+		boolean show = (buddyHover > 0.5f || sleepy) && buddyStart == 0;
 		if (show && buddyLine < 0) {
 			int next = (int) ((now / 7) % BUDDY_LINES.length);
 			buddyLine = next == lastLine ? (next + 1) % BUDDY_LINES.length : next;
@@ -827,7 +843,7 @@ public final class TitleMenu {
 			return;
 		}
 		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
-		String line = BUDDY_LINES[buddyLine];
+		String line = sleepy ? "zZz... zZz..." : BUDDY_LINES[buddyLine];
 		// type the line out letter by letter
 		int n = animations() ? (int) Math.min(line.length(), (now - buddyLineAt) / 28) : line.length();
 		float sc = 0.75f;
@@ -1056,6 +1072,7 @@ public final class TitleMenu {
 
 	/** A click on the title screen; true when it was handled (vanilla buttons are hidden). */
 	public static boolean click(GuiScreen s, int mx, int my, int button) {
+		EasterEggs.activity();
 		if (button != 0 || pending != null) {
 			return true;
 		}
@@ -1078,7 +1095,7 @@ public final class TitleMenu {
 				buddyStart = System.currentTimeMillis();
 				buddyBack = 0;
 			}
-			EasterEggs.buddyClicked();
+			EasterEggs.plebioClicked();
 			return true;
 		}
 		if (mx >= coinX && mx < coinX + coinW && my >= coinY && my < coinY + coinH) {
@@ -1101,6 +1118,7 @@ public final class TitleMenu {
 
 	/** Keys: up/down move through the sidebar, Enter opens, Escape clears, 1-9 open an entry. */
 	public static boolean key(GuiScreen s, char c, int key) {
+		EasterEggs.activity();
 		EasterEggs.titleKey(c, key);
 		String[][] it = TitleActions.ITEMS;
 		if (key == 200 || key == 208) { // up / down

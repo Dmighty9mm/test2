@@ -179,9 +179,21 @@ public final class ClientPrefs {
 		return true;
 	}
 
+	/** How many of today's secrets were found (ones since removed don't count). */
 	public int secretCount() {
-		return secrets.isEmpty() ? 0 : secrets.split(",").length;
+		int n = 0;
+		for (String id : Secrets.IDS) {
+			if (hasSecret(id)) {
+				n++;
+			}
+		}
+		return n;
 	}
+
+	/** Secret mods (found by typing in the Mods search; see Secrets.MOD_WORDS). */
+	public boolean snowMod;
+	public boolean buddyMod;
+	public boolean bigHeadMod;
 
 	// ---- developer ----
 	/** Shows Apollo debug in the launcher. */
@@ -240,6 +252,9 @@ public final class ClientPrefs {
 		menuFps = d.menuFps;
 		idleFps = d.idleFps;
 		rainbowAccent = d.rainbowAccent;
+		snowMod = d.snowMod;
+		buddyMod = d.buddyMod;
+		bigHeadMod = d.bigHeadMod;
 	}
 
 	public void load(SettingsStore store) {
@@ -288,6 +303,9 @@ public final class ClientPrefs {
 		menuFps = idx(m.get("menuFps"), menuFps, MENU_FPS.length);
 		idleFps = idx(m.get("idleFps"), idleFps, IDLE_FPS.length);
 		rainbowAccent = ProtoValues.asBool(m.get("rainbow"), rainbowAccent);
+		snowMod = ProtoValues.asBool(m.get("snowMod"), snowMod);
+		buddyMod = ProtoValues.asBool(m.get("buddyMod"), buddyMod);
+		bigHeadMod = ProtoValues.asBool(m.get("bigHeadMod"), bigHeadMod);
 		Object sec = m.get("secrets");
 		secrets = sec instanceof String && ((String) sec).matches("[a-z0-9,]{0,200}") ? (String) sec : secrets;
 	}
@@ -325,6 +343,9 @@ public final class ClientPrefs {
 		m.put("menuFps", (double) menuFps);
 		m.put("idleFps", (double) idleFps);
 		m.put("rainbow", rainbowAccent);
+		m.put("snowMod", snowMod);
+		m.put("buddyMod", buddyMod);
+		m.put("bigHeadMod", bigHeadMod);
 		m.put("secrets", secrets);
 		return Json.write(m);
 	}

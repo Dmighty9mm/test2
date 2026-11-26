@@ -1,11 +1,15 @@
 package net.plebmc.client.text;
 
 /**
- * Letters newer servers use that 1.8's font can't draw well. Scoreboards and
- * chat in newer versions are full of "small caps" (ᴛʜɪꜱ ꜱᴛʏʟᴇ), which newer
- * Minecraft draws from its main font; 1.8 only has them in its tiny unicode
- * pages (or not at all), so they come out small, blurry and uneven. They are
- * drawn here as the font's own capital letters instead, which is how they read.
+ * Letters newer servers use that 1.8's font can't draw well.
+ * <p>
+ * Scoreboards and chat on newer versions are full of "small caps" (ᴛʜɪꜱ
+ * ꜱᴛʏʟᴇ). Newer Minecraft draws them from its main font as short capitals;
+ * 1.8 only has them in its tiny unicode pages, so they came out thin and
+ * uneven. PlebClient draws them the newer way: {@link #glyph} gives each one a
+ * short capital in the 1.8 font's style (5 pixels tall, sitting on the line
+ * like a lowercase letter). Typographic quotes and dashes the 1.8 font lacks
+ * are drawn as their plain ASCII versions ({@link #fold}).
  */
 public final class ModernText {
 
@@ -16,12 +20,7 @@ public final class ModernText {
 
 	static {
 		String[] pairs = {
-				// IPA and phonetic extension small capitals
-				"ᴀA", "ʙB", "ᴄC", "ᴅD", "ᴇE", "ꜰF", "ɢG", "ʜH", "ɪI", "ᴊJ",
-				"ᴋK", "ʟL", "ᴍM", "ɴN", "ᴏO", "ᴘP", "ǫQ", "ʀR", "ꜱS", "ᴛT",
-				"ᴜU", "ᴠV", "ᴡW", "ʏY", "ᴢZ", "ᴁÆ",
-				// other look-alikes servers use for small caps
-				"ғF", "ѕS", "ᴩP",
+				"ᴁÆ",
 				// typographic punctuation the 1.8 ASCII font lacks
 				"‘'", "’'", "“\"", "”\"", "–-", "—-", "•·", "│|",
 				"┃|", "‐-", "‑-", "‒-", "  " };
@@ -29,6 +28,68 @@ public final class ModernText {
 		for (String p : pairs) {
 			TABLE[p.charAt(0)] = p.charAt(1);
 		}
+	}
+
+	// ==================== small caps ====================
+
+	/** Small capitals, then look-alikes servers use for them (each maps to a glyph below). */
+	private static final String SMALL = "ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡʏᴢғѕᴩ";
+	private static final String SMALL_OF = "ABCDEFGHIJKLMNOPQRSTUVWYZFSP";
+	/** 5 rows each, '#' = a pixel. */
+	private static final String[][] GLYPHS = {
+			{ ".###.", "#...#", "#####", "#...#", "#...#" }, // A
+			{ "####.", "#...#", "####.", "#...#", "####." }, // B
+			{ ".###.", "#...#", "#....", "#...#", ".###." }, // C
+			{ "####.", "#...#", "#...#", "#...#", "####." }, // D
+			{ "#####", "#....", "####.", "#....", "#####" }, // E
+			{ "#####", "#....", "####.", "#....", "#...." }, // F
+			{ ".####", "#....", "#..##", "#...#", ".###." }, // G
+			{ "#...#", "#...#", "#####", "#...#", "#...#" }, // H
+			{ "###", ".#.", ".#.", ".#.", "###" }, // I
+			{ "....#", "....#", "....#", "#...#", ".###." }, // J
+			{ "#...#", "#..#.", "###..", "#..#.", "#...#" }, // K
+			{ "#....", "#....", "#....", "#....", "#####" }, // L
+			{ "#...#", "##.##", "#.#.#", "#...#", "#...#" }, // M
+			{ "#...#", "##..#", "#.#.#", "#..##", "#...#" }, // N
+			{ ".###.", "#...#", "#...#", "#...#", ".###." }, // O
+			{ "####.", "#...#", "####.", "#....", "#...." }, // P
+			{ ".###.", "#...#", "#...#", "#..#.", ".##.#" }, // Q
+			{ "####.", "#...#", "####.", "#..#.", "#...#" }, // R
+			{ ".####", "#....", ".###.", "....#", "####." }, // S
+			{ "#####", "..#..", "..#..", "..#..", "..#.." }, // T
+			{ "#...#", "#...#", "#...#", "#...#", ".###." }, // U
+			{ "#...#", "#...#", ".#.#.", ".#.#.", "..#.." }, // V
+			{ "#...#", "#...#", "#.#.#", "##.##", "#...#" }, // W
+			{ "#...#", ".#.#.", "..#..", "..#..", "..#.." }, // Y
+			{ "#####", "...#.", "..#..", ".#...", "#####" }, // Z
+	};
+	private static final String GLYPH_OF = "ABCDEFGHIJKLMNOPQRSTUVWYZ";
+	/** The top row of a glyph in an 8 pixel cell (rows 2-6, like a lowercase letter). */
+	public static final int GLYPH_TOP = 2;
+
+	/** How many glyphs {@link #glyphPixels} has. */
+	public static int glyphCount() {
+		return GLYPHS.length;
+	}
+
+	/** The glyph to draw for {@code c}, or -1 when it's not a small capital. */
+	public static int glyph(char c) {
+		if (c < 0x0100) {
+			return -1;
+		}
+		int i = SMALL.indexOf(c);
+		return i < 0 ? -1 : GLYPH_OF.indexOf(SMALL_OF.charAt(i));
+	}
+
+	/** A glyph's width in pixels (the space after it not counted). */
+	public static int glyphWidth(int glyph) {
+		return GLYPHS[glyph][0].length();
+	}
+
+	/** True when glyph {@code g} has a pixel at column {@code x}, row {@code y} (0-4). */
+	public static boolean glyphPixel(int g, int x, int y) {
+		String row = GLYPHS[g][y];
+		return x < row.length() && row.charAt(x) == '#';
 	}
 
 	/** The character to draw in place of {@code c} (itself when it draws fine). */

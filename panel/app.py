@@ -63,6 +63,38 @@ MAX_FAILS = 5
 FAIL_WINDOW = 10 * 60
 COMMAND_ACTIONS = ("coins", "give", "remove", "equip", "kick", "signout")
 CATEGORIES = ("hat", "trail", "cloak", "wings")
+RANK_NAME = re.compile(r"[a-z0-9_-]{1,36}")
+PERM_NODE = re.compile(r"[A-Za-z0-9_.*-]{1,200}")
+
+
+def clean_ranks(r):
+    """What PlebioAPI reports about LuckPerms, trimmed to what the panel shows."""
+    def s(v, n):
+        return str(v if v is not None else "")[:n]
+    groups = []
+    for g in (r.get("groups") or [])[:500]:
+        if not isinstance(g, dict) or not RANK_NAME.fullmatch(str(g.get("name") or "")):
+            continue
+        perms = []
+        for n in (g.get("perms") or [])[:1000]:
+            if isinstance(n, dict) and n.get("node"):
+                perms.append({"node": s(n["node"], 200), "value": bool(n.get("value", True)),
+                              "server": s(n.get("server"), 36), "world": s(n.get("world"), 36),
+                              "expiry": int(n.get("expiry") or 0)})
+        try:
+            weight = int(g.get("weight") or 0)
+        except (TypeError, ValueError):
+            weight = 0
+        groups.append({"name": g["name"], "display": s(g.get("display"), 80), "weight": weight,
+                       "prefix": s(g.get("prefix"), 120), "suffix": s(g.get("suffix"), 120),
+                       "parents": [s(x, 36) for x in (g.get("parents") or [])[:50]],
+                       "members": int(g.get("members") or 0) if str(g.get("members") or "0").isdigit() else 0,
+                       "perms": perms})
+    groups.sort(key=lambda g: (-g["weight"], g["name"]))
+    tracks = [{"name": s(t.get("name"), 36), "groups": [s(x, 36) for x in (t.get("groups") or [])[:50]]}
+              for t in (r.get("tracks") or [])[:50] if isinstance(t, dict)]
+    return {"connected": bool(r.get("ok")), "reason": s(r.get("reason"), 200), "groups": groups, "tracks": tracks,
+            "at": int(time.time())}
 ITEM_ID_RE = re.compile(r"^[a-z0-9_]{2,32}$")
 VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+){0,3}$")
 PAGE = 50
@@ -619,6 +651,18 @@ class Panel:
             self.db.set_kv("online", {"at": now, "players": [str(n) for n in body["online"]][:5000]})
         if body.get("currency"):
             self.db.set_kv("currency", str(body["currency"])[:40])
+        if isinstance(body.get("ranks"), dict):
+            self.db.set_kv("ranks", clean_ranks(body["ranks"]))
+        if isinstance(players, list):
+            ranks = self.db.get_kv("player_ranks", {})
+            if body.get("full"):
+                ranks = {}
+            for pl in players:
+                if isinstance(pl, dict) and pl.get("name") and isinstance(pl.get("rank"), str):
+                    ranks[str(pl["name"]).lower()[:32]] = pl["rank"][:36]
+            if len(ranks) > 50000:
+                ranks = dict(list(ranks.items())[-50000:])
+            self.db.set_kv("player_ranks", ranks)
         self.db.set_kv("last_sync", now)
         return {"ok": True}
 
@@ -1106,6 +1150,72 @@ class Panel:
         rows = self.db.all("SELECT * FROM audit WHERE " + where + " ORDER BY id DESC LIMIT ?", *(args + [PAGE + 1]))
         return {"audit": rows[:PAGE], "more": len(rows) > PAGE}
 
+    # ---------- LuckPerms ranks (read from and changed through PlebioAPI) ----------
+
+    def ranks(self):
+        r = self.db.get_kv("ranks", None)
+        if not r:
+            return {"connected": False, "reason": "The proxy hasn't sent any ranks yet.", "groups": [], "tracks": []}
+        return r
+
+    def rank_of(self, name):
+        return self.db.get_kv("player_ranks", {}).get(str(name or "").lower())
+
+    def rank_change(self, actor, body):
+        """Owners change LuckPerms groups; PlebioAPI applies it on the proxy within a few seconds."""
+        op = str(body.get("op") or "")
+        group = str(body.get("group") or "").lower()
+        if op == "player":
+            name = str(body.get("name") or "")
+            if name_problem(name):
+                raise ApiError(400, "Pick a player.")
+            mode = str(body.get("mode") or "set")
+            if mode not in ("set", "add", "remove"):
+                raise ApiError(400, "Choose set, add or remove.")
+            if not RANK_NAME.fullmatch(group):
+                raise ApiError(400, "Pick a rank.")
+            args = ["player", mode, group]
+            target = name
+        else:
+            if not RANK_NAME.fullmatch(group):
+                raise ApiError(400, "Rank names are 1-36 letters, numbers, - or _ (lowercase).")
+            target = group
+            if op in ("create", "delete"):
+                if op == "delete" and group == "default":
+                    raise ApiError(400, "The default rank can't be deleted.")
+                args = [op]
+            elif op in ("prefix", "suffix", "display"):
+                text = str(body.get("text") or "")
+                if len(text) > 80 or "\n" in text:
+                    raise ApiError(400, "Keep it to one line of 80 characters.")
+                args = [op, text]
+            elif op == "weight":
+                try:
+                    w = int(body.get("weight"))
+                except (TypeError, ValueError):
+                    raise ApiError(400, "Weight is a whole number.")
+                if not -100000 <= w <= 100000:
+                    raise ApiError(400, "Weight is between -100000 and 100000.")
+                args = [op, w]
+            elif op in ("perm", "unperm"):
+                node = str(body.get("node") or "").strip()
+                if not PERM_NODE.fullmatch(node):
+                    raise ApiError(400, "A permission is letters, numbers and . - _ * (like essentials.fly).")
+                server = str(body.get("server") or "").strip().lower()
+                if server and not RANK_NAME.fullmatch(server):
+                    raise ApiError(400, "Server names are letters, numbers, - or _.")
+                args = [op, node, bool(body.get("value", True)), server]
+            elif op in ("parent", "unparent"):
+                parent = str(body.get("parent") or "").lower()
+                if not RANK_NAME.fullmatch(parent) or parent == group:
+                    raise ApiError(400, "Pick another rank to inherit from.")
+                args = [op, parent]
+            else:
+                raise ApiError(400, "Unknown change.")
+        cid = self.queue(actor["name"], target, "rank", args)
+        self.audit(actor["name"], "queue-rank", "%s %s" % (target, json.dumps(args)))
+        return {"ok": True, "id": cid}
+
     def admin_player(self, name):
         acc = self.account(name)
         p = self.player(name)
@@ -1115,6 +1225,7 @@ class Panel:
         tokens = self.db.one("SELECT COUNT(*) n FROM game_tokens WHERE account_id=?", acc["id"])["n"] if acc else 0
         return {"name": (acc or p)["name"], "account": self.public_account(acc) if acc else None, "player": p,
                 "online": name.lower() in {n.lower() for n in self.online()}, "devices": tokens,
+                "rank": self.rank_of(name),
                 "commands": [{"id": c["id"], "action": c["action"], "args": json.loads(c["args"]), "status": c["status"],
                               "result": c["result"], "by": c["by_name"], "at": c["created_at"]} for c in cmds]}
 
@@ -1404,6 +1515,16 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST" and route == "admin/account":
             actor = self.web_user(role="admin")
             return self.send_json(200, p.admin_account(actor, self.body()))
+        if method == "GET" and route == "admin/ranks":
+            self.web_user(role="admin")
+            rows = p.db.all("SELECT id, created_at, by_name, target, action, args, status, result FROM commands "
+                            "WHERE action='rank' ORDER BY id DESC LIMIT 30")
+            for r in rows:
+                r["args"] = json.loads(r["args"])
+            return self.send_json(200, {"ok": True, **p.ranks(), "changes": rows})
+        if method == "POST" and route == "admin/ranks":
+            actor = self.web_user(role="owner")
+            return self.send_json(200, p.rank_change(actor, self.body()))
         if method == "GET" and route == "admin/audit":
             self.web_user(role="admin")
             before = one("before")

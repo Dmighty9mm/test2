@@ -196,6 +196,17 @@ What it does:
   that name is locked on the spot (logged in the console) until you set its password.
 - Turn it off with `staff-lock.enabled: false` (not recommended on a cracked server).
 
+## Ranks with LuckPerms
+
+Put LuckPerms on the BungeeCord proxy (and keep it on your backends), with every
+LuckPerms install pointed at the same MySQL/MariaDB database and `messaging-service: sql`
+(or `pluginmsg`) so a change on the proxy reaches the backends straight away.
+PlebioAPI finds LuckPerms on the proxy by itself. The panel then gets a **Ranks**
+page: owners can make and delete ranks, set prefix/suffix (`&` and `&#hex` codes),
+display name and weight, add or remove permissions and parents, and set a player's
+rank from their player page. Admins can look but only owners can change ranks.
+If LuckPerms is not on the proxy, the Ranks page just says so.
+
 ## Admin menu in the client
 
 Players signed in to a PlebMc account whose role is in `admin-menu.roles` (default

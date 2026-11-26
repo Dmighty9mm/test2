@@ -182,6 +182,17 @@ players on other clients (who also don't earn coins, see `plebclient-only`).
 `/account` is handled by the proxy before BungeeCord sees it as a command, so the password
 never reaches a backend server or the proxy's command log.
 
+## Ranks with LuckPerms
+
+Put LuckPerms on the BungeeCord proxy (and keep it on your backends), with every
+LuckPerms install pointed at the same MySQL/MariaDB database and `messaging-service: sql`
+(or `pluginmsg`) so a change on the proxy reaches the backends straight away.
+PlebioAPI finds LuckPerms on the proxy by itself. The panel then gets a **Ranks**
+page: owners can make and delete ranks, set prefix/suffix (`&` and `&#hex` codes),
+display name and weight, add or remove permissions and parents, and set a player's
+rank from their player page. Admins can look but only owners can change ranks.
+If LuckPerms is not on the proxy, the Ranks page just says so.
+
 ## How it keeps people out
 
 - A name with an account can't spend, buy, equip, link the website or open the admin menu

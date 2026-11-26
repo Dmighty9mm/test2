@@ -56,6 +56,8 @@ const ICONS = {
   download: "M12 4v12M7 11l5 5 5-5M4 20h16",
   note: "M5 4h14v16H5zM9 8h6M9 12h6M9 16h3",
   edit: "M4 20h4L20 8l-4-4L4 16v4z",
+  crown: "M3 18h18M4 18L3 7l5 4 4-6 4 6 5-4-1 11",
+  key: "M15 7a4 4 0 11-3.5 6L5 19.5V22H2v-3h2v-2h2l3.5-3.5A4 4 0 0115 7zM16 9h.01",
 };
 function icon(name) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -206,7 +208,7 @@ function pager(container, load, render, opts = {}) {
 const NAV = [
   ["General", [["home", "Home", "home"], ["leaderboard", "Leaderboard", "trophy"], ["shop", "Shop", "bag"]]],
   ["You", [["me", "My account", "user", true]]],
-  ["Admin", [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["announce", "Announcements", "megaphone"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Client updates", "refresh"], ["audit", "Admin log", "list"]], "admin"],
+  ["Admin", [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["announce", "Announcements", "megaphone"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Client updates", "refresh"], ["audit", "Admin log", "list"]], "admin"],
 ];
 
 function setNav(view) {
@@ -216,7 +218,7 @@ function setNav(view) {
     const g = h("div", { class: "navgroup" }, h("span", {}, group));
     for (const [id, label, ic, signedIn] of links) {
       if (signedIn && !me) continue;
-      g.append(h("a", { href: "#" + id, class: view === id || (view === "player" && id === "players") ? "on" : null }, icon(ic), label));
+      g.append(h("a", { href: "#" + id, class: view === id || (view === "player" && id === "players") || (view === "rank" && id === "ranks") ? "on" : null }, icon(ic), label));
     }
     if (g.children.length > 1) nav.append(g); // no empty group (like "You" when signed out)
   }
@@ -674,6 +676,8 @@ async function playerView() {
       : h("p", { class: "muted" }, "The item list appears after the proxy connects."));
   wrap.append(h("div", { class: "grid g2" }, coins, cos));
   wrap.append(h("div", { style: "height:18px" }));
+  wrap.append(await playerRankCard(r.name, r.rank));
+  wrap.append(h("div", { style: "height:18px" }));
 
   const reason = h("input", { placeholder: "Kick reason", value: "Kicked by an admin." });
   const mod = card("Moderation", h("div", { class: "row" }, reason, h("button", { class: "danger", onclick: () => act({ action: "kick", reason: reason.value }) }, "Kick")));
@@ -722,6 +726,200 @@ async function playerView() {
 
 function statusPill(s) {
   return h("span", { class: "pill " + (s === "done" ? "good" : s === "failed" ? "bad" : "warn") }, s);
+}
+
+// ==================== admin: LuckPerms ranks ====================
+
+const MC_COLORS = { 0: "#000000", 1: "#0000AA", 2: "#00AA00", 3: "#00AAAA", 4: "#AA0000", 5: "#AA00AA", 6: "#FFAA00", 7: "#AAAAAA",
+  8: "#555555", 9: "#5555FF", a: "#55FF55", b: "#55FFFF", c: "#FF5555", d: "#FF55FF", e: "#FFFF55", f: "#FFFFFF" };
+
+/** A prefix like "&#00E5FF&lVIP &7" drawn the way the game shows it. */
+function mcText(text, fallback) {
+  const out = h("span", { class: "mc" });
+  let color = "#FFFFFF", bold = false, italic = false, under = false, strike = false;
+  let i = 0;
+  const str = String(text || "");
+  if (!str) {
+    if (fallback === "") return h("span");
+    out.append(h("span", { class: "muted" }, fallback || "none"));
+    return out;
+  }
+  let buf = "";
+  const flush = () => {
+    if (!buf) return;
+    const sp = h("span", {}, buf);
+    sp.style.color = color;
+    if (bold) sp.style.fontWeight = "800";
+    if (italic) sp.style.fontStyle = "italic";
+    const deco = [under ? "underline" : "", strike ? "line-through" : ""].join(" ").trim();
+    if (deco) sp.style.textDecoration = deco;
+    out.append(sp);
+    buf = "";
+  };
+  while (i < str.length) {
+    const c = str[i];
+    if ((c === "&" || c === "\u00a7") && i + 1 < str.length) {
+      const hex = /^#([0-9a-fA-F]{6})/.exec(str.slice(i + 1));
+      if (hex) { flush(); color = "#" + hex[1]; bold = italic = under = strike = false; i += 8; continue; }
+      const k = str[i + 1].toLowerCase();
+      if (MC_COLORS[k]) { flush(); color = MC_COLORS[k]; bold = italic = under = strike = false; i += 2; continue; }
+      if ("lmnor".includes(k)) {
+        flush();
+        if (k === "l") bold = true; else if (k === "o") italic = true; else if (k === "n") under = true; else if (k === "m") strike = true;
+        else { color = "#FFFFFF"; bold = italic = under = strike = false; }
+        i += 2; continue;
+      }
+      if (k === "k") { i += 2; continue; }
+    }
+    buf += c;
+    i++;
+  }
+  flush();
+  return out;
+}
+
+async function rankApi(body, after) {
+  try {
+    await api("admin/ranks", body);
+    toast("Queued. The proxy applies it within a few seconds.");
+    setTimeout(after || route, 4500);
+  } catch (e) { toast(e.message, false); }
+}
+
+function ranksStatus(r) {
+  if (r.connected) return null;
+  return h("div", { class: "card warnbox" }, h("h2", {}, "LuckPerms isn't connected"),
+    h("p", { class: "muted" }, r.reason || "The proxy hasn't sent any ranks yet."),
+    h("p", { class: "muted" }, "Install LuckPerms on the BungeeCord proxy (using the same database as your backend servers), then restart the proxy. PlebioAPI finds it on its own."));
+}
+
+async function ranksView() {
+  const r = await api("admin/ranks");
+  const wrap = h("div");
+  const st = ranksStatus(r);
+  if (st) wrap.append(st);
+  const head = h("div", { class: "card-head" }, h("h2", {}, "Ranks"), h("span", { class: "muted" }, r.groups.length + " ranks from LuckPerms"));
+  const list = h("div", { class: "scroll" }, h("table", {},
+    h("thead", {}, h("tr", {}, h("th", {}, "Rank"), h("th", {}, "Prefix"), h("th", { class: "num" }, "Weight"), h("th", {}, "Inherits"), h("th", { class: "num" }, "Permissions"))),
+    h("tbody", {}, r.groups.length ? r.groups.map((g) => h("tr", { class: "link", onclick: () => { location.hash = "#rank?name=" + encodeURIComponent(g.name); } },
+      h("td", {}, h("a", { href: "#rank?name=" + encodeURIComponent(g.name) }, h("b", {}, g.display || g.name)), g.display && g.display !== g.name ? h("small", { class: "muted" }, " " + g.name) : null),
+      h("td", {}, mcText(g.prefix)),
+      h("td", { class: "num" }, String(g.weight)),
+      h("td", {}, g.parents.join(", ") || h("span", { class: "muted" }, "-")),
+      h("td", { class: "num" }, String(g.perms.length)))) : h("tr", {}, h("td", { class: "muted" }, "No ranks yet.")))));
+  const main = card(null, head, list);
+  wrap.append(main);
+  if (isOwner()) {
+    const name = h("input", { placeholder: "new rank name (like vip or mod)", maxlength: 36, "aria-label": "Rank name" });
+    const create = card("New rank", h("p", { class: "muted" }, "Lowercase letters, numbers, - and _. You set its prefix, weight and permissions next."),
+      h("div", { class: "row" }, name, h("button", { class: "primary", onclick: () => {
+        const n = name.value.trim().toLowerCase();
+        rankApi({ op: "create", group: n }, () => { location.hash = "#rank?name=" + encodeURIComponent(n); });
+      } }, icon("plus"), "Create rank")));
+    wrap.append(h("div", { style: "height:18px" }), create);
+  } else {
+    wrap.append(h("p", { class: "muted" }, "Only owners can change ranks."));
+  }
+  if (r.tracks && r.tracks.length) {
+    wrap.append(h("div", { style: "height:18px" }), card("Tracks", h("div", { class: "list" }, r.tracks.map((t) =>
+      h("div", {}, h("b", {}, t.name), " ", h("span", { class: "muted" }, t.groups.join(" → ")))))));
+  }
+  wrap.append(h("div", { style: "height:18px" }), rankChanges(r.changes));
+  return wrap;
+}
+
+function rankChanges(changes) {
+  if (!changes || !changes.length) return h("div");
+  return card("Recent rank changes", h("div", { class: "scroll" }, h("table", {},
+    h("thead", {}, h("tr", {}, h("th", {}, "When"), h("th", {}, "By"), h("th", {}, "Rank / player"), h("th", {}, "Change"), h("th", {}, "Status"))),
+    h("tbody", {}, changes.map((c) => h("tr", {}, h("td", {}, ago(c.created_at)), h("td", {}, c.by_name), h("td", {}, c.target),
+      h("td", {}, c.args.map(String).join(" ")), h("td", {}, statusPill(c.status), c.result ? " " + c.result : "")))))));
+}
+
+async function rankView() {
+  const name = (params().name || "").toLowerCase();
+  const r = await api("admin/ranks");
+  const g = r.groups.find((x) => x.name === name);
+  const wrap = h("div", {}, h("p", {}, h("a", { href: "#ranks" }, "← Ranks")));
+  if (!g) {
+    wrap.append(card(null, h("h2", {}, name), h("p", { class: "muted" }, "This rank isn't in LuckPerms yet. If you just made it, it shows up within a minute.")));
+    return wrap;
+  }
+  const owner = isOwner();
+  const go = (body) => rankApi({ group: g.name, ...body });
+  wrap.append(h("div", { class: "card hero" }, h("div", { class: "rank-badge" }, icon("crown")),
+    h("div", {}, h("h1", {}, g.display || g.name, " ", g.display && g.display !== g.name ? h("small", { class: "muted" }, g.name) : null),
+      h("p", {}, mcText(g.prefix, "no prefix"), h("span", { class: "mc-name" }, "Steve"), mcText(g.suffix, "")),
+      h("p", { class: "muted" }, "Weight " + g.weight + (g.parents.length ? " · inherits " + g.parents.join(", ") : "") + " · " + g.perms.length + " permissions"))));
+
+  // looks
+  const field2 = (label, value, op, ph) => {
+    const inp = h("input", { value: value || "", placeholder: ph, maxlength: 80, disabled: !owner, "aria-label": label });
+    const prev = h("div", { class: "preview" }, mcText(value, "none"));
+    inp.addEventListener("input", () => prev.replaceChildren(mcText(inp.value, "none")));
+    return h("div", {}, h("label", {}, label), h("div", { class: "row" }, inp, owner ? h("button", { onclick: () => go({ op, text: inp.value }) }, "Save") : null), prev);
+  };
+  const weight = h("input", { type: "number", value: g.weight, disabled: !owner, "aria-label": "Weight", style: "max-width:140px" });
+  const looks = card("Look", h("p", { class: "muted" }, "Use & codes and &#RRGGBB hex colors. PlebClient players see hex colors exactly."),
+    field2("Prefix", g.prefix, "prefix", "&#00E5FF&lVIP &7"), h("div", { style: "height:10px" }),
+    field2("Suffix", g.suffix, "suffix", ""), h("div", { style: "height:10px" }),
+    field2("Display name", g.display, "display", g.name), h("div", { style: "height:10px" }),
+    h("label", {}, "Weight (higher ranks win)"), h("div", { class: "row" }, weight, owner ? h("button", { onclick: () => go({ op: "weight", weight: weight.value }) }, "Save") : null));
+
+  // inheritance
+  const others = r.groups.filter((x) => x.name !== g.name && !g.parents.includes(x.name));
+  const parentSel = h("select", { "aria-label": "Rank to inherit" }, others.map((x) => h("option", { value: x.name }, x.display || x.name)));
+  const parents = card("Inherits from", h("p", { class: "muted" }, "A rank gets every permission of the ranks it inherits."),
+    h("div", { class: "chips" }, g.parents.length ? g.parents.map((pn) => h("span", { class: "chip" }, pn, owner ? h("button", { class: "x", title: "Stop inheriting", onclick: () => go({ op: "unparent", parent: pn }) }, "×") : null)) : h("span", { class: "muted" }, "Nothing")),
+    owner && others.length ? h("div", { class: "row", style: "margin-top:12px" }, parentSel, h("button", { onclick: () => go({ op: "parent", parent: parentSel.value }) }, icon("plus"), "Inherit")) : null);
+  wrap.append(h("div", { class: "grid g2" }, looks, parents), h("div", { style: "height:18px" }));
+
+  // permissions
+  const filter = h("input", { placeholder: "Filter permissions", "aria-label": "Filter permissions" });
+  const body = h("tbody");
+  const draw = () => {
+    const q = filter.value.trim().toLowerCase();
+    const rows = g.perms.filter((n) => !q || n.node.toLowerCase().includes(q));
+    body.replaceChildren(...(rows.length ? rows.map((n) => h("tr", {},
+      h("td", {}, h("code", {}, n.node)),
+      h("td", {}, h("span", { class: "pill " + (n.value ? "good" : "bad") }, n.value ? "allow" : "deny")),
+      h("td", {}, n.server || h("span", { class: "muted" }, "all servers"), n.world ? " / " + n.world : ""),
+      h("td", {}, n.expiry ? "until " + new Date(n.expiry * 1000).toLocaleString() : ""),
+      h("td", {}, owner ? h("button", { class: "small ghost", title: "Remove", onclick: () => go({ op: "unperm", node: n.node, server: n.server }) }, icon("trash")) : null)))
+      : [h("tr", {}, h("td", { class: "muted" }, "No permissions" + (q ? " match." : " yet.")))]));
+  };
+  filter.addEventListener("input", draw);
+  draw();
+  const node = h("input", { placeholder: "permission, like essentials.fly", maxlength: 200, "aria-label": "Permission" });
+  const server = h("input", { placeholder: "server (empty = all)", maxlength: 36, "aria-label": "Server", style: "max-width:200px" });
+  const value = h("select", { "aria-label": "Allow or deny", style: "max-width:120px" }, h("option", { value: "1" }, "allow"), h("option", { value: "0" }, "deny"));
+  const perms = card("Permissions", h("div", { class: "row" }, filter),
+    owner ? h("div", { class: "row", style: "margin-top:10px" }, node, server, value, h("button", { class: "primary", onclick: () => go({ op: "perm", node: node.value.trim(), server: server.value.trim(), value: value.value === "1" }) }, icon("key"), "Add")) : null,
+    h("div", { style: "height:10px" }),
+    h("div", { class: "scroll" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Permission"), h("th", {}, ""), h("th", {}, "Where"), h("th", {}, "Expires"), h("th", {}, ""))), body)));
+  wrap.append(perms);
+  if (owner && g.name !== "default") {
+    wrap.append(h("div", { style: "height:18px" }), card("Danger zone", h("p", { class: "muted" }, "Deleting a rank removes it from everyone who has it."),
+      h("button", { class: "danger", onclick: () => {
+        if (!confirm("Delete the rank " + g.name + "? Everyone with it loses it.")) return;
+        rankApi({ op: "delete", group: g.name }, () => { location.hash = "#ranks"; });
+      } }, icon("trash"), "Delete rank")));
+  }
+  return wrap;
+}
+
+async function playerRankCard(name, rank) {
+  let groups = [];
+  try { groups = (await api("admin/ranks")).groups; } catch (e) { /* no ranks */ }
+  const current = h("p", {}, "Rank: ", rank ? h("b", {}, rank) : h("span", { class: "muted" }, "unknown (shows after they join)"));
+  if (!isOwner() || !groups.length) return card("Rank", current, !groups.length ? h("p", { class: "muted" }, "Ranks appear once LuckPerms is connected (see Ranks).") : null);
+  const sel = h("select", { "aria-label": "Rank" }, groups.map((g) => h("option", { value: g.name, selected: g.name === rank }, g.display || g.name)));
+  const go = (mode) => rankApi({ op: "player", name, group: sel.value, mode });
+  return card("Rank", current, h("div", { class: "row" }, sel,
+    h("button", { class: "primary", onclick: () => go("set") }, "Set as rank"),
+    h("button", { onclick: () => go("add") }, "Add"),
+    h("button", { onclick: () => go("remove") }, "Remove")),
+    h("p", { class: "muted" }, "Set replaces their ranks with this one. Add gives an extra rank."));
 }
 
 // ==================== admin: announcements ====================
@@ -923,6 +1121,8 @@ const VIEWS = {
   admin: ["Dashboard", dashboardView, "admin"],
   players: ["Players", playersView, "admin"],
   player: ["Player", playerView, "admin"],
+  ranks: ["Ranks", ranksView, "admin"],
+  rank: ["Rank", rankView, "admin"],
   announce: ["Announcements", announceView, "admin"],
   publish: ["Publish to shop", publishView, "admin"],
   client: ["Client updates", clientView, "admin"],

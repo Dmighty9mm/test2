@@ -26,6 +26,9 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 		this.renderer = renderer;
 	}
 
+	/** Per player: last ageInTicks, flap time, speed, amount. */
+	private static final java.util.Map<Integer, float[]> flaps = new java.util.HashMap<>();
+
 	@Override
 	public void doRenderLayer(AbstractClientPlayer player, float limbSwing, float limbSwingAmount,
 			float partialTicks, float ageInTicks, float headYaw, float headPitch, float scale) {
@@ -42,9 +45,27 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 				}
 				renderer.getMainModel().bipedBody.postRender(0.0625F);
 				GlStateManager.scale(0.0625F, 0.0625F, 0.0625F);
-				// flap faster while flying or falling, slowly while standing
+				// flap faster while flying or falling, slowly while standing; the beat keeps
+				// going smoothly when that changes (ageInTicks already counts partial ticks)
 				boolean air = !player.onGround;
-				wings(wings, ageInTicks + partialTicks, air ? 2.4f : 1f, air ? 1.6f : 1f);
+				float[] st = flaps.get(player.getEntityId());
+				if (st == null) {
+					if (flaps.size() > 256) {
+						flaps.clear();
+					}
+					st = new float[] { ageInTicks, 0f, 1f, 1f };
+					flaps.put(player.getEntityId(), st);
+				}
+				float dt = ageInTicks - st[0];
+				if (dt < 0f || dt > 20f) {
+					dt = 0f;
+				}
+				st[0] = ageInTicks;
+				float k = Math.min(1f, dt * 0.12f);
+				st[2] += ((air ? 2.4f : 1f) - st[2]) * k;
+				st[3] += ((air ? 1.6f : 1f) - st[3]) * k;
+				st[1] = (st[1] + dt * st[2]) % 100000f;
+				wings(wings, st[1], 1f, st[3]);
 			} finally {
 				GlStateManager.popMatrix();
 			}
@@ -59,6 +80,8 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 				GlStateManager.translate(0.0F, 0.2F, 0.0F);
 			}
 			renderer.getMainModel().bipedHead.postRender(0.0625F);
+			float big = SecretMods.headScale(player);
+			GlStateManager.scale(big, big, big);
 			// head space in pixels: the head is x/z -4..4, y -8 (top) .. 0 (neck); y grows downward
 			GlStateManager.scale(0.0625F, 0.0625F, 0.0625F);
 			if (player.getCurrentArmor(3) != null) {

@@ -209,6 +209,39 @@ class PanelLogic(unittest.TestCase):
         self.assertFalse(self.p.server_status()["connected"])
         self.assertEqual(self.p.online(), [])
 
+    def test_luckperms_ranks(self):
+        owner = self.p.create_account("Owner", "password1", "owner")
+        self.assertFalse(self.p.ranks()["connected"])
+        self.p.sync({"players": [{"uuid": "11111111-1111-1111-1111-111111111111", "name": "Bob", "coins": 1, "rank": "vip"}],
+                     "ranks": {"ok": True, "groups": [
+                         {"name": "default", "weight": 0, "prefix": "&7", "perms": [{"node": "essentials.spawn", "value": True}]},
+                         {"name": "vip", "weight": 10, "prefix": "&#00E5FF&lVIP ", "parents": ["default"], "members": 3,
+                          "perms": [{"node": "essentials.fly", "value": True, "server": "lobby"}]},
+                         {"name": "Bad Name!", "weight": 5}],
+                         "tracks": [{"name": "staff", "groups": ["helper", "mod"]}]}})
+        r = self.p.ranks()
+        self.assertTrue(r["connected"])
+        self.assertEqual([g["name"] for g in r["groups"]], ["vip", "default"])
+        self.assertEqual(r["groups"][0]["perms"][0]["server"], "lobby")
+        self.assertEqual(self.p.admin_player("Bob")["rank"], "vip")
+        self.p.rank_change(owner, {"op": "create", "group": "mvp"})
+        self.p.rank_change(owner, {"op": "prefix", "group": "mvp", "text": "&6[MVP] "})
+        self.p.rank_change(owner, {"op": "weight", "group": "mvp", "weight": 20})
+        self.p.rank_change(owner, {"op": "perm", "group": "mvp", "node": "essentials.fly", "value": False, "server": "plebnite"})
+        self.p.rank_change(owner, {"op": "parent", "group": "mvp", "parent": "vip"})
+        self.p.rank_change(owner, {"op": "player", "group": "mvp", "name": "Bob", "mode": "set"})
+        for bad in ({"op": "create", "group": "Has Space"}, {"op": "delete", "group": "default"},
+                    {"op": "perm", "group": "mvp", "node": "bad node;rm"}, {"op": "parent", "group": "mvp", "parent": "mvp"},
+                    {"op": "weight", "group": "mvp", "weight": "x"}, {"op": "player", "group": "mvp", "name": ""},
+                    {"op": "prefix", "group": "mvp", "text": "x" * 81}, {"op": "explode", "group": "mvp"}):
+            with self.assertRaises(app.ApiError, msg=str(bad)):
+                self.p.rank_change(owner, bad)
+        cmds = self.p.pending()
+        self.assertEqual([(c["target"], c["args"]) for c in cmds], [
+            ("mvp", ["create"]), ("mvp", ["prefix", "&6[MVP] "]), ("mvp", ["weight", 20]),
+            ("mvp", ["perm", "essentials.fly", False, "plebnite"]), ("mvp", ["parent", "vip"]), ("Bob", ["player", "set", "mvp"])])
+        self.assertTrue(all(c["action"] == "rank" for c in cmds))
+
     def test_players_are_paged(self):
         self.p.sync({"full": True, "players": [
             {"uuid": "00000000-0000-0000-0000-%012d" % i, "name": "P%03d" % i, "coins": i, "owned": [], "equipped": {},

@@ -23,6 +23,7 @@
     "MixinLayerCape",
     "MixinLayerSheepWool",
     "MixinMinecraft",
+    "MixinModelBiped",
     "MixinNetHandlerPlayClient",
     "MixinRender",
     "MixinRenderPlayer",

@@ -78,6 +78,32 @@ public class CustomItemsTest {
 		return true;
 	}
 
+	static double[] v3(Object o) {
+		List<?> l = (List<?>) o;
+		return new double[] { ((Number) l.get(0)).doubleValue(), ((Number) l.get(1)).doubleValue(), ((Number) l.get(2)).doubleValue() };
+	}
+
+	/** Where 1.8 puts a model point (pixels) with a display transform: T * Ry * Rx * Rz * S * (p - 8). */
+	static double[] place(ItemTransforms.T t, double[] p) {
+		double[] v = { (p[0] - 8) * t.s[0], (p[1] - 8) * t.s[1], (p[2] - 8) * t.s[2] };
+		v = rot(v, 2, t.r[2]);
+		v = rot(v, 0, t.r[0]);
+		v = rot(v, 1, t.r[1]);
+		return new double[] { v[0] + t.t[0], v[1] + t.t[1], v[2] + t.t[2] };
+	}
+
+	static double[] rot(double[] v, int axis, double deg) {
+		double a = Math.toRadians(deg), c = Math.cos(a), s = Math.sin(a);
+		switch (axis) {
+		case 0:
+			return new double[] { v[0], c * v[1] - s * v[2], s * v[1] + c * v[2] };
+		case 1:
+			return new double[] { c * v[0] + s * v[2], v[1], -s * v[0] + c * v[2] };
+		default:
+			return new double[] { c * v[0] - s * v[1], s * v[0] + c * v[1], v[2] };
+		}
+	}
+
 	public static void main(String[] a) {
 		// ---- display transforms: vanilla items look the same after conversion
 		ItemTransforms.T fp = ItemTransforms.convert("firstperson",
@@ -177,6 +203,47 @@ public class CustomItemsTest {
 		check(Json.parse(NewItems.modelJson("netherite_sword")) instanceof Map, "builtin model is valid json");
 
 		check(VanillaNames.modernNames("reeds").contains("sugar_cane") && "gold_sword".equals(VanillaNames.texture18("golden_sword")), "vanilla names");
+
+		// ---- a small pistol drawn at 3x in the GUI (more than 1.8 allows): the geometry is
+		// made bigger instead, and every slot still lands in the same place
+		Map<String, byte[]> gp = new HashMap<>();
+		gp.put("pack.mcmeta", s("{\"pack\":{\"pack_format\":6,\"description\":\"qa\"}}"));
+		gp.put("assets/minecraft/models/item/crossbow.json", s("{\"parent\":\"item/generated\",\"textures\":{\"layer0\":\"item/crossbow\"},"
+				+ "\"overrides\":[{\"predicate\":{\"custom_model_data\":1},\"model\":\"qualityarmory:gun/p30\"}]}"));
+		String p30Display = "{\"thirdperson_righthand\":{\"rotation\":[0,-90,0],\"translation\":[0,-1.75,-2],\"scale\":[1.5,1.5,1.5]},"
+				+ "\"firstperson_righthand\":{\"rotation\":[0,-90,0],\"translation\":[-1.5,0,0],\"scale\":[3.5,3.5,3.5]},"
+				+ "\"ground\":{\"translation\":[0,2,0],\"scale\":[2,2,2]},"
+				+ "\"gui\":{\"rotation\":[0,130,0],\"translation\":[4.72,9.8296,0],\"scale\":[3,3,3]}}";
+		String p30Els = "[{\"from\":[5.75,2.625,4.0625],\"to\":[9,5.8375,4.9375],\"faces\":{\"north\":{\"texture\":\"#0\"},\"up\":{\"uv\":[0,0,4,1],\"texture\":\"#0\"}}},"
+				+ "{\"from\":[8,4,4.25],\"to\":[8.5,5,4.75],\"rotation\":{\"angle\":22.5,\"axis\":\"z\",\"origin\":[8,4,4.5]},\"faces\":{\"south\":{\"texture\":\"#0\"}}}]";
+		gp.put("assets/qualityarmory/models/gun/p30.json", s("{\"textures\":{\"0\":\"qualityarmory:gun/p30\"},\"elements\":" + p30Els + ",\"display\":" + p30Display + "}"));
+		gp.put("assets/qualityarmory/textures/gun/p30.png", png(16, 16));
+		ItemRules gr = ItemRules.build(Arrays.asList(pack("qa", gp)));
+		ModelConverter.Result p30 = gr.match(Arrays.asList("crossbow"), 1, true, 0, 465, false, null);
+		check(p30 != null, "pistol converted");
+		if (p30 != null) {
+			Map<?, ?> out = (Map<?, ?>) Json.parse(p30.json);
+			Map<?, ?> pdisp = (Map<?, ?>) out.get("display");
+			Map<?, ?> d19 = (Map<?, ?>) Json.parse(p30Display);
+			List<?> before = (List<?>) Json.parse(p30Els), after = (List<?>) out.get("elements");
+			String[][] slots = { { "gui", "gui" }, { "firstperson", "firstperson_righthand" }, { "thirdperson", "thirdperson_righthand" }, { "ground", "ground" } };
+			for (String[] sl : slots) {
+				ItemTransforms.T want = ItemTransforms.convert(sl[0], ItemTransforms.read(d19.get(sl[1])), true);
+				ItemTransforms.T got = ItemTransforms.read(pdisp.get(sl[0]));
+				for (int i = 0; i < 3; i++) {
+					check(Math.abs(got.s[i]) <= 4 && Math.abs(got.t[i]) <= 24, sl[0] + " fits 1.8: " + got);
+				}
+				for (int e = 0; e < before.size(); e++) {
+					Map<?, ?> b = (Map<?, ?>) before.get(e), n = (Map<?, ?>) after.get(e);
+					for (String k : new String[] { "from", "to" }) {
+						double[] w = place(want, v3(b.get(k))), h = place(got, v3(n.get(k)));
+						check(near(w, h), sl[0] + " " + k + " " + e + " same place: " + Arrays.toString(w) + " vs " + Arrays.toString(h));
+					}
+				}
+			}
+			Map<?, ?> north = (Map<?, ?>) ((Map<?, ?>) ((Map<?, ?>) after.get(0)).get("faces")).get("north");
+			check(north.get("uv") != null, "auto UV written before resizing");
+		}
 
 		System.out.println("CustomItemsTest: " + checks + " checks, " + failures + " failures");
 		if (failures > 0) {

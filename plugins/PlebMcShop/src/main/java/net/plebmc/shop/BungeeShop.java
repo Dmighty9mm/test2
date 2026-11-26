@@ -538,6 +538,49 @@ public final class BungeeShop extends Plugin implements Listener {
 		signin.command(p.getUniqueId(), args, line -> p.sendMessage(TextComponent.fromLegacyText(line)));
 	}
 
+	/** LuckPerms on the proxy, or null (found once, after every plugin enabled). */
+	private Object luckPerms;
+	private boolean luckPermsTried;
+
+	private LuckPermsBridge luckPerms() {
+		if (!luckPermsTried) {
+			luckPermsTried = true;
+			if (getProxy().getPluginManager().getPlugin("LuckPerms") != null) {
+				luckPerms = LuckPermsBridge.find();
+			}
+			getLogger().info(luckPerms != null ? "LuckPerms found: ranks show on the panel and owners can change them there"
+					: "LuckPerms isn't on this proxy: the panel's Ranks page stays empty");
+		}
+		return (LuckPermsBridge) luckPerms;
+	}
+
+	/** Ranks for the panel: every LuckPerms group, and each online player's rank. */
+	@SuppressWarnings("unchecked")
+	private void addRanks(Map<String, Object> snap) {
+		LuckPermsBridge lp = luckPerms();
+		if (lp == null) {
+			Map<String, Object> r = new java.util.LinkedHashMap<>();
+			r.put("ok", false);
+			r.put("reason", "LuckPerms isn't installed on the BungeeCord proxy.");
+			snap.put("ranks", r);
+			return;
+		}
+		try {
+			snap.put("ranks", lp.report());
+			for (Map<String, Object> p : (List<Map<String, Object>>) snap.get("players")) {
+				String rank = lp.rankOf(UUID.fromString(String.valueOf(p.get("uuid"))));
+				if (rank != null) {
+					p.put("rank", rank);
+				}
+			}
+		} catch (Throwable t) {
+			Map<String, Object> r = new java.util.LinkedHashMap<>();
+			r.put("ok", false);
+			r.put("reason", "LuckPerms answered with an error: " + t);
+			snap.put("ranks", r);
+		}
+	}
+
 	/** Every 20 s: send the panel everyone's coins and cosmetics (when something changed, or each minute for who's online). */
 	private void syncPanel() {
 		PanelLink link = panelLink;
@@ -550,7 +593,9 @@ public final class BungeeShop extends Plugin implements Listener {
 			return;
 		}
 		try {
-			link.sync(core.snapshot());
+			Map<String, Object> snap = core.snapshot();
+			addRanks(snap);
+			link.sync(snap);
 			syncedVersion = v;
 			lastSync = now;
 		} catch (IOException e) {
@@ -632,6 +677,17 @@ public final class BungeeShop extends Plugin implements Listener {
 				n = -1;
 			}
 			return n <= 0 ? "!bad amount" : "gave " + n + " to " + core.giveOnline(n) + " players online";
+		}
+		case "rank": {
+			LuckPermsBridge lp = luckPerms();
+			if (lp == null) {
+				return "!LuckPerms isn't on the proxy";
+			}
+			try {
+				return lp.apply(target, args);
+			} catch (Exception e) {
+				return "!LuckPerms: " + e.getMessage();
+			}
 		}
 		case "broadcast":
 			return args.isEmpty() ? "!empty message" : "sent to " + core.announce(args.get(0)) + " players";

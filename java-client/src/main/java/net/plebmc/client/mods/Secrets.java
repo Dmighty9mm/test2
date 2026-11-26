@@ -7,17 +7,28 @@ package net.plebmc.client.mods;
  */
 public final class Secrets {
 
-	public static final String[] IDS = { "konami", "rain", "roll", "dinnerbone", "golden", "plebium", "holiday", "fpslarp" };
+	public static final String[] IDS = { "konami", "rain", "roll", "dinnerbone", "plebium", "holiday", "fpslarp",
+			"hello", "credits", "sleepy", "nightowl", "coinflip", "dizzy", "snow", "buddy", "bighead" };
 	public static final String[] HINTS = { "An old cheat code works on the title screen (arrows, then B A)",
 			"Type the server's name on the title screen", "Ask the title screen to do a barrel roll",
-			"A famous upside-down name, typed on the title screen", "Poke the little mascot. A lot.",
+			"A famous upside-down name, typed on the title screen",
 			"Something is hiding in the Video Settings title", "Come back on a holiday",
-			"FPS is just a number. Try it in the Mods search." };
+			"Secret mod: FPS is just a number. Try it in the Mods search.",
+			"Say hello to Plebio on the title screen", "Every movie ends with them. Type them on the title screen.",
+			"Leave Plebio alone on the title screen for a while", "Play when you should be asleep",
+			"Click your coins in the Right Shift menu", "Spin yourself around in the Wardrobe. A lot.",
+			"Secret mod: it's cold outside. Let it... (Mods search)",
+			"Secret mod: Plebio wants to be your best friend (Mods search)",
+			"Secret mod: some heads are bigger than others (Mods search)" };
+	/** Secret mods: the word typed in the Mods search, and the secret it finds. */
+	public static final String[][] MOD_WORDS = { { "fpslarp", "fpslarp" }, { "letitsnow", "snow" },
+			{ "bestfriend", "buddy" }, { "bighead", "bighead" } };
 
 	/** Up up down down left right left right B A (LWJGL key codes). */
 	public static final int[] KONAMI = { 200, 200, 208, 208, 203, 205, 203, 205, 48, 30 };
 	/** Words typed on the title screen, and the secret each one finds. */
-	public static final String[][] WORDS = { { "pleb", "rain" }, { "barrelroll", "roll" }, { "dinnerbone", "dinnerbone" } };
+	public static final String[][] WORDS = { { "pleb", "rain" }, { "barrelroll", "roll" }, { "dinnerbone", "dinnerbone" },
+			{ "hello", "hello" }, { "credits", "credits" } };
 
 	private int konamiAt;
 	private final StringBuilder typed = new StringBuilder();
@@ -55,6 +66,22 @@ public final class Secrets {
 			}
 		}
 		return null;
+	}
+
+	/** The secret a Mods search finds, or null. */
+	public static String modWord(String search) {
+		String s = search == null ? "" : search.trim().toLowerCase().replace(" ", "");
+		for (String[] w : MOD_WORDS) {
+			if (w[0].equals(s)) {
+				return w[1];
+			}
+		}
+		return null;
+	}
+
+	/** True for the small hours (2 to 4:59 AM). */
+	public static boolean nightOwl(int hour) {
+		return hour >= 2 && hour < 5;
 	}
 
 	public void reset() {

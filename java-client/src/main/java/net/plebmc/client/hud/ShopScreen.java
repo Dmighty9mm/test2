@@ -452,13 +452,19 @@ public final class ShopScreen extends PlebScreen {
 		if (mx >= pvx && mx < pvx + pvw && my >= pvy && my < pvy + pvh) {
 			spinning = true;
 			spinLastX = mx;
+			spinTotal = 0;
 		}
 	}
+
+	/** Degrees spun in this drag (five whole turns is a secret). */
+	private float spinTotal;
 
 	@Override
 	protected void mouseClickMove(int mx, int my, int button, long held) {
 		if (spinning) {
 			yawTarget += (mx - spinLastX) * 2.5f;
+			spinTotal += (mx - spinLastX) * 2.5f;
+			EasterEggs.spun(spinTotal);
 			yaw = yawTarget;
 			spinLastX = mx;
 		}

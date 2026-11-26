@@ -15,13 +15,14 @@ import net.plebmc.client.mods.Secrets;
  *
  * <ul>
  * <li>konami: the Konami code (title screen or in game) turns on rainbow menus</li>
- * <li>rain: type "pleb" on the title screen</li>
- * <li>roll: type "barrelroll" on the title screen</li>
- * <li>dinnerbone: type "dinnerbone" on the title screen</li>
- * <li>golden: click the little mascot ten times</li>
+ * <li>rain, roll, dinnerbone, hello, credits: words typed on the title screen</li>
  * <li>plebium: click the Video Settings title five times</li>
- * <li>holiday: open the game on a holiday</li>
- * <li>fpslarp: type "fpslarp" in the Mods search</li>
+ * <li>holiday: open the game on a holiday; nightowl: between 2 and 5 AM</li>
+ * <li>sleepy: leave Plebio alone on the title screen for two minutes</li>
+ * <li>coinflip: click your coins in the Right Shift menu</li>
+ * <li>dizzy: spin yourself five times in the Wardrobe</li>
+ * <li>secret mods, typed in the Mods search: fpslarp, letitsnow (snow),
+ * bestfriend (Plebio on your HUD), bighead (big heads)</li>
  * </ul>
  */
 public final class EasterEggs {
@@ -50,6 +51,12 @@ public final class EasterEggs {
 		} else if ("dinnerbone".equals(id)) {
 			flipUntil = System.currentTimeMillis() + 6000;
 			found("dinnerbone", "Dinnerbone was here", "Everything is upside down for a bit");
+		} else if ("hello".equals(id)) {
+			hello = true;
+			found("hello", "Hi, I'm Plebio!", "Nice to meet you. Click me sometime.");
+		} else if ("credits".equals(id)) {
+			creditsStart = System.currentTimeMillis();
+			found("credits", "Roll the credits", "Starring Plebio as himself");
 		}
 	}
 
@@ -72,24 +79,80 @@ public final class EasterEggs {
 
 	static void rain() {
 		rainStart = System.currentTimeMillis();
-		found("rain", "It's raining plebs!", "Hallelujah");
+		found("rain", "It's raining Plebios!", "Hallelujah");
 	}
 
 	// ==================== mascot and video screen ====================
 
-	private static int buddyClicks;
-	private static boolean golden;
+	private static boolean hello;
+	private static long lastPoke = System.currentTimeMillis();
+	private static boolean asleep;
 
-	/** The title screen's little mascot was clicked. */
-	static void buddyClicked() {
-		if (++buddyClicks == 10) {
-			golden = true;
-			found("golden", "The Golden Pleb", "You poked him ten times. He's golden now.");
+	/** Plebio on the title screen was clicked. */
+	static void plebioClicked() {
+		activity();
+	}
+
+	/** Any input on the title screen: Plebio wakes up. */
+	static void activity() {
+		lastPoke = System.currentTimeMillis();
+		asleep = false;
+	}
+
+	/** True once after someone typed "hello" (Plebio jumps). */
+	static boolean takeHello() {
+		boolean h = hello;
+		hello = false;
+		return h;
+	}
+
+	/** True while Plebio is asleep on the title screen (nobody touched anything for two minutes). */
+	static boolean plebioAsleep() {
+		if (!asleep && System.currentTimeMillis() - lastPoke > 120_000) {
+			asleep = true;
+			found("sleepy", "Shh, Plebio is napping", "You left him alone too long. zZz");
+		}
+		return asleep;
+	}
+
+	/** The coins in the Right Shift menu were clicked: heads or tails. */
+	static void coinFlip() {
+		boolean heads = Math.random() < 0.5;
+		found("coinflip", heads ? "Heads!" : "Tails!", heads ? "Plebio says you win" : "Plebio says you owe him a coin");
+	}
+
+	/** The Wardrobe model was spun this many degrees in one drag. */
+	static void spun(float degrees) {
+		if (Math.abs(degrees) >= 360f * 5) {
+			found("dizzy", "Dizzy!", "Five spins. Plebio needs to sit down.");
 		}
 	}
 
-	static boolean goldenBuddy() {
-		return golden;
+	// ==================== secret mods ====================
+
+	/**
+	 * The Mods search: a secret mod's word turns it on or off (and finds the
+	 * secret). Returns the secret's id, or null when the search isn't one.
+	 */
+	static String modSearch(String search) {
+		String id = Secrets.modWord(search);
+		if (id == null) {
+			return null;
+		}
+		ClientPrefs p = ClientPrefs.get();
+		if ("snow".equals(id)) {
+			p.snowMod = !p.snowMod;
+			found(id, "Let it snow!", p.snowMod ? "Snow on your screen (type it again to stop)" : "The snow stopped");
+		} else if ("buddy".equals(id)) {
+			p.buddyMod = !p.buddyMod;
+			found(id, "Best friends!", p.buddyMod ? "Plebio rides along on your HUD" : "Plebio went home");
+		} else if ("bighead".equals(id)) {
+			p.bigHeadMod = !p.bigHeadMod;
+			found(id, "Big heads!", p.bigHeadMod ? "Everyone's head got bigger (only you see it)" : "Heads are normal again");
+		} else if ("fpslarp".equals(id)) {
+			found(id, "FPS Larp unlocked", "Big numbers, zero effort");
+		}
+		return id;
 	}
 
 	private static int titleClicks;
@@ -126,10 +189,20 @@ public final class EasterEggs {
 		return today;
 	}
 
-	private static boolean holidaySeen;
+	private static boolean holidaySeen, owlSeen;
 
 	/** Holiday extras on the title screen: a greeting and falling confetti in the holiday's colors. */
 	static void titleExtras(int w, int h, long now) {
+		if (!owlSeen) {
+			owlSeen = true;
+			try {
+				if (Secrets.nightOwl(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY))) {
+					found("nightowl", "Night owl", "It's really late. Plebio is judging you.");
+				}
+			} catch (Throwable t) {
+				// no clock
+			}
+		}
 		Object[] hd = today();
 		if (hd == null) {
 			return;
@@ -262,12 +335,15 @@ public final class EasterEggs {
 	/** Drawn last on the title screen, every PlebClient menu and the HUD. */
 	public static void overlay(int w, int h) {
 		long now = System.currentTimeMillis();
-		if (rainStart == 0 && bannerTitle == null) {
+		if (rainStart == 0 && bannerTitle == null && creditsStart == 0) {
 			return;
 		}
 		GlStateManager.pushMatrix();
 		GlStateManager.translate(0f, 0f, 400f);
 		GlStateManager.enableBlend();
+		if (creditsStart != 0) {
+			credits(w, h, now - creditsStart);
+		}
 		if (rainStart != 0) {
 			long t = now - rainStart;
 			if (t > RAIN_MS) {
@@ -323,6 +399,41 @@ public final class EasterEggs {
 		}
 		GlStateManager.popMatrix();
 		GlStateManager.color(1f, 1f, 1f, 1f);
+	}
+
+	private static long creditsStart;
+	private static final String[][] CREDITS = { { "PlebClient", "" }, { "Made by", "Mighty" },
+			{ "Starring", "Plebio as himself" }, { "Moral support", "Lucky" }, { "Bug creator", "Mighty" },
+			{ "Bug finder", "Lucky" }, { "TNT supplier", "Plebio" }, { "Special thanks", "Everyone on PlebMc" },
+			{ "", "play.plebmc.top" }, { "", "Thanks for playing!" } };
+
+	/** Movie credits rolling up the screen for twelve seconds. */
+	private static void credits(int w, int h, long t) {
+		long len = 12000;
+		if (t > len) {
+			creditsStart = 0;
+			return;
+		}
+		float fade = Math.min(1f, Math.min(t / 500f, (len - t) / 600f));
+		Ui.rect(0, 0, w, h, Ui.alpha(0xFF05080C, Math.round(0xD8 * fade)));
+		int a = Math.round(255 * fade);
+		float y = h - (t / 1000f) * 34f;
+		for (int i = 0; i < CREDITS.length; i++) {
+			String role = CREDITS[i][0], who = CREDITS[i][1];
+			int ly = Math.round(y + i * 34);
+			if (ly < -30 || ly > h + 10) {
+				continue;
+			}
+			if (i == 0) {
+				Ui.mascot(w / 2f - 12, ly - 26, 24, fade);
+				Ui.big(role, w / 2 - Math.round(Ui.width(role) * 2f) / 2, ly, 2f, Ui.alpha(Ui.accent(), a), true);
+				continue;
+			}
+			if (!role.isEmpty()) {
+				Ui.centered(role.toUpperCase(), w / 2, ly, Ui.alpha(Ui.FAINT, a));
+			}
+			Ui.centered(who, w / 2, ly + 11, Ui.alpha(0xFFFFFFFF, a));
+		}
 	}
 
 	private static void sound(String name) {

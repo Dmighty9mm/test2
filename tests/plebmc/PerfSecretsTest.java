@@ -104,6 +104,26 @@ public final class PerfSecretsTest {
 		}
 		check("typed dinnerbone", "dinnerbone".equals(got));
 		check("ids and hints line up", Secrets.IDS.length == Secrets.HINTS.length);
+		check("16 secrets, no golden", Secrets.IDS.length == 16 && !java.util.Arrays.asList(Secrets.IDS).contains("golden"));
+		got = null;
+		for (char c : "hello".toCharArray()) {
+			String id = s.letter(c);
+			if (id != null) {
+				got = id;
+			}
+		}
+		check("typed hello", "hello".equals(got));
+		check("mod words", "snow".equals(Secrets.modWord(" Let It Snow ")) && "buddy".equals(Secrets.modWord("bestfriend"))
+				&& "bighead".equals(Secrets.modWord("BIGHEAD")) && Secrets.modWord("fps") == null);
+		check("night owl", Secrets.nightOwl(3) && !Secrets.nightOwl(5) && !Secrets.nightOwl(23));
+		boolean every = true;
+		for (String[] w : Secrets.MOD_WORDS) {
+			every &= java.util.Arrays.asList(Secrets.IDS).contains(w[1]);
+		}
+		for (String[] w : Secrets.WORDS) {
+			every &= java.util.Arrays.asList(Secrets.IDS).contains(w[1]);
+		}
+		check("every word finds a listed secret", every);
 
 		check("thanksgiving 2026", "Happy Thanksgiving!".equals(Secrets.holiday(11, 26, 5)[0]));
 		check("not thanksgiving on the third thursday", Secrets.holiday(11, 19, 5) == null);
@@ -113,14 +133,29 @@ public final class PerfSecretsTest {
 
 		check("a 1.8 bow matches crossbow gun rules",
 				net.plebmc.client.items.VanillaNames.modernNames("bow").contains("crossbow"));
-		check("small caps become capitals",
-				"RANK: Owner".equals(net.plebmc.client.text.ModernText.fold("\u0280\u1D00\u0274\u1D0B: Owner")));
-		check("small s and f", "SF".equals(net.plebmc.client.text.ModernText.fold("\uA731\uA730")));
+		check("small caps are kept for their own glyphs",
+				"\u0280\u1D00\u0274\u1D0B: Owner".equals(net.plebmc.client.text.ModernText.fold("\u0280\u1D00\u0274\u1D0B: Owner")));
+		check("glyphs", net.plebmc.client.text.ModernText.glyph('\u0280') == "ABCDEFGHIJKLMNOPQRSTUVWYZ".indexOf('R')
+				&& net.plebmc.client.text.ModernText.glyph('\uA731') == "ABCDEFGHIJKLMNOPQRSTUVWYZ".indexOf('S')
+				&& net.plebmc.client.text.ModernText.glyph('\u0455') == "ABCDEFGHIJKLMNOPQRSTUVWYZ".indexOf('S')
+				&& net.plebmc.client.text.ModernText.glyph('a') == -1 && net.plebmc.client.text.ModernText.glyph('\u00e9') == -1);
+		boolean shapes = true;
+		for (int g = 0; g < net.plebmc.client.text.ModernText.glyphCount(); g++) {
+			int w = net.plebmc.client.text.ModernText.glyphWidth(g);
+			boolean any = false;
+			for (int y = 0; y < 5; y++) {
+				for (int x = 0; x < w; x++) {
+					any |= net.plebmc.client.text.ModernText.glyphPixel(g, x, y);
+				}
+			}
+			shapes &= any && w >= 3 && w <= 5;
+		}
+		check("every glyph has pixels", shapes);
 		String plain = "plain text \u00a7aok";
 		check("plain text is the same string", net.plebmc.client.text.ModernText.fold(plain) == plain);
-		String rgb = "\u00a7\uE123hi\u1D00";
-		check("rgb codes pass through", ("\u00a7\uE123hiA").equals(net.plebmc.client.text.ModernText.fold(rgb)));
-		check("char fold", net.plebmc.client.text.ModernText.fold('\u1D1B') == 'T' && net.plebmc.client.text.ModernText.fold('a') == 'a');
+		String rgb = "\u00a7\uE123hi\u2019";
+		check("rgb codes pass through", ("\u00a7\uE123hi'").equals(net.plebmc.client.text.ModernText.fold(rgb)));
+		check("char fold", net.plebmc.client.text.ModernText.fold('\u2014') == '-' && net.plebmc.client.text.ModernText.fold('a') == 'a');
 
 		System.out.println(passed + " passed, " + failed + " failed");
 		if (failed > 0) {

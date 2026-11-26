@@ -137,6 +137,78 @@ public final class ItemTransforms {
 		return c.mul(Mat.of19(m19)).to18();
 	}
 
+	/**
+	 * The same slot after the geometry was moved by {@code d} pixels and then
+	 * scaled {@code k} times around the middle of the block.
+	 */
+	public static T refit(T t18, double[] d, double k) {
+		Mat rs = Mat.of18(new T(t18.r, new double[3], t18.s));
+		double[] t = new double[3], s = new double[3];
+		for (int i = 0; i < 3; i++) {
+			t[i] = Mat.clean(t18.t[i] - (rs.m[i * 4] * d[0] + rs.m[i * 4 + 1] * d[1] + rs.m[i * 4 + 2] * d[2]));
+			s[i] = Mat.clean(t18.s[i] / k);
+		}
+		return new T(t18.r.clone(), t, s);
+	}
+
+	/**
+	 * How far to move a model's geometry (pixels) so every slot's translation
+	 * fits in 1.8's 24 pixels, or as close as it gets (the hands and the GUI
+	 * count most). The geometry, made {@code k} times bigger around the middle
+	 * of the block afterwards, has to stay inside 1.8's -16..32 box.
+	 */
+	public static double[] bestShift(java.util.Map<String, T> t18s, double[] lo, double[] hi, double k) {
+		double[] dlo = new double[3], dhi = new double[3], d = new double[3];
+		for (int i = 0; i < 3; i++) {
+			dlo[i] = 8 - 24 / k - lo[i];
+			dhi[i] = 8 + 24 / k - hi[i];
+			if (dlo[i] > dhi[i]) {
+				dlo[i] = dhi[i] = 8 - (lo[i] + hi[i]) / 2;
+			}
+			d[i] = Math.max(dlo[i], Math.min(dhi[i], 8 - (lo[i] + hi[i]) / 2));
+		}
+		java.util.List<double[]> as = new java.util.ArrayList<>();
+		java.util.List<double[]> ts = new java.util.ArrayList<>();
+		java.util.List<Double> ws = new java.util.ArrayList<>();
+		double norm = 0;
+		for (java.util.Map.Entry<String, T> e : t18s.entrySet()) {
+			T t = e.getValue();
+			Mat rs = Mat.of18(new T(t.r, new double[3], t.s));
+			double w = "gui".equals(e.getKey()) || e.getKey().endsWith("person") ? 10 : 1;
+			as.add(rs.m);
+			ts.add(t.t);
+			ws.add(w);
+			double s = Math.max(Math.abs(t.s[0]), Math.max(Math.abs(t.s[1]), Math.abs(t.s[2])));
+			norm += w * s * s;
+		}
+		double step = norm <= 0 ? 0 : 0.4 / norm;
+		for (int it = 0; it < 4000; it++) {
+			double[] g = new double[3];
+			boolean any = false;
+			for (int n = 0; n < as.size(); n++) {
+				double[] m = as.get(n), t = ts.get(n);
+				for (int i = 0; i < 3; i++) {
+					double r = t[i] - (m[i * 4] * d[0] + m[i * 4 + 1] * d[1] + m[i * 4 + 2] * d[2]);
+					double over = Math.abs(r) - 23.9;
+					if (over > 0) {
+						any = true;
+						double o = Math.signum(r) * over * ws.get(n);
+						for (int j = 0; j < 3; j++) {
+							g[j] -= o * m[i * 4 + j];
+						}
+					}
+				}
+			}
+			if (!any) {
+				break;
+			}
+			for (int j = 0; j < 3; j++) {
+				d[j] = Math.max(dlo[j], Math.min(dhi[j], d[j] - step * g[j]));
+			}
+		}
+		return d;
+	}
+
 	/** Reads a {@code {"rotation":[..],"translation":[..],"scale":[..]}} map (missing parts default). */
 	public static T read(Object o) {
 		if (!(o instanceof java.util.Map)) {
@@ -313,7 +385,7 @@ public final class ItemTransforms {
 			return new T(r, t, new double[] { clean(s[0]), clean(s[1]), clean(s[2]) });
 		}
 
-		private static double clean(double d) {
+		static double clean(double d) {
 			double r = Math.round(d * 10000) / 10000.0;
 			return r == -0.0 ? 0.0 : r;
 		}

@@ -50,10 +50,52 @@ public abstract class MixinFontRenderer {
 		return net.plebmc.client.text.ModernText.fold(PlebClient.filterText(text));
 	}
 
-	/** Newer small caps letters measure (and draw) as the font's capitals. */
-	@ModifyVariable(method = "getCharWidth", at = @At("HEAD"), argsOnly = true, ordinal = 0)
-	private char plebmc$modernWidth(char c) {
-		return net.plebmc.client.text.ModernText.fold(c);
+	@Shadow
+	protected float posX;
+	@Shadow
+	protected float posY;
+	@Shadow
+	private boolean unicodeFlag;
+
+	/** The character renderStringAtPos is on, for the two below. */
+	private char plebmc$char;
+
+	/** Newer small caps letters measure (and draw) with PlebClient's glyphs. */
+	@Inject(method = "getCharWidth", at = @At("HEAD"), cancellable = true)
+	private void plebmc$modernWidth(char c, CallbackInfoReturnable<Integer> cir) {
+		if (!this.unicodeFlag && c >= 0x100) {
+			int w = net.plebmc.client.hud.ModernFont.width(net.plebmc.client.text.ModernText.fold(c));
+			if (w >= 0) {
+				cir.setReturnValue(w);
+			}
+		}
+	}
+
+	@Inject(method = "renderChar", at = @At("HEAD"), cancellable = true)
+	private void plebmc$modernChar(char c, boolean italic, CallbackInfoReturnable<Float> cir) {
+		if (!this.unicodeFlag && c >= 0x100) {
+			float w = net.plebmc.client.hud.ModernFont.draw(c, this.posX, this.posY, italic);
+			if (w >= 0) {
+				cir.setReturnValue(w);
+			}
+		}
+	}
+
+	@ModifyVariable(method = "renderStringAtPos", at = @At("STORE"), ordinal = 0)
+	private char plebmc$seeChar(char c) {
+		this.plebmc$char = c;
+		return c;
+	}
+
+	/** Our glyphs get the shadow and bold offsets of the main font, not the unicode pages'. */
+	@ModifyVariable(method = "renderStringAtPos", at = @At("STORE"), ordinal = 0)
+	private float plebmc$offset(float f) {
+		return !this.unicodeFlag && net.plebmc.client.hud.ModernFont.width(this.plebmc$char) >= 0 ? 1.0F : f;
+	}
+
+	@ModifyVariable(method = "renderStringAtPos", at = @At("STORE"), ordinal = 1)
+	private boolean plebmc$shadowPlace(boolean flag) {
+		return flag && !(!this.unicodeFlag && net.plebmc.client.hud.ModernFont.width(this.plebmc$char) >= 0);
 	}
 
 	/**

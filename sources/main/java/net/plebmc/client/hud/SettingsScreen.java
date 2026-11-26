@@ -149,6 +149,21 @@ public final class SettingsScreen extends PlebScreen {
 						() -> pr.rainbowAccent, saved(() -> pr.rainbowAccent = !pr.rainbowAccent)), clip);
 				y += step;
 			}
+			if (pr.hasSecret("snow")) {
+				add(toggle("Let It Snow", "Secret mod: snow over the game, piling up on your hotbar", lx, y, lw, h,
+						() -> pr.snowMod, saved(() -> pr.snowMod = !pr.snowMod)), clip);
+				y += step;
+			}
+			if (pr.hasSecret("buddy")) {
+				add(toggle("Best Friend", "Secret mod: Plebio sits by your hotbar and talks", lx, y, lw, h,
+						() -> pr.buddyMod, saved(() -> pr.buddyMod = !pr.buddyMod)), clip);
+				y += step;
+			}
+			if (pr.hasSecret("bighead")) {
+				add(toggle("Big Heads", "Secret mod: everyone's head is bigger (only you see it)", lx, y, lw, h,
+						() -> pr.bigHeadMod, saved(() -> pr.bigHeadMod = !pr.bigHeadMod)), clip);
+				y += step;
+			}
 			add(choice("Secrets found", secretHint(), lx, y, lw, h,
 					() -> pr.secretCount() + " of " + EasterEggs.IDS.length, () -> {
 						hint++;
@@ -175,7 +190,7 @@ public final class SettingsScreen extends PlebScreen {
 					saved(() -> pr.titleBackground = wrap(pr.titleBackground + 1, ClientPrefs.BACKGROUNDS.length)),
 					saved(() -> pr.titleBackground = wrap(pr.titleBackground - 1, ClientPrefs.BACKGROUNDS.length))), clip);
 			y += step;
-			add(toggle("Mini mascot", "The little mascot in the corner (click him)", lx, y, lw, h, () -> pr.titleBuddy,
+			add(toggle("Mini Plebio", "Plebio in the corner (click him)", lx, y, lw, h, () -> pr.titleBuddy,
 					saved(() -> pr.titleBuddy = !pr.titleBuddy)), clip);
 			y += step;
 			add(choice("Particles", "Snow, embers or fireflies drifting over the title screen", lx, y, lw, h,
@@ -183,7 +198,7 @@ public final class SettingsScreen extends PlebScreen {
 					saved(() -> pr.titleParticles = wrap(pr.titleParticles + 1, ClientPrefs.PARTICLES.length)),
 					saved(() -> pr.titleParticles = wrap(pr.titleParticles - 1, ClientPrefs.PARTICLES.length))), clip);
 			y += step;
-			add(toggle("Mascot", "The PlebMc mascot at the top of the sidebar", lx, y, lw, h, () -> pr.titleMascot,
+			add(toggle("Plebio", "Plebio at the top of the sidebar", lx, y, lw, h, () -> pr.titleMascot,
 					saved(() -> pr.titleMascot = !pr.titleMascot)), clip);
 			y += step;
 			add(toggle("Clock", "The time in the bottom corner", lx, y, lw, h, () -> pr.titleClock,

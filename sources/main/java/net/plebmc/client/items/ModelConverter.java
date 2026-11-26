@@ -309,6 +309,7 @@ public final class ModelConverter {
 			}
 			out.put("textures", outTex);
 			Map<String, Object> disp = new LinkedHashMap<>();
+			Map<String, ItemTransforms.T> t18s = new LinkedHashMap<>();
 			for (String slot : ItemTransforms.SLOTS_18) {
 				ItemTransforms.T t18;
 				Object legacy = "thirdperson".equals(slot) || "firstperson".equals(slot) ? display.get(slot) : null;
@@ -320,8 +321,14 @@ public final class ModelConverter {
 							: ItemTransforms.default19(slot, kind);
 					t18 = ItemTransforms.convert(slot, t19, !generated);
 				}
-				if (t18 != null && !t18.isIdentity()) {
-					disp.put(slot, ItemTransforms.write(t18));
+				t18s.put(slot, t18 == null ? ItemTransforms.IDENTITY : t18);
+			}
+			if (!generated) {
+				refit((List<Object>) out.get("elements"), t18s);
+			}
+			for (Map.Entry<String, ItemTransforms.T> e : t18s.entrySet()) {
+				if (!e.getValue().isIdentity()) {
+					disp.put(e.getKey(), ItemTransforms.write(e.getValue()));
 				}
 			}
 			if (!disp.isEmpty()) {
@@ -332,6 +339,114 @@ public final class ModelConverter {
 			warnings.add(ref + ": " + e);
 			return null;
 		}
+	}
+
+	/**
+	 * 1.8 refuses a display scale over 4 and a translation over 24 pixels, and
+	 * small models made for 1.9+ (pistols drawn at 3x in the GUI and 7x in
+	 * first person) need more. When a slot is over, the geometry is moved to
+	 * the middle of the block and made bigger, and every slot's transform is
+	 * changed to match, so each slot still draws exactly the same thing.
+	 */
+	@SuppressWarnings("unchecked")
+	static void refit(List<Object> els, Map<String, ItemTransforms.T> t18s) {
+		if (els == null || els.isEmpty() || !over(t18s.values())) {
+			return;
+		}
+		double[] lo = { 1e9, 1e9, 1e9 }, hi = { -1e9, -1e9, -1e9 };
+		for (Object o : els) {
+			Map<String, Object> e = (Map<String, Object>) o;
+			double[] f = vec3(e.get("from")), t = vec3(e.get("to"));
+			for (int i = 0; i < 3; i++) {
+				lo[i] = Math.min(lo[i], Math.min(f[i], t[i]));
+				hi[i] = Math.max(hi[i], Math.max(f[i], t[i]));
+			}
+		}
+		double half = 0;
+		for (int i = 0; i < 3; i++) {
+			half = Math.max(half, (hi[i] - lo[i]) / 2);
+		}
+		double need = 1;
+		for (ItemTransforms.T t : t18s.values()) {
+			for (double v : t.s) {
+				need = Math.max(need, Math.abs(v) / 4);
+			}
+		}
+		double k = Math.max(1, Math.min(need, half <= 0 ? 1 : 24 / half));
+		double[] d = ItemTransforms.bestShift(t18s, lo, hi, k);
+		for (Map.Entry<String, ItemTransforms.T> e : t18s.entrySet()) {
+			e.setValue(ItemTransforms.refit(e.getValue(), d, k));
+		}
+		for (Object o : els) {
+			Map<String, Object> e = (Map<String, Object>) o;
+			double[] f = vec3(e.get("from")), t = vec3(e.get("to"));
+			Object faces = e.get("faces");
+			if (faces instanceof Map) {
+				for (Map.Entry<String, Object> fe : ((Map<String, Object>) faces).entrySet()) {
+					Map<String, Object> face = (Map<String, Object>) fe.getValue();
+					if (!face.containsKey("uv")) {
+						face.put("uv", autoUv(fe.getKey(), f, t)); // 1.8 works it out from the size, which changes
+					}
+				}
+			}
+			e.put("from", moved(f, d, k));
+			e.put("to", moved(t, d, k));
+			if (e.get("rotation") instanceof Map) {
+				Map<String, Object> r = (Map<String, Object>) e.get("rotation");
+				double[] origin = vec3(r.get("origin"));
+				if (origin != null) {
+					r.put("origin", moved(origin, d, k));
+				}
+			}
+		}
+	}
+
+	private static boolean over(Iterable<ItemTransforms.T> ts) {
+		for (ItemTransforms.T t : ts) {
+			for (int i = 0; i < 3; i++) {
+				if (Math.abs(t.s[i]) > 4 || Math.abs(t.t[i]) > 24) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	private static List<Object> moved(double[] p, double[] d, double k) {
+		double[] o = new double[3];
+		for (int i = 0; i < 3; i++) {
+			o[i] = Math.round((8 + k * (p[i] + d[i] - 8)) * 10000) / 10000.0;
+		}
+		return clampList(o, -16, 32);
+	}
+
+	/** The UV 1.8 (and 1.9+) give a face that has none. */
+	static List<Object> autoUv(String side, double[] f, double[] t) {
+		double[] uv;
+		switch (side) {
+		case "down":
+			uv = new double[] { f[0], 16 - t[2], t[0], 16 - f[2] };
+			break;
+		case "up":
+			uv = new double[] { f[0], f[2], t[0], t[2] };
+			break;
+		case "north":
+			uv = new double[] { 16 - t[0], 16 - t[1], 16 - f[0], 16 - f[1] };
+			break;
+		case "south":
+			uv = new double[] { f[0], 16 - t[1], t[0], 16 - f[1] };
+			break;
+		case "west":
+			uv = new double[] { f[2], 16 - t[1], t[2], 16 - f[1] };
+			break;
+		default:
+			uv = new double[] { 16 - t[2], 16 - t[1], 16 - f[2], 16 - f[1] };
+		}
+		List<Object> l = new ArrayList<>();
+		for (double v : uv) {
+			l.add(Math.max(0, Math.min(16, v)));
+		}
+		return l;
 	}
 
 	private static Object firstSprite(Map<String, Object> tex) {
