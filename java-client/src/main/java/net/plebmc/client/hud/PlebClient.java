@@ -105,6 +105,14 @@ public final class PlebClient {
 				public void onMessage(String channel, byte[] data) {
 				}
 			});
+			// saved PlebMc account sign-ins (tokens, never passwords) live in the browser's storage
+			net.plebmc.client.cosmetics.PlebAccount.storage(STORE);
+			// the PlebMc account this client plays as (the start screen signs in or makes one)
+			// Forge: you play as the launcher's name, so only that name's account can sign in
+			net.plebmc.client.cosmetics.ClientSession.fixName(minecraft.getSession().getUsername());
+			net.plebmc.client.cosmetics.ClientSession.setup((url, json, done) -> net.plebmc.forge.compat.PlatformPlebHttp
+					.post(url, json, (status, body) -> done.done(status, body)), STORE, name -> {
+					});
 			net.plebmc.client.cosmetics.Cosmetics.init(new PluginChannels.Log() {
 				@Override
 				public void info(String msg) {

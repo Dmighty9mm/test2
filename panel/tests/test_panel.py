@@ -79,6 +79,16 @@ class PanelLogic(unittest.TestCase):
         p, _ = make_panel(open_registration=True)
         self.assertEqual(p.web_register("Alice", None, "password1", "1.1.1.1")["name"], "Alice")
 
+    def test_website_signup_without_code_is_limited(self):
+        p, _ = make_panel(open_registration=True, client_registrations_per_hour=2)
+        p.web_register("One", "", "password1", "5.5.5.5")
+        p.web_register("Two", "", "password1", "5.5.5.5")
+        with self.assertRaises(app.ApiError) as e:
+            p.web_register("Three", "", "password1", "5.5.5.5")
+        self.assertEqual(e.exception.status, 429)
+        with self.assertRaises(app.ApiError):
+            p.web_register("One", "", "password1", "6.6.6.6")  # name taken
+
     def test_rules(self):
         for name, pw in (("ab", "password1"), ("bad name", "password1"), ("Bob", "short")):
             with self.assertRaises(app.ApiError):

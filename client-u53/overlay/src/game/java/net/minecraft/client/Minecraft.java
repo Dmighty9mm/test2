@@ -1177,6 +1177,7 @@ public class Minecraft implements IThreadListener {
 		}
 
 		RateLimitTracker.tick();
+		net.plebmc.client.hud.PlebClient.tick();
 
 		boolean isHostingLAN = LANServerController.isHostingLAN();
 		this.isGamePaused = !isHostingLAN && this.isSingleplayer() && this.theWorld != null && this.thePlayer != null

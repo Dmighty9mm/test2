@@ -49,6 +49,10 @@ classes, and the places listed below.
 
 ### Differences from the Eaglercraft client
 
+- **PlebMc account**: the title screen first asks you to sign in or create an account
+  (same start screen as the Eaglercraft client, talking to `https://client.plebmc.top`).
+  The name is the one from your launcher, so only that name's account can be used.
+
 - **Server address**: Join PlebMc connects to `play.plebmc.top` (`PlebMenu.SERVER_ADDRESS`).
 - **Resolution** setting is gone (Java Edition draws at the window size). FPS Boost
   still switches vsync, render distance and the fast video settings.

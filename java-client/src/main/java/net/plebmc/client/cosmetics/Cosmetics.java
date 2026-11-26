@@ -209,6 +209,8 @@ public final class Cosmetics {
 	private static Toasts toasts;
 	private static List<QuestCategory> questCategories = Collections.emptyList();
 	private static final Account account = new Account();
+	/** The PlebMc account sign-in (the server's panel). */
+	private static final PlebAccount pleb = new PlebAccount();
 	private static final Admin admin = new Admin();
 	private static boolean serverSupport;
 	private static final Set<String> owned = new HashSet<>();
@@ -240,6 +242,8 @@ public final class Cosmetics {
 			@Override
 			public void onJoin() {
 				send(obj("type", "open"));
+				// is this name's PlebMc account signed in? (signs in with a saved token if there is one)
+				send(obj("type", "signin"));
 			}
 
 			@Override
@@ -345,6 +349,7 @@ public final class Cosmetics {
 		quests = Collections.emptyList();
 		questCategories = Collections.emptyList();
 		account.clear();
+		pleb.clear();
 		admin.clear();
 		dailyResetAt = 0;
 		weeklyResetAt = 0;
@@ -610,6 +615,8 @@ public final class Cosmetics {
 			textureChunk(m);
 		} else if ("account".equals(type)) {
 			account.update(m);
+		} else if ("signin".equals(type)) {
+			signinUpdate(m);
 		} else if ("admin".equals(type)) {
 			admin.update(m);
 		} else if ("notify".equals(type)) {
@@ -767,6 +774,64 @@ public final class Cosmetics {
 		account.pending = true;
 		account.version++;
 		return send(obj("type", "logout"));
+	}
+
+	// ==================== PlebMc account sign-in ====================
+
+	/** The PlebMc account state (Right Shift > Sign in). */
+	public static PlebAccount plebAccount() {
+		return pleb;
+	}
+
+	private static void signinUpdate(Map<?, ?> m) {
+		boolean was = pleb.signedIn;
+		boolean wasKnown = pleb.known && pleb.checked;
+		String token = pleb.update(m);
+		if (token != null) {
+			send(obj("type", "signin", "token", token));
+		}
+		if (toasts == null) {
+			return;
+		}
+		if (pleb.signedIn && !was) {
+			toasts.show("Signed in", "PlebMc account: " + pleb.name);
+		} else if (!wasKnown && pleb.checked && pleb.enabled && pleb.exists && !pleb.signedIn && token == null && !pleb.locked) {
+			toasts.show("Sign in to your account", "Right Shift > Sign in, or /account login");
+		}
+	}
+
+	/** Signs in to this name's PlebMc account. With remember, the server sends a token this browser keeps. */
+	public static boolean signIn(String password, boolean remember) {
+		pleb.pending = true;
+		pleb.message = null;
+		pleb.version++;
+		Map<String, Object> m = obj("type", "signin", "password", password);
+		m.put("remember", remember);
+		return send(m);
+	}
+
+	/** Makes a PlebMc account for this name (and signs in). */
+	public static boolean register(String password, boolean remember) {
+		pleb.pending = true;
+		pleb.message = null;
+		pleb.version++;
+		Map<String, Object> m = obj("type", "signin", "password", password);
+		m.put("register", true);
+		m.put("remember", remember);
+		return send(m);
+	}
+
+	/** Signs out and forgets this browser's saved sign-in. */
+	public static boolean signOut() {
+		pleb.pending = true;
+		pleb.version++;
+		String t = pleb.savedToken();
+		boolean sent = t == null ? send(obj("type", "signout")) : send(obj("type", "signout", "token", t));
+		if (t != null && t.equals(ClientSession.tokenFor(pleb.name))) {
+			// that was this client's own sign-in: back to the start screen next time
+			ClientSession.signOut();
+		}
+		return sent;
 	}
 
 	/** The admin menu's data (website Owners only). */

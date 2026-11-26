@@ -47,9 +47,10 @@ public final class LoginGateScreen extends PlebScreen {
 		tab("Sign in", "account", Ui.accent(), x, wy + 40, half, 18, () -> !register, () -> switchTo(false));
 		tab("Create account", "check", Ui.accent(), x + half + 6, wy + 40, half, 18, () -> register, () -> switchTo(true));
 		boolean keepName = name != null;
-		String typed = keepName ? name.getText() : ClientSession.name();
+		String fixed = ClientSession.fixedName();
+		String typed = fixed != null ? fixed : keepName ? name.getText() : ClientSession.name();
 		name = field(x + 6, wy + 84, w - 12, 12, 16);
-		if (!keepName || name.getText().isEmpty()) {
+		if (!keepName || name.getText().isEmpty() || fixed != null) {
 			name.setText(typed);
 		}
 		password = passwordField(x + 6, wy + 118, w - 12);

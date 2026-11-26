@@ -79,9 +79,12 @@ class Config:
         self.public_url = env("PANEL_PUBLIC_URL", "http://localhost:8080").rstrip("/")
         self.site_name = env("PANEL_SITE_NAME", "PlebMc")
         self.trust_proxy = env("PANEL_TRUST_PROXY", "0") == "1"
-        self.open_registration = env("PANEL_OPEN_REGISTRATION", "0") == "1"
         # the PlebMc client's start screen can make accounts (it signs in before it can play)
         self.client_registration = env("PANEL_CLIENT_REGISTRATION", "1") == "1"
+        # the website's Create account page works without a code from the game. Same rule as
+        # the client by default: the client can't be used without an account, so there is no
+        # way to get a code from the game first.
+        self.open_registration = env("PANEL_OPEN_REGISTRATION", "1" if self.client_registration else "0") == "1"
         # accounts one address may make from the client per hour
         self.client_registrations_per_hour = int(env("PANEL_CLIENT_REGISTRATIONS_PER_HOUR", "3"))
         secure = env("PANEL_SECURE_COOKIES")
@@ -436,13 +439,18 @@ class Panel:
         problem = name_problem(name) or password_problem(password)
         if problem:
             raise ApiError(400, problem)
-        if not self.cfg.open_registration:
-            row = self.db.one("SELECT * FROM claim_codes WHERE name_key=? AND expires_at>?", name.lower(), self.now())
-            if not row or not hmac.compare_digest(row["code"], norm_code(code)):
-                self.code_throttle.fail("ip:" + str(address))
-                raise ApiError(400, "That code is wrong or expired. Type /account code in game for a new one.")
-            # the spelling used in game wins (it is the player's UUID)
-            name = row["name"]
+        if self.cfg.open_registration and not code:
+            if self.signup_throttle.blocked("ip:" + str(address)):
+                raise ApiError(429, "Too many new accounts from your network. Try again in an hour.")
+            acc = self.create_account(name, password)
+            self.signup_throttle.fail("ip:" + str(address))
+            return acc
+        row = self.db.one("SELECT * FROM claim_codes WHERE name_key=? AND expires_at>?", name.lower(), self.now())
+        if not row or not hmac.compare_digest(row["code"], norm_code(code)):
+            self.code_throttle.fail("ip:" + str(address))
+            raise ApiError(400, "That code is wrong or expired. Type /account code in game for a new one.")
+        # the spelling used in game wins (it is the player's UUID)
+        name = row["name"]
         return self.create_account(name, password)
 
     # ---------- game sign-in ----------

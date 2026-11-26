@@ -118,7 +118,7 @@ function registerView() {
     btn.disabled = false;
   } },
   h("h1", {}, "Create your account"),
-  info.openRegistration ? h("p", { class: "muted" }, "Pick the exact name you play with.") :
+  info.openRegistration ? h("p", { class: "muted" }, "Pick the name you want to play as. Then sign in with it on the PlebClient start screen. (You can also create the account right there on the start screen.)") :
     h("div", {}, h("p", { class: "muted" }, "Your account belongs to the name you play with. To prove it's you:"),
       h("ol", { class: "steps" }, h("li", {}, "Join the server with your name"), h("li", {}, "Type ", h("code", {}, "/account code"), " in chat"),
         h("li", {}, "Type the code here (or click the link in chat)"))),
@@ -128,7 +128,7 @@ function registerView() {
   field("Password again", { id: "password2", name: "password2", type: "password", required: true, minlength: 8, autocomplete: "new-password" }),
   out);
   const btn = h("button", { class: "primary full", type: "submit" }, "Create account");
-  form.append(btn, h("p", { class: "muted center" }, "You can also make one in game: ", h("code", {}, "/account register <password> <password>")));
+  form.append(btn, h("p", { class: "muted center" }, "Or open the PlebClient: its start screen has Create account."));
   return form;
 }
 
@@ -162,8 +162,8 @@ async function meView() {
     p ? null : h("p", { class: "muted" }, "Join the server once and your coins show up here.")),
   h("div", { class: "card" }, h("h2", {}, "Your cosmetics"), itemList(p && p.owned, p && p.equipped, r.catalog)),
   h("div", { class: "card" }, h("h2", {}, "In game"),
-    h("p", { class: "muted" }, "On the PlebMc client, sign in once with Right Shift > Sign in and tick Remember. On any other client type ",
-      h("code", {}, "/account login <password>"), " after you join. Until you sign in, nobody on your name can spend your coins.")));
+    h("p", { class: "muted" }, "The PlebClient asks you to sign in when it starts, and then you play as ", me.name,
+      ". Until you sign in, nobody on your name can spend your coins.")));
   wrap.append(passwordCard(), signoutCard());
   return wrap;
 }

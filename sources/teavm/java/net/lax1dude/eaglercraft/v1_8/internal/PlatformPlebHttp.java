@@ -46,4 +46,8 @@ public class PlatformPlebHttp {
 			cb.done(0, null);
 		}
 	}
+
+	/** Answers arrive by themselves here; nothing to poll. */
+	public static void poll() {
+	}
 }

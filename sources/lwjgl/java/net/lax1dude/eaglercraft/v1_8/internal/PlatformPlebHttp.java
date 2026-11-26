@@ -52,4 +52,8 @@ public class PlatformPlebHttp {
 		t.setDaemon(true);
 		t.start();
 	}
+
+	/** Answers arrive by themselves here; nothing to poll. */
+	public static void poll() {
+	}
 }

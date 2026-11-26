@@ -132,6 +132,18 @@ public class ClientSessionTest {
 		check(!ClientSession.signedIn() && posts.get(posts.size() - 1)[0].endsWith("/api/client/logout")
 				&& posts.get(posts.size() - 1)[1].contains("tok2"), "sign out revokes the token");
 
+		// Forge: the launcher's name is fixed; only that account can sign in
+		ClientSession.fixName("Steve");
+		start(store());
+		int before = posts.size();
+		ClientSession.signIn("Pleb", "hunter2hunter2");
+		check(posts.size() == before && !ClientSession.signedIn(), "other name refused when the name is fixed");
+		reply = "{\"ok\":true,\"name\":\"Steve\",\"token\":\"tok3\"}";
+		ClientSession.signIn("steve", "hunter2hunter2");
+		check(ClientSession.signedIn() && "Steve".equals(ClientSession.name()), "fixed name signs in");
+		ClientSession.fixName("Alex");
+		check(!ClientSession.signedIn(), "saved sign-in for another launcher name is not used");
+
 		System.out.println(checks - failures + "/" + checks + " client sign-in checks passed");
 		System.exit(failures == 0 ? 0 : 1);
 	}

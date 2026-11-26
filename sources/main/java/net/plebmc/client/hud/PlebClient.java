@@ -261,6 +261,11 @@ public final class PlebClient {
 		}
 	}
 
+	/** Every game tick (also on menus): finishes account-panel requests on builds that poll them. */
+	public static void tick() {
+		net.lax1dude.eaglercraft.v1_8.internal.PlatformPlebHttp.poll();
+	}
+
 	public static void saveSettings() {
 		try {
 			mods.save(STORE);

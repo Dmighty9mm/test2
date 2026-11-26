@@ -47,6 +47,11 @@ public final class ClientSession {
 	private static String role = "player";
 	private static String panel = DEFAULT_PANEL;
 	private static boolean loaded;
+	/**
+	 * Set on clients that can't change the player's name (Forge: the name comes
+	 * from the Minecraft launcher). Only that name's account can be signed in.
+	 */
+	private static String fixedName;
 	/** Waiting for the panel. */
 	public static volatile boolean pending;
 	public static volatile String message;
@@ -78,7 +83,8 @@ public final class ClientSession {
 		panel = p == null || p.trim().isEmpty() ? DEFAULT_PANEL : p.trim();
 		String n = store.get("account.name");
 		String t = store.get("account.token");
-		if (n == null || t == null || n.isEmpty() || t.isEmpty()) {
+		if (n == null || t == null || n.isEmpty() || t.isEmpty()
+				|| (fixedName != null && !n.equalsIgnoreCase(fixedName))) {
 			state = State.SIGNED_OUT;
 			return;
 		}
@@ -106,6 +112,17 @@ public final class ClientSession {
 				version++;
 			}
 		});
+	}
+
+	/** Locks the account name to the launcher's name (Forge). Call before setup. */
+	public static synchronized void fixName(String n) {
+		fixedName = n == null || n.isEmpty() ? null : n;
+		loaded = false;
+	}
+
+	/** The name this client must use, or null if any name can be chosen. */
+	public static synchronized String fixedName() {
+		return fixedName;
 	}
 
 	/** May the client be used? */
@@ -152,6 +169,10 @@ public final class ClientSession {
 		n = n == null ? "" : n.trim();
 		if (!n.matches("[A-Za-z0-9_]{3,16}")) {
 			fail("Names are 3 to 16 letters, digits or _.");
+			return;
+		}
+		if (fixedName != null && !n.equalsIgnoreCase(fixedName)) {
+			fail("You play as " + fixedName + " here, so use that name's account.");
 			return;
 		}
 		if (password == null || password.length() < 8) {
@@ -287,6 +308,7 @@ public final class ClientSession {
 		name = token = "";
 		role = "player";
 		panel = DEFAULT_PANEL;
+		fixedName = null;
 		loaded = false;
 		pending = false;
 		message = null;

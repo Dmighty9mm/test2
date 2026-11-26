@@ -13,7 +13,7 @@ sign in to the account that owns their name. Names with an account must sign in 
 
 | Who | What they get |
 | --- | --- |
-| Players | Make an account on the PlebMc client's start screen (the client can't be used until you sign in or create one), in game (`/account register <password> <password>`) or on the website with a code from the game. Sign in with `/account login <password>` on any client, or Right Shift > **Sign in** on the PlebMc client ("Remember me" signs in by itself after that). On the website: coins, cosmetics, change password, sign out everywhere. |
+| Players | Make an account on the PlebClient's start screen (the client can't be used until you sign in or create one) or on the website's **Create account** page. The client remembers the sign-in. On the website: coins, cosmetics, change password, sign out everywhere. |
 | Admins | Search every player, give/take/set coins, give/remove/put on cosmetics, kick, lock accounts, reset passwords, sign someone out everywhere, create accounts, admin log. |
 | Owners | All of that, plus making admins and owners. |
 
@@ -82,14 +82,20 @@ You need a small Linux VPS (1 GB RAM is plenty) and a domain or subdomain, for e
    the jar was already new). The console says `PlebMc accounts ON`. Within a minute the
    panel's Admin page says "Proxy connected" and lists your players.
 
-8. **Make yourself owner.** Join the server with your name, type
-   `/account register <password> <password>`, then on the VPS:
+8. **Make yourself owner.** Make your account first, either on the website
+   (`https://client.plebmc.top` > **Create account**, name + password, no code needed) or on
+   the PlebClient's start screen (**Create account**). Use the exact name you play as. Then on
+   the VPS:
 
    ```sh
+   cd /opt/plebmc-panel
    docker compose exec panel python app.py set-role YourName owner
    ```
 
-   Sign in on the website: you now have the **Admin** tab.
+   Sign out and back in on the website: you now have the **Admin** tab. (No account yet? You
+   can also make it straight from the VPS:
+   `docker compose exec panel python app.py create-account YourName owner`, which asks for the
+   password.)
 
 ### The client's start screen
 
@@ -142,6 +148,9 @@ docker compose cp panel:/data/backup.db ./panel-backup-$(date +%F).db
 
 ## In game
 
+PlebClient players don't need any of these: the start screen signs them in. They're for
+players on other clients (who also don't earn coins, see `plebclient-only`).
+
 | Command | What |
 | --- | --- |
 | `/account` | Are you signed in? What to do next |
@@ -163,9 +172,10 @@ never reaches a backend server or the proxy's command log.
 - "Remember me" saves a random token in the browser, never the password. Tokens expire
   after 60 days unused, at most 10 per account, and are wiped by a password change,
   "Sign out everywhere", a lock or a delete.
-- Website registration needs a code from the game (`/account code`), so nobody can claim
-  your name on the website without being on it. With nLogin installed, `/account register`
-  and `/account code` also need nLogin's `/login` first.
+- New accounts (website or client start screen) are limited to
+  `PANEL_CLIENT_REGISTRATIONS_PER_HOUR` per IP. Set `PANEL_OPEN_REGISTRATION=0` to make the
+  website ask for a code from `/account code` in game instead (only useful for players on
+  other clients).
 - Passwords are stored with scrypt. The server key only lives in the panel's `.env` and
   the proxy's config; never put it in the client.
 - Admins can't change other admins or owners; only owners can change roles.

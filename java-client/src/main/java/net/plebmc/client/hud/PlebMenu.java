@@ -30,6 +30,12 @@ public final class PlebMenu {
 
 	/** Adds the row above Singleplayer. {@code top} is the Singleplayer button's y. */
 	public static void initMainMenu(GuiScreen screen, List<GuiButton> buttons, int top) {
+		if (!net.plebmc.client.cosmetics.ClientSession.signedIn()) {
+			// no PlebMc account signed in: the start screen comes first, and there's no way past it
+			Minecraft.getMinecraft().displayGuiScreen(new LoginGateScreen(screen));
+			return;
+		}
+		net.plebmc.client.cosmetics.ClientSession.ensureName();
 		int y = top - 24;
 		int x = screen.width / 2 - 100;
 		buttons.add(new GuiButton(ID_JOIN, x, y, 148, 20, "§a§lJoin PlebMc"));
@@ -38,6 +44,10 @@ public final class PlebMenu {
 
 	/** True when the button was one of ours (and has been handled). */
 	public static boolean mainMenuAction(GuiScreen screen, GuiButton b) {
+		if (!net.plebmc.client.cosmetics.ClientSession.signedIn()) {
+			Minecraft.getMinecraft().displayGuiScreen(new LoginGateScreen(screen));
+			return true;
+		}
 		if (b.id == ID_JOIN) {
 			joinServer(screen);
 			return true;
