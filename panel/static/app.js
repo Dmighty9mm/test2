@@ -32,6 +32,7 @@ const ICONS = {
   home: "M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10",
   trophy: "M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4zM17 5h3v2a3 3 0 01-3 3M7 5H4v2a3 3 0 003 3",
   bag: "M6 7h12l1 14H5L6 7zM9 7V5a3 3 0 016 0v2",
+  check: "M5 12.5l4.5 4.5L19 7.5",
   image: "M4 4h16v16H4zM4 16l5-5 4 4 3-3 4 4M15 9h.01",
   hammer: "M14 4l6 6-3 3-6-6 3-3zM11 7l-8 8 3 3 8-8",
   user: "M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0",
@@ -314,24 +315,127 @@ async function leaderboardView() {
     h("div", { style: "height:18px" }), foundCard);
 }
 
+const scriptLoads = {};
+function loadScript(src) {
+  if (!scriptLoads[src]) {
+    scriptLoads[src] = new Promise((ok) => {
+      const el = h("script", { src });
+      el.onload = () => ok(true);
+      el.onerror = () => ok(false);
+      document.head.append(el);
+    });
+  }
+  return scriptLoads[src];
+}
+async function previews() {
+  if (!(await loadScript("/static/vendor/three.min.js"))) return null;
+  if (!(await loadScript("/static/preview.js"))) return null;
+  return window.PlebPreview || null;
+}
+
+const forSale = (i) => i.price != null && i.price >= 0;
+const catName = { hat: "Hats", wings: "Wings", cloak: "Cloaks", trail: "Trails" };
+
 async function shopView() {
-  const items = await catalog();
-  const q = h("input", { placeholder: "Search the shop", "aria-label": "Search the shop" });
+  const [items, account] = await Promise.all([catalog(), me ? api("me").catch(() => null) : null]);
+  let player = account && account.player;
+  const P = await previews();
+  const q = h("input", { type: "search", placeholder: "Search the shop", "aria-label": "Search the shop" });
   let cat = "all";
   const cats = ["all", ...new Set(items.map((i) => i.category))];
   const chips = h("div", { class: "chips" });
-  const grid = h("div", { class: "items" });
+  const grid = h("div", { class: "items shop" });
+  const owned = (i) => !!(player && player.owned.includes(i.id));
+
+  // the big live preview with the item's details and Buy
+  const canvas = h("canvas", { class: "stage", "aria-label": "3D preview, drag to turn" });
+  const stage = P ? P.stage(canvas) : null;
+  const info = h("div", { class: "stage-info" });
+  const balance = h("div", { class: "muted" });
+  const showBalance = () => balance.replaceChildren(player ? h("span", {}, "You have ", h("b", { class: "gold" }, fmt(player.coins) + " " + coinName())) : "");
+  let selected = null;
+  let buying = false;
+
+  function buyArea(i) {
+    if (!forSale(i)) return h("span", { class: "pill" }, "Not for sale");
+    if (owned(i)) return h("span", { class: "pill good" }, icon("check"), "You own this");
+    if (!me) return h("a", { class: "btn primary", href: "#login" }, "Sign in to buy");
+    if (!player) return h("span", { class: "muted" }, "Join the server once, then you can buy here.");
+    if (i.permission) return h("span", { class: "muted" }, "Needs a rank. Buy it in game.");
+    if (player.coins < i.price) return h("span", { class: "muted" }, "You need " + fmt(i.price - player.coins) + " more " + coinName() + ".");
+    return h("button", { class: "primary", disabled: buying, onclick: () => buy(i) }, buying ? "Buying..." : "Buy for " + fmt(i.price));
+  }
+  function showInfo() {
+    const i = selected;
+    if (!i) { info.replaceChildren(h("p", { class: "muted" }, "Pick something below to see it.")); return; }
+    info.replaceChildren(...[
+      h("div", { class: "row", style: "gap:8px" }, h("span", { class: "pill" }, i.category), i.collection ? h("span", { class: "pill" }, i.collection) : null),
+      h("h2", { class: "stage-name" }, i.name),
+      i.description ? h("p", { class: "muted" }, i.description) : null,
+      i.creator ? h("p", { class: "muted", style: "font-size:12.5px" }, "Made by " + i.creator) : null,
+      h("div", { class: "price big" }, forSale(i) ? fmt(i.price) + " " + coinName() : "Not for sale"),
+      h("div", { class: "row" }, buyArea(i)),
+      balance].filter(Boolean));
+    showBalance();
+  }
+  function select(i, scroll) {
+    selected = i;
+    showInfo();
+    if (stage) stage.show(i);
+    if (scroll) canvas.scrollIntoView({ behavior: "smooth", block: "center" });
+    grid.querySelectorAll(".item").forEach((el) => el.classList.toggle("on", el.dataset.id === i.id));
+  }
+
+  async function buy(i) {
+    if (buying) return;
+    if (!confirm("Buy " + i.name + " for " + fmt(i.price) + " " + coinName() + "?")) return;
+    buying = true;
+    showInfo();
+    try {
+      const r = await api("shop/buy", { item: i.id });
+      let o = null;
+      for (let n = 0; n < 40; n++) {
+        await new Promise((ok) => setTimeout(ok, 1500));
+        o = await api("shop/order?id=" + r.id);
+        if (o.status !== "pending" && o.status !== "sent") break;
+      }
+      if (o && o.player) player = o.player;
+      if (o && o.status === "done") toast("Bought " + i.name + "! It's yours in game.");
+      else if (o && o.status === "failed") toast("Couldn't buy it: " + (o.result || "the server said no"), false);
+      else toast("The server hasn't answered yet. Check back in a minute.", false);
+    } catch (e) {
+      toast(e.message, false);
+    }
+    buying = false;
+    showInfo();
+    draw();
+  }
+
   const draw = () => {
-    chips.replaceChildren(...cats.map((c) => h("button", { class: "chip", "aria-pressed": String(c === cat), onclick: () => { cat = c; draw(); } }, c === "all" ? "Everything" : c)));
+    chips.replaceChildren(...cats.map((c) => h("button", { class: "chip", "aria-pressed": String(c === cat), onclick: () => { cat = c; draw(); } }, c === "all" ? "Everything" : catName[c] || c)));
     const t = q.value.trim().toLowerCase();
     const list = items.filter((i) => (cat === "all" || i.category === cat) && (!t || i.name.toLowerCase().includes(t) || i.id.includes(t)));
-    grid.replaceChildren(...list.map((i) => h("div", { class: "item" }, h("b", {}, i.name), h("small", {}, i.category),
-      h("span", { class: "price" }, i.price == null || i.price < 0 ? "Not for sale" : fmt(i.price) + " " + coinName()))));
+    grid.replaceChildren(...list.map((i) => {
+      const pic = h("div", { class: "thumb" }, icon(i.category === "hat" ? "hat" : i.category === "cloak" ? "cloak" : i.category === "wings" ? "wings" : "bag"));
+      if (P && P.canShow(i)) P.thumb(i).then((url) => { if (url) pic.replaceChildren(h("img", { src: url, alt: "" })); });
+      return h("button", { class: "item" + (selected && selected.id === i.id ? " on" : ""), "data-id": i.id, onclick: () => select(i, true) },
+        pic, h("b", {}, i.name), h("small", {}, i.category),
+        h("span", { class: "row", style: "gap:6px;justify-content:space-between" },
+          h("span", { class: "price" }, forSale(i) ? fmt(i.price) : "Not for sale"),
+          owned(i) ? h("span", { class: "pill good" }, "Owned") : null));
+    }));
     if (!list.length) grid.append(empty("bag", items.length ? "Nothing matches." : "The shop shows up once the server connects."));
   };
   q.addEventListener("input", draw);
   draw();
-  return card("Shop", h("p", { class: "muted" }, "Buy these in the PlebClient shop (Right Shift > Shop)."), h("div", { class: "row" }, q), h("div", { style: "height:10px" }), chips, h("div", { style: "height:14px" }), grid);
+  const first = items.find((i) => forSale(i) && (!P || P.canShow(i))) || items[0];
+  if (first) select(first, false); else showInfo();
+  return h("div", {},
+    items.length ? card(null, h("div", { class: "stage-wrap" }, stage ? canvas : h("div", { class: "stage" }, empty("bag", "3D previews need WebGL.")), info)) : null,
+    items.length ? h("div", { style: "height:18px" }) : null,
+    card("Shop", h("p", { class: "muted" }, me ? "Buy with your coins here or in game (Right Shift > Shop). What you buy shows up in game right away." :
+      "Sign in to buy with your coins, or buy in game (Right Shift > Shop)."),
+      h("div", { class: "row" }, q), h("div", { style: "height:10px" }), chips, h("div", { style: "height:14px" }), grid));
 }
 
 // ==================== designs ====================
@@ -1127,7 +1231,7 @@ async function downloadsView() {
     h("div", { class: "row", style: "width:100%" }, icon("download"),
       h("div", {}, h("h2", {}, d.name)),
       h("span", { class: "spacer" }),
-      h("a", { class: "btn primary", href: d.url, target: "_blank", rel: "noopener" }, icon("download"), "Download")),
+      h("a", { class: "btn primary", href: "/api/dl/" + encodeURIComponent(d.kind), download: "" }, icon("download"), "Download")),
     h("p", { class: "muted" }, d.help)));
   return h("div", {},
     card("Get PlebClient", h("p", { class: "muted" }, "Pick how you want to play. The first time you start it, make your PlebMc account on the start screen.")),

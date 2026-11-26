@@ -61,8 +61,21 @@ final class PanelLink {
 		return call("POST", "claim", body("name", name));
 	}
 
-	void sync(Map<String, Object> snapshot) throws IOException {
-		call("POST", "sync", snapshot);
+	/** Sends the snapshot; returns the texture/model ids the panel still needs for its shop previews. */
+	List<String> sync(Map<String, Object> snapshot) throws IOException {
+		Object n = call("POST", "sync", snapshot).get("need");
+		List<String> out = new ArrayList<>();
+		if (n instanceof List) {
+			for (Object o : (List<?>) n) {
+				out.add(String.valueOf(o));
+			}
+		}
+		return out;
+	}
+
+	/** Uploads one cloak texture or hat model so the website can preview it. */
+	void asset(String hash, byte[] data) throws IOException {
+		call("POST", "asset", body("hash", hash, "data", java.util.Base64.getEncoder().encodeToString(data)));
 	}
 
 	/** Changes queued by admins on the panel: [{id, target, action, args, by}] */

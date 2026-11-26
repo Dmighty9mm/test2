@@ -595,9 +595,20 @@ public final class BungeeShop extends Plugin implements Listener {
 		try {
 			Map<String, Object> snap = core.snapshot();
 			addRanks(snap);
-			link.sync(snap);
+			List<String> need = link.sync(snap);
 			syncedVersion = v;
 			lastSync = now;
+			for (String h : need) {
+				byte[] b = core.asset(h);
+				if (b != null) {
+					try {
+						link.asset(h, b);
+					} catch (IOException e) {
+						getLogger().warning("PlebMc accounts: can't send a shop preview file to the panel (" + e.getMessage() + ")");
+						break;
+					}
+				}
+			}
 		} catch (IOException e) {
 			if (now - lastSync > 5 * 60_000) {
 				getLogger().warning("PlebMc accounts: can't send coins to the panel (" + e.getMessage() + ")");
@@ -689,6 +700,8 @@ public final class BungeeShop extends Plugin implements Listener {
 				return "!LuckPerms: " + e.getMessage();
 			}
 		}
+		case "buy":
+			return args.isEmpty() ? "!no item" : core.webBuy(target, args.get(0));
 		case "broadcast":
 			return args.isEmpty() ? "!empty message" : "sent to " + core.announce(args.get(0)) + " players";
 		case "additem": {

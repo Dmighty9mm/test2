@@ -311,6 +311,35 @@ public class AccountsTest {
         link.ack(res);
         check(link.commands().isEmpty(), "a change is applied once");
 
+        // buying on the website: the panel queues it, the proxy checks and applies it
+        link.sync(core.snapshot());
+        r = web("GET", "/api/shop", null, null);
+        Map<?, ?> top = null;
+        for (Object o : (List<?>) ((Map<?, ?>) r[1]).get("catalog")) if ("tophat".equals(((Map<?, ?>) o).get("id"))) top = (Map<?, ?>) o;
+        check(top != null && "tophat".equals(top.get("render")) && ((Number) top.get("price")).longValue() == 1500, "website shop has preview info: " + top);
+        r = web("POST", "/api/shop/buy", "{\"item\":\"dropzone_crown\"}", ownerCookie);
+        check((Integer) r[0] == 400, "can't buy what isn't for sale on the website");
+        r = web("POST", "/api/shop/buy", "{\"item\":\"tophat\"}", ownerCookie);
+        check((Integer) r[0] == 200, "web buy queued: " + r[1]);
+        long cid = ((Number) ((Map<?, ?>) r[1]).get("id")).longValue();
+        r = web("POST", "/api/shop/buy", "{\"item\":\"halo\"}", ownerCookie);
+        check((Integer) r[0] == 429, "one purchase at a time");
+        had = real.coins();
+        cmds = link.commands();
+        check(cmds.size() == 1 && "buy".equals(cmds.get(0).get("action")), "proxy picks up the purchase: " + cmds);
+        String out = core.webBuy((String) cmds.get(0).get("target"), "tophat");
+        check(out.startsWith("bought") && real.coins() == had - 1500 && String.valueOf(real.last("state").get("owned")).contains("tophat"), "purchase applied: " + out);
+        check(core.webBuy("Owner", "tophat").startsWith("!"), "can't buy it twice");
+        res = new ArrayList<>();
+        one = new LinkedHashMap<>();
+        one.put("id", ((Number) cmds.get(0).get("id")).intValue()); one.put("ok", true); one.put("result", out);
+        res.add(one);
+        link.ack(res);
+        r = web("GET", "/api/shop/order?id=" + cid, null, ownerCookie);
+        Map<?, ?> ord = (Map<?, ?>) r[1];
+        check("done".equals(ord.get("status")) && ((List<?>) ((Map<?, ?>) ord.get("player")).get("owned")).contains("tophat"),
+                "the website shows it bought: " + ord);
+
         // web registration with a code from the game
         ShopTest.P newbie = join("Newbie");
         account(newbie, "code");

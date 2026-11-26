@@ -226,3 +226,20 @@ tr.link:hover td { background: var(--card2); }
 .card.build > .row > svg { width: 30px; height: 30px; flex: none; color: var(--accent); }
 .card.build h2 { margin: 0; }
 .card.build p { margin: 10px 0 0; }
+
+/* shop previews */
+.stage-wrap { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; align-items: center; }
+.stage { width: 100%; height: 340px; display: block; border-radius: 12px; background: radial-gradient(circle at 50% 40%, var(--card2), transparent 75%); cursor: grab; touch-action: none; }
+.stage:active { cursor: grabbing; }
+.stage-info { display: grid; gap: 10px; align-content: center; }
+.stage-info p { margin: 0; }
+.stage-name { font-size: 24px; margin: 0; }
+.price.big { color: var(--gold); font-weight: 700; font-size: 18px; }
+b.gold { color: var(--gold); }
+.items.shop .item { display: grid; align-content: start; text-align: left; cursor: pointer; font: inherit; color: inherit; justify-content: stretch; white-space: normal; }
+.items.shop .item.on { border-color: var(--accent); }
+.items.shop .thumb { height: 120px; display: grid; place-items: center; color: var(--muted); }
+.items.shop .thumb img { width: 120px; height: 120px; }
+.items.shop .thumb svg { width: 34px; height: 34px; }
+@media (max-width: 760px) { .stage-wrap { grid-template-columns: 1fr; } .stage { height: 280px; } }
+.pill svg { width: 14px; height: 14px; }

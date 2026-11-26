@@ -44,7 +44,8 @@ import time
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
+import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(HERE, "static")
@@ -75,6 +76,34 @@ DOWNLOADS = (
     ("forge-1.8.9", "PlebClient for Forge 1.8.9", "Install Forge 1.8.9, then put the jar in your .minecraft/mods folder.",
      "https://gitflic.ru/project/mightymcyt/plebmc-client/blob/raw?file=PlebClient-Forge-1.8.9.zip"),
 )
+
+
+def clean_item(i):
+    """One shop item from the proxy, keeping only what the website shows."""
+    def num(v, lo, hi):
+        try:
+            v = int(v)
+        except (TypeError, ValueError):
+            return None
+        return v if lo <= v <= hi else None
+
+    def text(v, n):
+        return re.sub(r"(?i)[&\u00a7][0-9a-fk-or]", "", str(v))[:n] if v not in (None, "") else None
+
+    def hexid(v):
+        return v if isinstance(v, str) and re.fullmatch(r"[0-9a-f]{16}", v) else None
+
+    price = None if i.get("forSale") is False else num(i.get("price"), 0, 10 ** 12)
+    color = i.get("color") if isinstance(i.get("color"), str) and re.fullmatch(r"#[0-9a-fA-F]{6}", i["color"]) else None
+    out = {"id": str(i["id"])[:64], "name": text(i.get("name"), 64) or str(i["id"])[:64],
+           "category": str(i.get("category") or "")[:16], "price": price}
+    extra = {"render": text(i.get("render"), 32), "color": color, "description": text(i.get("description"), 300),
+             "collection": text(i.get("collection"), 64), "creator": text(i.get("creator"), 32),
+             "texture": hexid(i.get("texture")), "textureWidth": num(i.get("textureWidth"), 1, 4096),
+             "frames": num(i.get("frames"), 2, 64), "frameTime": num(i.get("frameTime"), 1, 10000),
+             "model": hexid(i.get("model")), "permission": True if i.get("permission") else None}
+    out.update({k: v for k, v in extra.items() if v is not None})
+    return out
 
 
 def clean_ranks(r):
@@ -305,6 +334,11 @@ CREATE TABLE IF NOT EXISTS notes (
   text TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS notes_name ON notes(name_key);
+CREATE TABLE IF NOT EXISTS assets (
+  hash TEXT PRIMARY KEY,
+  data BLOB NOT NULL,
+  created_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS client_seen (
   day INTEGER NOT NULL,
   version TEXT NOT NULL,
@@ -669,10 +703,16 @@ class Panel:
                                json.dumps([str(x) for x in (p.get("owned") or [])][:500]),
                                json.dumps({str(k): str(v) for k, v in (p.get("equipped") or {}).items()}),
                                int(p.get("streak") or 0), now, seen))
+        need = []
         if isinstance(body.get("catalog"), list):
-            self.db.set_kv("catalog", [
-                {"id": str(i.get("id")), "name": str(i.get("name") or i.get("id")), "category": str(i.get("category")),
-                 "price": i.get("price")} for i in body["catalog"] if isinstance(i, dict) and i.get("id")])
+            items = [clean_item(i) for i in body["catalog"][:2000] if isinstance(i, dict) and i.get("id")]
+            self.db.set_kv("catalog", items)
+            # textures and models the website needs to show previews: ask the proxy for the missing ones
+            wanted = {h for i in items for h in (i.get("texture"), i.get("model")) if h}
+            have = {r["hash"] for r in self.db.all("SELECT hash FROM assets")}
+            need = sorted(wanted - have)[:50]
+            for h in have - wanted:
+                self.db.run("DELETE FROM assets WHERE hash=?", h)
         if isinstance(body.get("online"), list):
             names = [str(n) for n in body["online"]][:5000]
             self.db.set_kv("online", {"at": now, "players": names})
@@ -693,7 +733,58 @@ class Panel:
                 ranks = dict(list(ranks.items())[-50000:])
             self.db.set_kv("player_ranks", ranks)
         self.db.set_kv("last_sync", now)
+        return {"ok": True, "need": need}
+
+    def put_asset(self, body):
+        """A cloak texture or hat model from the proxy, checked against its id (the first 16 hex of its SHA-1)."""
+        h = str(body.get("hash") or "")
+        try:
+            data = base64.b64decode(str(body.get("data") or ""), validate=True)
+        except ValueError:
+            raise ApiError(400, "Bad data.")
+        if not re.fullmatch(r"[0-9a-f]{16}", h) or hashlib.sha1(data).hexdigest()[:16] != h:
+            raise ApiError(400, "That isn't the file for this id.")
+        if not any(h in (i.get("texture"), i.get("model")) for i in self.catalog()):
+            raise ApiError(400, "No item uses this file.")
+        self.db.run("INSERT OR REPLACE INTO assets(hash,data,created_at) VALUES(?,?,?)", h, data, self.now())
         return {"ok": True}
+
+    def asset(self, h):
+        r = self.db.one("SELECT data FROM assets WHERE hash=?", str(h)) if re.fullmatch(r"[0-9a-f]{16}", str(h)) else None
+        return bytes(r["data"]) if r else None
+
+    # ---------- buying cosmetics on the website ----------
+
+    def web_buy(self, acc, body):
+        item_id = str(body.get("item") or "")
+        it = next((i for i in self.catalog() if i["id"] == item_id), None)
+        if not it:
+            raise ApiError(400, "That item isn't in the shop.")
+        if self.db.one("SELECT id FROM commands WHERE action='buy' AND by_name=? AND status IN ('pending','sent')",
+                       acc["name"]):
+            raise ApiError(429, "Your last purchase is still going through.")
+        if it.get("price") is None:
+            raise ApiError(400, "That item can't be bought.")
+        if it.get("permission"):
+            raise ApiError(400, "That item needs a rank. Buy it in game.")
+        pl = self.player(acc["name"])
+        if not pl:
+            raise ApiError(400, "Join the server once first, then you can buy here.")
+        if item_id in pl["owned"]:
+            raise ApiError(400, "You already own it.")
+        if pl["coins"] < int(it["price"]):
+            raise ApiError(400, "You need %d more coins." % (int(it["price"]) - pl["coins"]))
+        if not self.server_status()["connected"]:
+            raise ApiError(503, "The server isn't connected right now. Try again in a bit.")
+        cid = self.queue(acc["name"], acc["name"], "buy", [item_id])
+        self.audit(acc["name"], "web-buy", "%s for %s" % (item_id, it["price"]))
+        return {"ok": True, "id": cid}
+
+    def web_order(self, acc, cid):
+        r = self.db.one("SELECT status, result FROM commands WHERE id=? AND action='buy' AND by_name=?", cid, acc["name"])
+        if not r:
+            raise ApiError(404, "Not found.")
+        return {"ok": True, "status": r["status"], "result": r["result"], "player": self.player(acc["name"])}
 
     def player(self, name):
         p = self.db.one("SELECT * FROM players WHERE name_key=? ORDER BY updated_at DESC", str(name or "").lower())
@@ -737,6 +828,18 @@ class Panel:
                  "by": r["by_name"]} for r in rows]
 
     def ack(self, cid, ok, result):
+        cmd = self.db.one("SELECT * FROM commands WHERE id=? AND status='sent'", cid)
+        if cmd and ok and cmd["action"] == "buy":
+            # show the purchase on the website now; the next sync from the proxy has the real numbers
+            item_id = (json.loads(cmd["args"]) or [""])[0]
+            it = next((i for i in self.catalog() if i["id"] == item_id), None)
+            p = self.db.one("SELECT * FROM players WHERE name_key=? ORDER BY updated_at DESC", cmd["target"].lower())
+            if it and p and it.get("price") is not None:
+                owned = json.loads(p["owned"])
+                if item_id not in owned:
+                    owned.append(item_id)
+                    self.db.run("UPDATE players SET coins=MAX(0, coins-?), owned=? WHERE uuid=?", int(it["price"]),
+                                json.dumps(owned), p["uuid"])
         self.db.run("UPDATE commands SET status=?, result=?, done_at=? WHERE id=?", "done" if ok else "failed",
                     str(result or "")[:500], self.now(), cid)
         self.db.run("UPDATE commands SET status='lost', result='The server did not answer' WHERE status='sent' AND "
@@ -959,6 +1062,16 @@ class Panel:
                 v = {"url": v}
             out.append({"kind": k, "name": v.get("name") or n, "help": v.get("help") or h, "url": v.get("url", url)})
         return out
+
+    def download_target(self, kind):
+        """(link, file name, is html) for a download, or None when it isn't set."""
+        d = next((d for d in self.downloads() if d["kind"] == kind and d["url"]), None)
+        if not d:
+            return None
+        u = urlparse(d["url"])
+        name = (parse_qs(u.query).get("file") or [""])[0] or unquote(u.path.rsplit("/", 1)[-1])
+        name = re.sub(r"[^A-Za-z0-9._ -]", "_", os.path.basename(name))[:100] or "PlebClient"
+        return d["url"], name, name.lower().endswith((".html", ".htm"))
 
     def set_downloads(self, actor, body):
         links = {}
@@ -1352,6 +1465,42 @@ class Handler(BaseHTTPRequestHandler):
                          "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; "
                          "script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 
+    def download(self, kind):
+        """A download button. An HTML file (PlebClient JS) is passed through so the browser saves it instead of
+        opening it as a page; anything else goes straight to its link."""
+        t = self.panel.download_target(kind)
+        if not t:
+            raise ApiError(404, "Not found.")
+        url, name, html = t
+        if not html:
+            self.send_response(302)
+            self.send_header("Location", url)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        try:
+            up = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "PlebMc-Panel"}), timeout=30)
+        except Exception:
+            raise ApiError(502, "The download host didn't answer. Try again in a bit.")
+        with up:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Disposition", 'attachment; filename="%s"' % name)
+            if up.headers.get("Content-Length"):
+                self.send_header("Content-Length", up.headers["Content-Length"])
+            else:
+                self.close_connection = True
+            self.send_header("Cache-Control", "no-store")
+            self.security_headers()
+            self.end_headers()
+            sent = 0
+            while sent < 512 * 1024 * 1024:
+                chunk = up.read(256 * 1024)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                sent += len(chunk)
+
     def body(self, limit=64 * 1024):
         n = int(self.headers.get("Content-Length") or 0)
         if n > limit:
@@ -1473,6 +1622,28 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, {"ok": True, **p.leaderboard(one("offset", "0"), one("limit", "10"), one("q"))})
         if method == "GET" and route == "shop":
             return self.send_json(200, {"ok": True, "catalog": p.catalog(), "currency": p.server_status()["currency"]})
+        if method == "GET" and route.startswith("dl/"):
+            return self.download(route[len("dl/"):])
+        if method == "GET" and route.startswith("asset/"):
+            data = p.asset(route[len("asset/"):])
+            if data is None:
+                raise ApiError(404, "Not found.")
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png" if data[:8] == b"\x89PNG\r\n\x1a\n" else "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+            self.security_headers()
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if method == "POST" and route == "shop/buy":
+            return self.send_json(200, p.web_buy(self.web_user(), self.body()))
+        if method == "GET" and route == "shop/order":
+            try:
+                cid = int(one("id", "0"))
+            except ValueError:
+                cid = 0
+            return self.send_json(200, p.web_order(self.web_user(), cid))
         # ---------- designs (hat and cloak makers) ----------
         # the makers are for admins (they make what goes in the shop)
         if method == "GET" and route == "designs/get":
@@ -1620,7 +1791,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, {"commands": p.pending()})
         if method != "POST":
             raise ApiError(404, "Not found.")
-        b = self.body(limit=16 * 1024 * 1024 if route == "sync" else 64 * 1024)
+        b = self.body(limit=16 * 1024 * 1024 if route in ("sync", "asset") else 64 * 1024)
         if route == "login":
             return self.send_json(200, p.game_login(str(b.get("name") or ""), b.get("password"), bool(b.get("remember"))))
         if route == "token":
@@ -1642,6 +1813,8 @@ class Handler(BaseHTTPRequestHandler):
                                         "url": "%s/#register?name=%s&code=%s" % (p.cfg.public_url, b.get("name"), code)})
         if route == "sync":
             return self.send_json(200, p.sync(b))
+        if route == "asset":
+            return self.send_json(200, p.put_asset(b))
         if route == "ack":
             for a in b.get("results") or []:
                 if isinstance(a, dict) and isinstance(a.get("id"), int):

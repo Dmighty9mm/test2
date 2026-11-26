@@ -554,6 +554,61 @@ final class ShopCore {
 		}
 	}
 
+	/** A cloak texture or hat model by id, for the panel's shop previews. */
+	synchronized byte[] asset(String hash) {
+		return catalog.download(hash);
+	}
+
+	/**
+	 * A purchase made on the website (the panel checked it first; this checks
+	 * again with the real numbers). Returns what happened, "!" first when it failed.
+	 */
+	synchronized String webBuy(String name, String id) {
+		UUID p = resolve(name);
+		Catalog.Item it = catalog.get(id);
+		if (p == null) {
+			return "!" + name + " hasn't joined yet";
+		}
+		if (it == null) {
+			return "!that item isn't in the shop";
+		}
+		Store.Data d = store.get(p);
+		if (d.owned.contains(it.id)) {
+			return "!already owned";
+		}
+		if (it.notForSale()) {
+			return "!not for sale";
+		}
+		boolean online = net.online().contains(p);
+		if (it.permission != null && !it.permission.isEmpty() && !(online && net.hasPermission(p, it.permission))) {
+			return "!needs a rank, buy it in game";
+		}
+		if (d.coins < it.price) {
+			return "!needs " + fmt(it.price - d.coins) + " more coins";
+		}
+		d.coins -= it.price;
+		d.owned.add(it.id);
+		boolean autoEquip = config.bool("equip-on-buy", true);
+		if (autoEquip) {
+			d.equipped.put(it.category, it.id);
+		}
+		store.changed();
+		store.save();
+		log.info(d.name + " bought " + it.id + " for " + it.price + " coins on the website");
+		if (online) {
+			if (clients.contains(p)) {
+				notify(p, color("&a&lShop"), "Bought " + plain(it.name) + " on the website!");
+				sendState(p, false);
+			} else {
+				net.chat(p, prefix + color("&aBought " + plain(it.name) + " on the website!"));
+			}
+			if (autoEquip) {
+				broadcastSlots(p);
+			}
+		}
+		return "bought " + it.id + " for " + it.price;
+	}
+
 	/** Base64 characters per texture message (a plugin message stays far under 32 KB). */
 	static final int TEXTURE_CHUNK = 24_000;
 	private static final long TEXTURE_RESEND_MS = 15_000;
@@ -1531,11 +1586,13 @@ final class ShopCore {
 		}
 		List<Map<String, Object>> items = new ArrayList<>();
 		for (Catalog.Item it : catalog.all()) {
-			Map<String, Object> i = new LinkedHashMap<>();
-			i.put("id", it.id);
+			// everything the website needs to draw a preview (textures and models are sent when it asks)
+			Map<String, Object> i = it.toJson();
 			i.put("name", it.name == null ? it.id : it.name.replaceAll("(?i)[&\u00a7][0-9a-fk-or]", ""));
-			i.put("category", it.category);
 			i.put("price", it.notForSale() ? null : it.price);
+			if (it.permission != null && !it.permission.isEmpty()) {
+				i.put("permission", true);
+			}
 			items.add(i);
 		}
 		List<String> online = new ArrayList<>();

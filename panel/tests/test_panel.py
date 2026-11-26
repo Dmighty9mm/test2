@@ -184,6 +184,62 @@ class PanelLogic(unittest.TestCase):
         self.clock.t += 600
         self.assertEqual(self.p.admin_players(sort="name")["players"][0]["lastSeen"], t + 600)
 
+    def test_shop_previews_and_web_buy(self):
+        import base64, hashlib
+        png = b"\x89PNG\r\n\x1a\n" + b"cloak" * 10
+        h = hashlib.sha1(png).hexdigest()[:16]
+        bob = self.p.create_account("Bob", "password1")
+        r = self.p.sync({"full": True, "players": [
+            {"uuid": "11111111-1111-1111-1111-111111111111", "name": "Bob", "coins": 500, "owned": []}],
+            "catalog": [{"id": "tophat", "name": "&6Top Hat", "category": "hat", "render": "tophat", "price": 100,
+                         "color": "#112233", "description": "Classy"},
+                        {"id": "fire", "name": "Fire", "category": "cloak", "render": "cloak", "price": 900,
+                         "texture": h, "textureWidth": 64, "frames": 4, "frameTime": 2},
+                        {"id": "vip", "name": "VIP", "category": "hat", "render": "crown", "price": 10, "permission": True},
+                        {"id": "event", "name": "Event", "category": "hat", "render": "halo", "price": 999999999,
+                         "forSale": False, "texture": "not-a-hash"}],
+            "online": ["Bob"]})
+        self.assertEqual(r["need"], [h])  # the website asks for the cloak texture
+        items = {i["id"]: i for i in self.p.catalog()}
+        self.assertEqual(items["tophat"]["name"], "Top Hat")
+        self.assertEqual(items["tophat"]["color"], "#112233")
+        self.assertEqual(items["fire"]["frames"], 4)
+        self.assertIsNone(items["event"]["price"])
+        self.assertNotIn("texture", items["event"])
+        with self.assertRaises(app.ApiError):  # must match its id
+            self.p.put_asset({"hash": h, "data": base64.b64encode(b"other").decode()})
+        self.p.put_asset({"hash": h, "data": base64.b64encode(png).decode()})
+        self.assertEqual(self.p.asset(h), png)
+        self.assertIsNone(self.p.asset("../etc"))
+        self.assertEqual(self.p.sync({"catalog": self.p.catalog()})["need"], [])
+        # buying
+        for item in ("event", "vip", "fire", "nope"):  # not for sale, needs a rank, too dear, unknown
+            with self.assertRaises(app.ApiError):
+                self.p.web_buy(bob, {"item": item})
+        cid = self.p.web_buy(bob, {"item": "tophat"})["id"]
+        with self.assertRaises(app.ApiError):  # one at a time
+            self.p.web_buy(bob, {"item": "tophat"})
+        cmd = self.p.pending()[0]
+        self.assertEqual((cmd["target"], cmd["action"], cmd["args"]), ("Bob", "buy", ["tophat"]))
+        self.p.ack(cid, True, "bought tophat for 100")
+        o = self.p.web_order(bob, cid)
+        self.assertEqual(o["status"], "done")
+        self.assertEqual((o["player"]["coins"], o["player"]["owned"]), (400, ["tophat"]))
+        with self.assertRaises(app.ApiError):  # owned now
+            self.p.web_buy(bob, {"item": "tophat"})
+        other = self.p.create_account("Eve", "password1")
+        with self.assertRaises(app.ApiError):  # someone else's order
+            self.p.web_order(other, cid)
+        # the texture goes when no item uses it
+        self.p.sync({"catalog": [{"id": "tophat", "name": "Top Hat", "category": "hat", "price": 100}]})
+        self.assertIsNone(self.p.asset(h))
+
+    def test_download_target(self):
+        url, name, html = self.p.download_target("offline")
+        self.assertEqual((name, html), ("PlebClient_Offline.html", True))
+        self.assertFalse(self.p.download_target("wasm")[2])
+        self.assertIsNone(self.p.download_target("nope"))
+
     def test_sync_and_commands(self):
         owner = self.p.create_account("Owner", "password1", "owner")
         self.p.sync({"full": True, "players": [
