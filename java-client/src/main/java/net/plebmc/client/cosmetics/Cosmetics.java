@@ -37,7 +37,10 @@ public final class Cosmetics {
 	/** Trails were taken out of the shop; trail items from a server are ignored. */
 	public static final String TRAIL = "trail";
 	public static final String CLOAK = "cloak";
-	public static final String[] CATEGORIES = { HAT, CLOAK };
+	public static final String WINGS = "wings";
+	public static final String[] CATEGORIES = { HAT, CLOAK, WINGS };
+	/** The wing looks this client draws itself (a wings item can also be a server model). */
+	public static final String[] WING_RENDERS = { "angel", "demon", "dragon", "butterfly", "bat" };
 	/** The collection an item is in when the server doesn't say. */
 	public static final String MAIN = "plebmc";
 
@@ -175,7 +178,8 @@ public final class Cosmetics {
 
 	/** Every look this client knows how to draw. A catalog item with another render id is hidden. */
 	public static final String[] RENDERS = { "tophat", "crown", "halo", "partyhat", "beanie", "horns", "cap",
-			"headphones", "bunny", "wizard", "viking", "cowboy", "propeller", "chef", "cloak", "model" };
+			"headphones", "bunny", "wizard", "viking", "cowboy", "propeller", "chef", "cloak", "model", "angel", "demon",
+			"dragon", "butterfly", "bat" };
 
 	/** A hat drawn from a model the server sends (a Blockbench model in the shop plugin's folder). */
 	public static final String MODEL = "model";
@@ -195,7 +199,12 @@ public final class Cosmetics {
 			new Item("cowboy", "Cowboy Hat", HAT, "cowboy", "Yeehaw", 2200, -1),
 			new Item("propeller", "Propeller Cap", HAT, "propeller", "It spins", 3000, -1),
 			new Item("chef", "Chef Hat", HAT, "chef", "Cooking up wins", 1200, -1),
-			new Item("red_cloak", "Red Cloak", CLOAK, "cloak", "A plain red cloak", 1500, 0xB71C1C)));
+			new Item("red_cloak", "Red Cloak", CLOAK, "cloak", "A plain red cloak", 1500, 0xB71C1C),
+			new Item("angel_wings", "Angel Wings", WINGS, "angel", "White feathered wings", 8000, -1),
+			new Item("demon_wings", "Demon Wings", WINGS, "demon", "Dark red and spiky", 8000, -1),
+			new Item("dragon_wings", "Dragon Wings", WINGS, "dragon", "Scaled wings with claws", 12000, -1),
+			new Item("butterfly_wings", "Butterfly Wings", WINGS, "butterfly", "Bright and fluttery", 6000, -1),
+			new Item("bat_wings", "Bat Wings", WINGS, "bat", "For night owls (and bats)", 5000, -1)));
 
 	private static List<Item> catalog = DEFAULT_CATALOG;
 	private static List<Collection> collections = DEFAULT_COLLECTIONS;
@@ -691,9 +700,9 @@ public final class Cosmetics {
 		}
 		if (MODEL.equals(render)) {
 			String model = str(m.get("model"), null);
-			if (!HAT.equals(cat) || model == null || !model.matches("[0-9a-f]{8,64}") || tex == null
+			if (!(HAT.equals(cat) || WINGS.equals(cat)) || model == null || !model.matches("[0-9a-f]{8,64}") || tex == null
 					|| !tex.matches("[0-9a-f]{8,64}")) {
-				return null; // a model hat needs its model and texture
+				return null; // a model hat or wings need the model and texture
 			}
 			it.model = model;
 			it.texture = tex;
@@ -925,7 +934,7 @@ public final class Cosmetics {
 
 	private static long lastCoins = -1;
 	private static String lastCurrency = "PlebMc Coins";
-	private static Item lastHat, lastCloak;
+	private static Item lastHat, lastCloak, lastWings;
 	private static int lookVersion;
 
 	/** Keeps the balance and what the player wore, so the title screen can show them after leaving. */
@@ -939,10 +948,11 @@ public final class Cosmetics {
 			lastCurrency = currency;
 			changed = true;
 		}
-		Item h = item(equipped.get(HAT)), c = item(equipped.get(CLOAK));
-		if (h != lastHat || c != lastCloak) {
+		Item h = item(equipped.get(HAT)), c = item(equipped.get(CLOAK)), w = item(equipped.get(WINGS));
+		if (h != lastHat || c != lastCloak || w != lastWings) {
 			lastHat = h;
 			lastCloak = c;
+			lastWings = w;
 			changed = true;
 		}
 		if (changed) {
@@ -961,7 +971,7 @@ public final class Cosmetics {
 
 	/** The hat or cloak the player last wore on a server, or null. */
 	public static Item lastWorn(String category) {
-		return HAT.equals(category) ? lastHat : CLOAK.equals(category) ? lastCloak : null;
+		return HAT.equals(category) ? lastHat : CLOAK.equals(category) ? lastCloak : WINGS.equals(category) ? lastWings : null;
 	}
 
 	/** Changes every time the remembered look changes (to know when to save it). */
@@ -979,6 +989,9 @@ public final class Cosmetics {
 		if (lastCloak != null) {
 			m.put("cloak", itemJson(lastCloak));
 		}
+		if (lastWings != null) {
+			m.put("wings", itemJson(lastWings));
+		}
 		return net.plebmc.client.apollo.proto.Json.write(m);
 	}
 
@@ -994,6 +1007,8 @@ public final class Cosmetics {
 			Item h = readItem(m.get("hat")), c = readItem(m.get("cloak"));
 			lastHat = h != null && HAT.equals(h.category) ? h : null;
 			lastCloak = c != null && CLOAK.equals(c.category) ? c : null;
+			Item w = readItem(m.get("wings"));
+			lastWings = w != null && WINGS.equals(w.category) ? w : null;
 		} catch (RuntimeException e) {
 			// a broken value: forget it
 		}
@@ -1190,6 +1205,21 @@ public final class Cosmetics {
 			id = slots == null ? null : slots.get(category);
 		}
 		return item(id);
+	}
+
+	/**
+	 * True when this player plays on PlebClient (or another PlebMc client), so the Pleb
+	 * head goes by their name. This player always is; others when the server says so.
+	 */
+	public static boolean isPleb(String uuid) {
+		if (uuid == null) {
+			return false;
+		}
+		if (uuid.equals(selfUuid)) {
+			return true;
+		}
+		Map<String, String> slots = others.get(uuid);
+		return slots != null && slots.containsKey("pleb");
 	}
 
 	/** True when nobody needs cosmetics drawn (skips all per-player work). */

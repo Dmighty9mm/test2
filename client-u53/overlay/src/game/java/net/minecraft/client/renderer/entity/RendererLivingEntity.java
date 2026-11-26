@@ -492,6 +492,7 @@ public abstract class RendererLivingEntity<T extends EntityLivingBase> extends R
 					GlStateManager.enableTexture2D();
 					GlStateManager.depthMask(true);
 					fontrenderer.drawString(s, -fontrenderer.getStringWidth(s) / 2, 0, 553648127);
+					net.plebmc.client.hud.PlebEntities.nametagBadge(entitylivingbase, s, i, 0);
 					GlStateManager.enableLighting();
 					GlStateManager.disableBlend();
 					GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);

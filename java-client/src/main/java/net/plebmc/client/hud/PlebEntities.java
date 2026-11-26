@@ -13,6 +13,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.item.EntityTNTPrimed;
 import net.minecraft.entity.player.EntityPlayer;
 import net.plebmc.client.apollo.Apollo;
+import net.plebmc.client.cosmetics.Cosmetics;
 import net.plebmc.client.apollo.ApolloText;
 import net.plebmc.client.apollo.module.EntityModule;
 import net.plebmc.client.apollo.module.Ids;
@@ -92,6 +93,27 @@ public final class PlebEntities {
 	private static final java.util.Map<UUID, String> uuidCache = new java.util.HashMap<>();
 
 	/** Server rule: nametags farther than this many blocks are hidden (0 = vanilla 64). */
+	/** True when the player plays on PlebClient (the Pleb head goes by their name). */
+	public static boolean isPleb(UUID u) {
+		return u != null && Cosmetics.isPleb(Ids.uuid(u.getMostSignificantBits(), u.getLeastSignificantBits()));
+	}
+
+	/**
+	 * Draws the Pleb head left of a player's nametag (in the label's own pixels,
+	 * {@code half} is half the text width) when they play on PlebClient.
+	 */
+	public static void nametagBadge(Entity e, String label, int half, int y) {
+		if (!(e instanceof net.minecraft.entity.player.EntityPlayer) || label == null
+				|| !label.contains(e.getName()) || !Cosmetics.isPleb(uuid(e))) {
+			return;
+		}
+		try {
+			Ui.mascot(-half - 11, y - 1, 9, 1f);
+		} catch (Throwable t) {
+			// the texture isn't ready: just the name
+		}
+	}
+
 	public static double nametagRange(double vanilla) {
 		ServerRuleModule rules = Apollo.module(ServerRuleModule.class);
 		if (rules == null || !rules.isEnabled()) {

@@ -13,6 +13,7 @@
     "MixinGuiIngame",
     "MixinGuiMainMenu",
     "MixinGuiOptionSlider",
+    "MixinGuiPlayerTabOverlay",
     "MixinGuiScreen",
     "MixinGuiSlider",
     "MixinGuiSlot",

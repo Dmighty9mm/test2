@@ -391,6 +391,7 @@ public abstract class Render<T extends Entity> {
 			GlStateManager.enableDepth();
 			GlStateManager.depthMask(true);
 			fontrenderer.drawString(str, -fontrenderer.getStringWidth(str) / 2, b0, -1);
+			net.plebmc.client.hud.PlebEntities.nametagBadge(entityIn, str, i, b0);
 			GlStateManager.enableLighting();
 			GlStateManager.disableBlend();
 			GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);

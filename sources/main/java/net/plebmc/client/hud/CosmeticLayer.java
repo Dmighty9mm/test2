@@ -32,7 +32,24 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 		if (Cosmetics.nothingToDraw() || player.isInvisible()) {
 			return;
 		}
-		Cosmetics.Item hat = Cosmetics.shown(PlebEntities.uuid(player), Cosmetics.HAT);
+		String uuid = PlebEntities.uuid(player);
+		Cosmetics.Item wings = Cosmetics.shown(uuid, Cosmetics.WINGS);
+		if (wings != null) {
+			GlStateManager.pushMatrix();
+			try {
+				if (player.isSneaking()) {
+					GlStateManager.translate(0.0F, 0.2F, 0.0F);
+				}
+				renderer.getMainModel().bipedBody.postRender(0.0625F);
+				GlStateManager.scale(0.0625F, 0.0625F, 0.0625F);
+				// flap faster while flying or falling, slowly while standing
+				boolean air = !player.onGround;
+				wings(wings, ageInTicks + partialTicks, air ? 2.4f : 1f, air ? 1.6f : 1f);
+			} finally {
+				GlStateManager.popMatrix();
+			}
+		}
+		Cosmetics.Item hat = Cosmetics.shown(uuid, Cosmetics.HAT);
 		if (hat == null) {
 			return;
 		}
@@ -74,17 +91,27 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 	 * tipped toward the viewer.
 	 */
 	public static void thumb(Cosmetics.Item it, float x, float y, float scale, float yaw, float time) {
+		boolean w = Cosmetics.WINGS.equals(it.category);
 		GlStateManager.pushMatrix();
 		GlStateManager.translate(x, y, 150f);
 		GlStateManager.scale(scale, scale, scale);
 		GlStateManager.rotate(-18f, 1f, 0f, 0f);
-		GlStateManager.rotate(yaw, 0f, 1f, 0f);
-		GlStateManager.translate(0f, 10.5f, 0f);
+		if (w) {
+			// seen from behind, a little smaller (wings are wide)
+			GlStateManager.scale(0.62f, 0.62f, 0.62f);
+			GlStateManager.rotate(180f + (yaw - 35f) * 0.4f, 0f, 1f, 0f);
+			GlStateManager.translate(0f, -2f, -2f);
+		} else {
+			GlStateManager.rotate(yaw, 0f, 1f, 0f);
+			GlStateManager.translate(0f, 10.5f, 0f);
+		}
 		GlStateManager.clear(256);
 		GlStateManager.enableDepth();
 		GlStateManager.depthMask(true);
 		try {
-			if (Cosmetics.MODEL.equals(it.render)) {
+			if (w) {
+				wings(it, time, 1f, 1f);
+			} else if (Cosmetics.MODEL.equals(it.render)) {
 				model(it);
 			} else {
 				draw(it.render, it.color, time);
@@ -155,6 +182,190 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 			break;
 		default:
 			break;
+		}
+		t.draw();
+		GlStateManager.enableCull();
+		GlStateManager.enableLighting();
+		GlStateManager.enableTexture2D();
+	}
+
+	// ==================== wings ====================
+
+	/**
+	 * Draws a pair of wings in body space (pixels, y down from the neck, +z
+	 * behind the back). Built-in looks are pixel shapes; a model is the right
+	 * wing from the server (y up from the waist, z 0 at the back), mirrored.
+	 * {@code speed} and {@code amount} make the flap faster and wider.
+	 */
+	public static void wings(Cosmetics.Item it, float time, float speed, float amount) {
+		boolean model = Cosmetics.MODEL.equals(it.render);
+		float flap = 20f + 11f * amount * (float) Math.sin(time * 0.13f * speed);
+		for (int side = -1; side <= 1; side += 2) {
+			GlStateManager.pushMatrix();
+			try {
+				if (model) {
+					GlStateManager.translate(0f, 12f, 2f);
+				} else {
+					GlStateManager.translate(0f, 0f, 2.1f);
+				}
+				GlStateManager.scale(side, 1f, 1f);
+				if (!model) {
+					GlStateManager.translate(0.6f, 0f, 0f);
+				}
+				GlStateManager.rotate(-flap, 0f, 1f, 0f);
+				if (model) {
+					model(it);
+				} else {
+					wing(it.render, it.color);
+				}
+			} finally {
+				GlStateManager.popMatrix();
+			}
+		}
+	}
+
+	/** Width of each built-in wing in pixels. */
+	static int wingWidth(String render) {
+		return "butterfly".equals(render) || "bat".equals(render) ? 11 : 13;
+	}
+
+	/**
+	 * One pixel of a built-in wing: u goes out from the root (0..width-1), v
+	 * is the body's y (negative is above the shoulders). 0 is empty, then
+	 * 1 main color, 2 edge/bone, 3 accent, 4 shade.
+	 */
+	static int wingCell(String render, int u, int v) {
+		int w = wingWidth(render);
+		if (u < 0 || u >= w) {
+			return 0;
+		}
+		switch (render) {
+		case "angel": {
+			int top = 2 - Math.round(5f * (float) Math.sin(Math.min(1f, u / (float) (w - 2)) * Math.PI / 2));
+			if (u == w - 1) {
+				top += 2;
+			}
+			int len = Math.round(12f - 0.62f * u) + (u % 2 == 0 ? 1 : 0);
+			int d = v - top;
+			if (d < 0 || d >= len) {
+				return 0;
+			}
+			if (d == 0) {
+				return 2;
+			}
+			return u % 3 == 2 && d > len * 0.4f ? 4 : d > len - 2 ? 4 : 1;
+		}
+		case "butterfly": {
+			float x = u + 0.5f, y = v + 0.5f;
+			boolean upper = sq((x - 5.6f) / 5.6f) + sq((y + 1.8f) / 5.2f) <= 1f;
+			boolean lower = sq((x - 3.6f) / 3.8f) + sq((y - 6.5f) / 4.2f) <= 1f;
+			if (!upper && !lower) {
+				return 0;
+			}
+			boolean edge = false;
+			for (int k = 0; k < 4 && !edge; k++) {
+				int nu = u + (k == 0 ? 1 : k == 1 ? -1 : 0), nv = v + (k == 2 ? 1 : k == 3 ? -1 : 0);
+				float nx = nu + 0.5f, ny = nv + 0.5f;
+				edge = nu >= 0 && !(sq((nx - 5.6f) / 5.6f) + sq((ny + 1.8f) / 5.2f) <= 1f
+						|| sq((nx - 3.6f) / 3.8f) + sq((ny - 6.5f) / 4.2f) <= 1f);
+			}
+			if (edge) {
+				return 2;
+			}
+			if (sq(x - 7.2f) + sq(y + 2.2f) <= 2.3f || sq(x - 3.5f) + sq(y - 7.5f) <= 1.2f) {
+				return 3;
+			}
+			return upper ? 1 : 4;
+		}
+		default: { // demon, dragon, bat: bones with skin between
+			int top = 2 - Math.round(u * ("bat".equals(render) ? 0.45f : 0.6f));
+			int period = Math.max(3, (w + 1) / 3);
+			int f = u % period;
+			boolean finger = f == period - 1 || u == w - 1;
+			float dip = finger ? 0f : (float) Math.sin(Math.PI * (f + 1) / period) * ("bat".equals(render) ? 3.2f : 4f);
+			int bottom = Math.round(("bat".equals(render) ? 8.5f : 10.5f) - 0.3f * u - dip);
+			if ("demon".equals(render) && finger && v == top - 1) {
+				return 2; // spikes
+			}
+			if ("dragon".equals(render) && u == w - 1 && v >= top - 2 && v < top) {
+				return 3; // claw
+			}
+			if (v < top || v > bottom) {
+				return 0;
+			}
+			if (v == top || finger) {
+				return 2;
+			}
+			return "dragon".equals(render) && (u + v) % 4 == 0 ? 4 : 1;
+		}
+		}
+	}
+
+	private static float sq(float f) {
+		return f * f;
+	}
+
+	/** The colors of a built-in wing: main, edge, accent, shade (the tint replaces main). */
+	static int[] wingColors(String render, int tint) {
+		int[] c;
+		switch (render) {
+		case "angel":
+			c = new int[] { 0xF4F4F4, 0xFFFFFF, 0xFFFFFF, 0xC9CFD8 };
+			break;
+		case "demon":
+			c = new int[] { 0x8A1414, 0x2A0808, 0xFF5A2A, 0x5E0D0D };
+			break;
+		case "dragon":
+			c = new int[] { 0x2F7D3A, 0x173F1D, 0xEDE6CF, 0x256530 };
+			break;
+		case "butterfly":
+			c = new int[] { 0x3FA9F5, 0x15182B, 0xFFFFFF, 0xFF8A3D };
+			break;
+		default: // bat
+			c = new int[] { 0x34343F, 0x16161C, 0x9A2A2A, 0x2A2A33 };
+			break;
+		}
+		if (tint >= 0) {
+			c[0] = tint;
+			c[3] = "butterfly".equals(render) ? mixRgb(tint, 0xFF8A3D, 0.5f) : mixRgb(tint, 0x000000, 0.22f);
+			if ("angel".equals(render)) {
+				c[1] = mixRgb(tint, 0xFFFFFF, 0.45f);
+			}
+		}
+		return c;
+	}
+
+	static int mixRgb(int a, int b, float t) {
+		int r = Math.round(((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t);
+		int g = Math.round(((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t);
+		int bl = Math.round((a & 255) * (1 - t) + (b & 255) * t);
+		return (r << 16) | (g << 8) | bl;
+	}
+
+	/** One built-in wing going out along +x from the root, a pixel-thick slab. */
+	static void wing(String render, int tint) {
+		int[] colors = wingColors(render, tint);
+		GlStateManager.disableTexture2D();
+		GlStateManager.disableLighting();
+		GlStateManager.disableCull();
+		GlStateManager.color(1f, 1f, 1f, 1f);
+		Tessellator t = Tessellator.getInstance();
+		wr = t.getWorldRenderer();
+		wr.begin(7, DefaultVertexFormats.POSITION_COLOR);
+		int w = wingWidth(render);
+		for (int u = 0; u < w; u++) {
+			// one box per run of the same color down the column
+			int start = -12, cur = 0;
+			for (int v = -12; v <= 16; v++) {
+				int c = v == 16 ? 0 : wingCell(render, u, v);
+				if (c != cur) {
+					if (cur != 0) {
+						box(u, start, 0f, u + 1, v, 0.7f, colors[cur - 1]);
+					}
+					cur = c;
+					start = v;
+				}
+			}
 		}
 		t.draw();
 		GlStateManager.enableCull();

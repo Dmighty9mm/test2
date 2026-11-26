@@ -498,8 +498,21 @@ public final class TitleMenu {
 	 */
 	public static void drawSkinModel(float x, float foot, float scale, float yaw, net.plebmc.client.cosmetics.Cosmetics.Item cloak,
 			net.plebmc.client.cosmetics.Cosmetics.Item hat) {
-		drawPlayer(x, foot, scale, yaw, 0f, 0f, System.currentTimeMillis() / 1000f, 1f, cloak, hat, 0f);
+		drawSkinModel(x, foot, scale, yaw, cloak, hat, null);
 	}
+
+	public static void drawSkinModel(float x, float foot, float scale, float yaw, net.plebmc.client.cosmetics.Cosmetics.Item cloak,
+			net.plebmc.client.cosmetics.Cosmetics.Item hat, net.plebmc.client.cosmetics.Cosmetics.Item wings) {
+		drawWings = wings;
+		try {
+			drawPlayer(x, foot, scale, yaw, 0f, 0f, System.currentTimeMillis() / 1000f, 1f, cloak, hat, 0f);
+		} finally {
+			drawWings = null;
+		}
+	}
+
+	/** Wings for the next drawPlayer (the title screen shows the last worn ones). */
+	private static net.plebmc.client.cosmetics.Cosmetics.Item drawWings;
 
 	private static void drawPlayer(float x, float foot, float scale, float bodyYaw, float headYaw, float headPitch, float t,
 			float in, net.plebmc.client.cosmetics.Cosmetics.Item cloak, net.plebmc.client.cosmetics.Cosmetics.Item hat, float tilt) {
@@ -559,6 +572,15 @@ public final class TitleMenu {
 				GlStateManager.rotate(8f + (float) Math.sin(t * 1.3f) * 3f, 1f, 0f, 0f);
 				GlStateManager.rotate(180f, 0f, 1f, 0f);
 				m.renderCape(sc);
+				GlStateManager.popMatrix();
+			}
+			net.plebmc.client.cosmetics.Cosmetics.Item wings = drawWings != null ? drawWings
+					: net.plebmc.client.cosmetics.Cosmetics.lastWorn(net.plebmc.client.cosmetics.Cosmetics.WINGS);
+			if (wings != null) {
+				GlStateManager.pushMatrix();
+				m.bipedBody.postRender(sc);
+				GlStateManager.scale(sc, sc, sc);
+				CosmeticLayer.wings(wings, age, 1f, 1f);
 				GlStateManager.popMatrix();
 			}
 			if (hat != null) {

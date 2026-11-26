@@ -68,6 +68,13 @@ public class CosmeticsTest {
 				"other player's hat (uuid case-insensitive)");
 		Cosmetics.handle("{\"type\":\"players\",\"players\":{\"" + other + "\":null}}");
 		check(Cosmetics.shown(other, "hat") == null, "other player's cosmetics removed");
+		check(Cosmetics.isPleb(me) && !Cosmetics.isPleb(other), "self is always Pleb, others only when told");
+		Cosmetics.handle("{\"type\":\"players\",\"players\":{\"" + other + "\":{\"pleb\":\"1\",\"wings\":\"angel_wings\"}}}");
+		check(Cosmetics.isPleb(other) && Cosmetics.shown(other, "hat") == null, "the server marks PlebClient players");
+		check(Cosmetics.shown(other, "wings") != null && "angel".equals(Cosmetics.shown(other, "wings").render),
+				"other player's wings");
+		Cosmetics.handle("{\"type\":\"players\",\"players\":{\"" + other + "\":null}}");
+		check(!Cosmetics.isPleb(other), "Pleb mark cleared");
 
 		Cosmetics.handle("{\"type\":\"state\",\"catalog\":[{\"id\":\"gold_tophat\",\"name\":\"Gold Top Hat\","
 				+ "\"category\":\"hat\",\"render\":\"tophat\",\"price\":900,\"color\":\"#FFD700\"},"

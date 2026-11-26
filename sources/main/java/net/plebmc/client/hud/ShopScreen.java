@@ -81,7 +81,7 @@ public final class ShopScreen extends PlebScreen {
 	}
 
 	private static String categoryName(String c) {
-		return Cosmetics.HAT.equals(c) ? "Hats" : Character.toUpperCase(c.charAt(0)) + c.substring(1) + "s";
+		return Cosmetics.HAT.equals(c) ? "Hats" : Cosmetics.WINGS.equals(c) ? "Wings" : Character.toUpperCase(c.charAt(0)) + c.substring(1) + "s";
 	}
 
 	@Override
@@ -148,7 +148,7 @@ public final class ShopScreen extends PlebScreen {
 					page = 0;
 					selectedId = null;
 					// cloaks are on your back: turn the preview around
-					yawTarget = Cosmetics.CLOAK.equals(c) ? FRONT + 180f : FRONT;
+					yawTarget = Cosmetics.CLOAK.equals(c) || Cosmetics.WINGS.equals(c) ? FRONT + 180f : FRONT;
 					rebuild();
 				}
 			});
@@ -301,7 +301,7 @@ public final class ShopScreen extends PlebScreen {
 				return;
 			}
 			selectedId = it.id;
-			if (Cosmetics.CLOAK.equals(it.category)) {
+			if (Cosmetics.CLOAK.equals(it.category) || Cosmetics.WINGS.equals(it.category)) {
 				yawTarget = FRONT + 180f;
 			}
 			// try it on right away (not if it's what you already wear)
@@ -342,7 +342,8 @@ public final class ShopScreen extends PlebScreen {
 		} else {
 			// not in a world: your own skin, wearing what you're trying on
 			int scale = Math.max(20, Math.min(60, (pvh - 52) * 10 / 21));
-			TitleMenu.drawSkinModel(pvx + pvw / 2f, pvy + pvh - 24, scale, yaw, offlineWorn(Cosmetics.CLOAK), offlineWorn(Cosmetics.HAT));
+			TitleMenu.drawSkinModel(pvx + pvw / 2f, pvy + pvh - 24, scale, yaw, offlineWorn(Cosmetics.CLOAK), offlineWorn(Cosmetics.HAT),
+					offlineWorn(Cosmetics.WINGS));
 		}
 		Ui.icon("drag", pvx + 6, pvy + pvh - 14, 1, Ui.FAINT);
 		Ui.text("Drag to spin", pvx + 18, pvy + pvh - 13, Ui.FAINT);
