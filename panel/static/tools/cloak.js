@@ -443,15 +443,15 @@
     cape = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tex, transparent: true }));
     const pivot = new THREE.Group(); pivot.position.set(0, 24, -2.6); cape.position.set(0, -8, -.5); pivot.add(cape); pivot.rotation.x = .16; scene.add(pivot);
     cape.userData.pivot = pivot;
-    let yaw = Math.PI * .82, drag = null;
-    cv.addEventListener('pointerdown', (e) => { drag = e.clientX; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
+    let yaw = Math.PI * .82, drag = null, touched = false; // once you turn it yourself it stays where you leave it
+    cv.addEventListener('pointerdown', (e) => { drag = e.clientX; touched = true; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
     cv.addEventListener('pointermove', (e) => { if (drag !== null) { yaw += (e.clientX - drag) * .01; drag = e.clientX; } });
     cv.addEventListener('pointerup', () => { drag = null; cv.style.cursor = 'grab'; });
     const resize = () => { const r = cv.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix(); };
     new ResizeObserver(resize).observe(cv); resize();
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     return (now) => {
-      if (drag === null && !reduce) yaw += .004;
+      if (drag === null && !touched && !reduce) yaw += .004;
       camera.position.set(Math.sin(yaw) * 58, 22, Math.cos(yaw) * 58); camera.lookAt(0, 16, 0);
       pivot.rotation.x = .16 + (reduce ? 0 : Math.sin(now / 700) * .04);
       renderer.render(scene, camera);

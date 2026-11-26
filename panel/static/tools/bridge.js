@@ -1,7 +1,7 @@
 "use strict";
-// Connects a maker (Hat Maker, Cloak Maker) to your PlebMc account on the panel:
-// save to your account, open your designs, share them in the gallery, remix shared ones,
-// and (admins) publish straight into the server's shop.
+// Connects a maker (Cosmetic Maker, Cloak Maker) to your PlebMc account on the panel:
+// save to your account, open your designs and publish them straight into the server's shop.
+// The makers are for admins only.
 window.PlebTool = (() => {
   function h(tag, attrs, ...kids) {
     const el = document.createElement(tag);
@@ -42,41 +42,40 @@ window.PlebTool = (() => {
   };
 
   /**
-   * tool: { kind, get() -> {name, itemId, data, extra, thumb} (may be async),
+   * tool: { kind (a string, or a function for makers with modes), accepts(kind)?, get() -> {name, itemId, data, extra, thumb} (may be async),
    *         set(design), publishFile() -> {file, frametime?} (may be async), status(text, bad) }
    */
   function mount(box, tool) {
+    const kindOf = () => (typeof tool.kind === "function" ? tool.kind() : tool.kind);
     let me = null;
     let currentId = null;
     let currentMine = false;
     const who = h("div", { class: "muted" }, "Checking your account…");
-    const share = h("input", { type: "checkbox", id: "pt-share" });
     const saveBtn = h("button", { class: "primary", onclick: () => save(false) }, "Save to my account");
     const newBtn = h("button", { onclick: () => save(true) }, "Save as new");
     const list = h("div", { class: "designs" });
     const pub = h("div", { class: "acct hidden" });
     const shownName = h("small", { class: "muted" });
     box.append(h("div", { class: "acct" }, who, shownName,
-      h("label", { class: "check" }, share, "Share in the gallery (others can like and remix it)"),
       h("div", { class: "row" }, saveBtn, newBtn),
-      h("details", {}, h("summary", {}, "My saved " + tool.kind + "s"), h("div", { style: "height:8px" }), list),
+      h("details", {}, h("summary", {}, "My saved designs"), h("div", { style: "height:8px" }), list),
       pub));
 
     function showName() {
-      shownName.textContent = currentId ? (currentMine ? "Editing your saved design #" + currentId : "Remixing design #" + currentId + ": saving makes your own copy") : "Not saved to your account yet";
+      shownName.textContent = currentId ? (currentMine ? "Editing your saved design #" + currentId : "Editing design #" + currentId + ": saving makes your own copy") : "Not saved to your account yet";
     }
 
     async function refreshList() {
       if (!me) return;
       try {
         const r = await api("designs/mine");
-        const mine = r.designs.filter((d) => d.kind === tool.kind);
+        const mine = r.designs.filter((d) => d.kind === kindOf() || (tool.accepts && tool.accepts(d.kind)));
         list.replaceChildren();
         if (!mine.length) list.append(h("p", { class: "muted" }, "Nothing saved yet."));
         for (const d of mine) {
           list.append(h("div", { class: "design" },
             h("div", { class: "pic" }, d.thumb ? h("img", { src: d.thumb, alt: "" }) : ""),
-            h("div", { class: "body" }, h("b", {}, d.name), h("small", { class: "muted" }, ago(d.updated) + (d.public ? " · shared" : "")),
+            h("div", { class: "body" }, h("b", {}, d.name), h("small", { class: "muted" }, d.kind + " · " + ago(d.updated)),
               h("div", { class: "row" },
                 h("button", { class: "small", onclick: () => open(d.id) }, "Open"),
                 h("button", { class: "small danger", title: "Delete", onclick: async () => {
@@ -96,14 +95,14 @@ window.PlebTool = (() => {
       saveBtn.disabled = newBtn.disabled = true;
       try {
         const d = await tool.get();
-        const body = { kind: tool.kind, name: d.name, itemId: d.itemId, data: d.data, extra: d.extra || {}, thumb: d.thumb || "", public: share.checked };
+        const body = { kind: kindOf(), name: d.name, itemId: d.itemId, data: d.data, extra: d.extra || {}, thumb: d.thumb || "" };
         if (currentId && currentMine && !asNew) body.id = currentId;
         const r = await api("designs/save", body);
         currentId = r.id;
         currentMine = true;
         history.replaceState(null, "", location.pathname + "?design=" + r.id);
         showName();
-        tool.status(share.checked ? "Saved and shared in the gallery." : "Saved to your account.");
+        tool.status("Saved to your account.");
         refreshList();
       } catch (e) {
         tool.status(e.message, true);
@@ -114,14 +113,13 @@ window.PlebTool = (() => {
     async function open(id) {
       try {
         const d = (await api("designs/get?id=" + encodeURIComponent(id))).design;
-        if (d.kind !== tool.kind) {
-          location.href = "/static/tools/" + d.kind + ".html?design=" + d.id;
+        if (d.kind !== kindOf() && !(tool.accepts && tool.accepts(d.kind))) {
+          location.href = "/static/tools/" + (d.kind === "wings" ? "hat" : d.kind) + ".html?design=" + d.id;
           return;
         }
         await tool.set(d);
         currentId = d.id;
         currentMine = !!d.mine;
-        share.checked = d.mine ? d.public : false;
         history.replaceState(null, "", location.pathname + "?design=" + d.id);
         showName();
         tool.status(d.mine ? "Opened " + d.name + "." : "Opened " + d.name + " by " + (d.author || "someone") + ". Save to keep your own copy.");
@@ -132,8 +130,9 @@ window.PlebTool = (() => {
 
     function publishBox() {
       const id = h("input", { type: "text", id: "pt-id", maxlength: 32, spellcheck: "false" });
-      const price = h("input", { type: "number", id: "pt-price", value: tool.kind === "hat" ? 2000 : 5000, step: 100 });
-      const desc = h("input", { type: "text", id: "pt-desc", maxlength: 100, value: tool.kind === "hat" ? "Made with the Hat Maker" : "Animated cloak" });
+      const k0 = kindOf();
+      const price = h("input", { type: "number", id: "pt-price", value: k0 === "hat" ? 2000 : k0 === "wings" ? 8000 : 5000, step: 100 });
+      const desc = h("input", { type: "text", id: "pt-desc", maxlength: 100, value: k0 === "cloak" ? "Animated cloak" : "Made with the Cosmetic Maker" });
       const coll = h("input", { type: "text", id: "pt-coll", maxlength: 40, placeholder: "plebmc" });
       const creator = h("input", { type: "text", id: "pt-creator", maxlength: 40, placeholder: "optional" });
       const go = h("button", { class: "primary", onclick: async () => {
@@ -141,7 +140,7 @@ window.PlebTool = (() => {
         try {
           const d = await tool.get();
           const f = await tool.publishFile();
-          await api("admin/publish", { kind: tool.kind, itemId: (id.value || d.itemId).trim(), name: d.name, price: price.value, file: f.file,
+          await api("admin/publish", { kind: kindOf(), itemId: (id.value || d.itemId).trim(), name: d.name, price: price.value, file: f.file,
             frametime: f.frametime, description: desc.value, collection: coll.value, creator: creator.value, designId: currentMine ? currentId : null });
           tool.status("Sent to the server: it's in the shop within a few seconds. (See Publish to shop on the panel for the result.)");
         } catch (e) {
@@ -164,14 +163,18 @@ window.PlebTool = (() => {
       try {
         me = (await api("me")).account;
       } catch (e) { me = null; }
-      if (me) {
-        who.replaceChildren("Signed in as ", h("b", {}, me.name), ". ", h("a", { href: "/#me" }, "My account"));
-        refreshList();
-        if (me.role === "admin" || me.role === "owner") publishBox();
-      } else {
-        who.replaceChildren(h("a", { href: "/#login?next=" + encodeURIComponent(location.pathname + location.search) }, "Sign in"),
-          " to save your designs to your account and share them. You can still download the files without signing in.");
+      if (!me || (me.role !== "admin" && me.role !== "owner")) {
+        // the makers are for admins: everyone else goes back to the panel
+        const back = me ? "/#home" : "/#login?next=" + encodeURIComponent(location.pathname + location.search);
+        document.body.replaceChildren(h("div", { class: "card narrow", style: "margin:80px auto;max-width:420px;text-align:center" },
+          h("h2", {}, "Admins only"),
+          h("p", { class: "muted" }, me ? "The cosmetic makers are for PlebMc admins." : "Sign in with an admin account to use the cosmetic makers."),
+          h("a", { class: "btn primary", href: back }, me ? "Back to the panel" : "Sign in")));
+        return;
       }
+      who.replaceChildren("Signed in as ", h("b", {}, me.name), ". ", h("a", { href: "/#makers" }, "My designs"));
+      refreshList();
+      publishBox();
       showName();
       const want = new URLSearchParams(location.search).get("design");
       if (want) open(want);

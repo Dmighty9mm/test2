@@ -1,4 +1,7 @@
-// PlebMc Hat Maker (panel version). Needs three.js and bridge.js first.
+// PlebMc Cosmetic Maker (hats and wings; panel version). Needs three.js and bridge.js first.
+// Hats are built on a head (y 0..8 is the head). Wings are built on a body seen from behind:
+// y goes up from the waist (the shoulders are y 12), z 0 is the back and +z sticks out behind.
+// Only the right wing (x 0 and up) is exported; the client mirrors it and flaps both.
 (() => {
   'use strict';
   const N = 24;            // build space: x/z -12..11, y 0..23 (head top is y 8)
@@ -7,6 +10,8 @@
                    '#d9a441','#f28c28','#b085ff','#ff6fae','#5de2e7','#6b6b6b','#3f2a14','#f2f2f2'];
   let palette = PALETTE.slice();
   let color = '#e8b923', tool = 'add', mirror = true;
+  const want = new URLSearchParams(location.search);
+  let mode = want.get('mode') === 'wings' ? 'wings' : 'hat';
   const vox = new Map();   // "x,y,z" -> "#rrggbb"
   const hist = [], redoStack = [];
   const $ = id => document.getElementById(id);
@@ -49,8 +54,25 @@
   // the neck/shoulders hint
   const body = new THREE.Mesh(new THREE.BoxGeometry(8, 6, 4), new THREE.MeshLambertMaterial({ color: 0x2a8f8f, transparent: true, opacity: 0.5 }));
   body.position.set(0, -3, 0); scene.add(body);
+  // wings mode: a whole player seen from behind (the back is z 0)
+  const shirt = new THREE.MeshLambertMaterial({ color: 0x2a8f8f });
+  const skin = new THREE.MeshLambertMaterial({ color: 0xc69a74 });
+  const pants = new THREE.MeshLambertMaterial({ color: 0x34407a });
+  const part = (w, hh, d, x, y, z, mat, solid) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, hh, d), mat);
+    m.position.set(x, y, z); m.userData.head = solid; return m;
+  };
+  const player = new THREE.Group();
+  const wingHead = new THREE.Mesh(new THREE.BoxGeometry(8, 8, 8), headMats);
+  wingHead.position.set(0, 16, -2); wingHead.userData.head = true;
+  player.add(part(8, 12, 4, 0, 6, -2, shirt, true), wingHead,
+    part(4, 12, 4, -6, 6, -2, skin, true), part(4, 12, 4, 6, 6, -2, skin, true),
+    part(4, 12, 4, -2, -6, -2, pants, false), part(4, 12, 4, 2, -6, -2, pants, false));
+  player.visible = false;
+  scene.add(player);
   // a floor grid under the build space
   const grid = new THREE.GridHelper(N, N, 0x2f4658, 0x1a2834); grid.position.y = -6.01; scene.add(grid);
+  const solids = () => (mode === 'wings' ? player.children.filter((m) => m.userData.head) : [head]);
 
   const boxGeo = new THREE.BoxGeometry(1, 1, 1);
   const mats = {};
@@ -76,7 +98,7 @@
   // orbit
   let yaw = Math.PI - 0.6, pitch = 0.45, dist = 34, spin = false;
   function placeCam() {
-    const cy = 6;
+    const cy = mode === 'wings' ? 9 : 6;
     cam.position.set(Math.sin(yaw) * Math.cos(pitch) * dist, cy + Math.sin(pitch) * dist, Math.cos(yaw) * Math.cos(pitch) * dist);
     cam.lookAt(0, cy, 0);
   }
@@ -94,16 +116,21 @@
     mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(mouse, cam);
     const objs = [...meshes.values()];
-    if ($('ghost').getAttribute('aria-pressed') === 'true') objs.push(head);
+    if ($('ghost').getAttribute('aria-pressed') === 'true') objs.push(...solids());
     const hits = ray.intersectObjects(objs, false);
     return hits[0] || null;
   }
-  const inside = (x,y,z) => x >= -N/2 && x < N/2 && z >= -N/2 && z < N/2 && y >= -4 && y < N;
-  const inHead = (x,y,z) => x >= -4 && x < 4 && z >= -4 && z < 4 && y >= 0 && y < 8;
+  const inside = (x,y,z) => mode === 'wings'
+    ? x >= -16 && x < 16 && y >= -10 && y < 26 && z >= -3 && z < 14
+    : x >= -N/2 && x < N/2 && z >= -N/2 && z < N/2 && y >= -4 && y < N;
+  // the head (hats) or the body (wings): no blocks inside it
+  const inHead = (x,y,z) => mode === 'wings'
+    ? (z >= -4 && z < 0 && y >= 0 && y < 12 && x >= -8 && x < 8) || (x >= -4 && x < 4 && y >= 12 && y < 20 && z >= -6 && z < 2)
+    : x >= -4 && x < 4 && z >= -4 && z < 4 && y >= 0 && y < 8;
   function snapshot() { hist.push(JSON.stringify([...vox])); if (hist.length > 200) hist.shift(); redoStack.length = 0; }
   function setV(x,y,z,c) {
     const ks = [[x,y,z]];
-    if (mirror) ks.push([-x-1,y,z]);
+    if (mirror || mode === 'wings') ks.push([-x-1,y,z]);
     for (const [a,b,d] of ks) {
       if (!inside(a,b,d) || inHead(a,b,d)) continue;
       if (c) vox.set(key(a,b,d), c); else vox.delete(key(a,b,d));
@@ -188,12 +215,21 @@
   }
   document.querySelectorAll('#tools button').forEach(b => b.onclick = () => setTool(b.dataset.tool));
   const toggle = (id, on) => { $(id).setAttribute('aria-pressed', String(on)); return on; };
-  $('mirror').onclick = () => { mirror = toggle('mirror', !mirror); };
+  $('mirror').onclick = () => { if (mode === 'wings') { status('Wings are always mirrored: you build the right one, the game copies it.'); return; } mirror = toggle('mirror', !mirror); };
   $('spin').onclick = () => { spin = toggle('spin', !spin); };
-  $('ghost').onclick = () => { const on = toggle('ghost', $('ghost').getAttribute('aria-pressed') !== 'true'); head.visible = on; body.visible = on; };
-  $('viewFront').onclick = () => { yaw = Math.PI; pitch = 0.15; };
+  const ghostOn = () => $('ghost').getAttribute('aria-pressed') === 'true';
+  function showGhost() {
+    const on = ghostOn();
+    head.visible = body.visible = on && mode === 'hat';
+    player.visible = on && mode === 'wings';
+    grid.position.y = mode === 'wings' ? -12.01 : -6.01;
+  }
+  $('ghost').onclick = () => { toggle('ghost', !ghostOn()); showGhost(); };
+  // "front" is what you look at most: the face for hats, the back for wings
+  const front = () => (mode === 'wings' ? 0 : Math.PI);
+  $('viewFront').onclick = () => { yaw = front(); pitch = 0.15; };
   $('viewSide').onclick = () => { yaw = Math.PI / 2; pitch = 0.15; };
-  $('viewTop').onclick = () => { yaw = Math.PI; pitch = 1.4; };
+  $('viewTop').onclick = () => { yaw = front(); pitch = 1.4; };
   function undo() { if (!hist.length) return; redoStack.push(JSON.stringify([...vox])); load(hist.pop()); }
   function redo() { if (!redoStack.length) return; hist.push(JSON.stringify([...vox])); load(redoStack.pop()); }
   function load(s) { vox.clear(); for (const [k,c] of JSON.parse(s)) vox.set(k, c); rebuild(); }
@@ -223,19 +259,107 @@
     headphones() { fill(-5,8,-1,4,8,0,'#1c1c1c'); for (const x of [-5,4]) { fill(x,2,-1,x,7,0,'#1c1c1c'); } fill(-6,2,-2,-5,5,1,'#3a7bd5'); fill(4,2,-2,5,5,1,'#3a7bd5'); },
     viking() { fill(-5,8,-5,4,9,4,'#8a8f98'); ring(8,5,'#6b4a2b'); fill(-1,8,-6,0,9,-5,'#8a8f98'); for (const s of [-1,1]) { const x = s < 0 ? -6 : 5; fill(x,9,0,x,10,0,'#f2f2e6'); fill(x+s,11,0,x+s,12,0,'#f2f2e6'); fill(x+s,13,0,x+s,13,0,'#d9d2b8'); } }
   };
-  document.querySelectorAll('#templates button').forEach(b => b.onclick = () => { snapshot(); vox.clear(); T[b.dataset.t](); rebuild(); });
+  // wing templates: the same shapes the client draws for its built-in wings
+  function wingCell(r, u, v) {
+    const w = r === 'butterfly' || r === 'bat' ? 11 : 13;
+    if (u < 0 || u >= w) return 0;
+    const sq = (f) => f * f;
+    if (r === 'angel') {
+      let top = 2 - Math.round(5 * Math.sin(Math.min(1, u / (w - 2)) * Math.PI / 2));
+      if (u === w - 1) top += 2;
+      const len = Math.round(12 - 0.62 * u) + (u % 2 === 0 ? 1 : 0), d = v - top;
+      if (d < 0 || d >= len) return 0;
+      if (d === 0) return 2;
+      return (u % 3 === 2 && d > len * 0.4) || d > len - 2 ? 4 : 1;
+    }
+    if (r === 'butterfly') {
+      const inW = (uu, vv) => { const x = uu + .5, y = vv + .5; return sq((x - 5.6) / 5.6) + sq((y + 1.8) / 5.2) <= 1 || sq((x - 3.6) / 3.8) + sq((y - 6.5) / 4.2) <= 1; };
+      if (!inW(u, v)) return 0;
+      const x = u + .5, y = v + .5;
+      if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => u + a >= 0 && !inW(u + a, v + b))) return 2;
+      if (sq(x - 7.2) + sq(y + 2.2) <= 2.3 || sq(x - 3.5) + sq(y - 7.5) <= 1.2) return 3;
+      return sq((x - 5.6) / 5.6) + sq((y + 1.8) / 5.2) <= 1 ? 1 : 4;
+    }
+    const bat = r === 'bat';
+    const top = 2 - Math.round(u * (bat ? 0.45 : 0.6));
+    const period = Math.max(3, Math.floor((w + 1) / 3)), f = u % period;
+    const finger = f === period - 1 || u === w - 1;
+    const dip = finger ? 0 : Math.sin(Math.PI * (f + 1) / period) * (bat ? 3.2 : 4);
+    const bottom = Math.round((bat ? 8.5 : 10.5) - 0.3 * u - dip);
+    if (r === 'demon' && finger && v === top - 1) return 2;
+    if (r === 'dragon' && u === w - 1 && v >= top - 2 && v < top) return 3;
+    if (v < top || v > bottom) return 0;
+    if (v === top || finger) return 2;
+    return r === 'dragon' && (u + v) % 4 === 0 ? 4 : 1;
+  }
+  const WING_COLORS = { angel: ['#f4f4f4', '#ffffff', '#ffffff', '#c9cfd8'], demon: ['#8a1414', '#2a0808', '#ff5a2a', '#5e0d0d'],
+    dragon: ['#2f7d3a', '#173f1d', '#ede6cf', '#256530'], butterfly: ['#3fa9f5', '#15182b', '#ffffff', '#ff8a3d'], bat: ['#34343f', '#16161c', '#9a2a2a', '#2a2a33'] };
+  function wingTemplate(r) {
+    // the client's built-in wing sits half a pixel out from the spine and a hair off the back
+    for (let u = 0; u < 13; u++) for (let v = -12; v < 16; v++) {
+      const c = wingCell(r, u, v);
+      if (c) setV(u, 11 - v, 0, WING_COLORS[r][c - 1]);
+    }
+  }
+  const TEMPLATES = {
+    hat: [['tophat', 'Top hat'], ['crown', 'Crown'], ['cap', 'Cap'], ['beanie', 'Beanie'], ['horns', 'Horns'], ['halo', 'Halo'], ['witch', 'Witch hat'], ['straw', 'Straw hat'], ['headphones', 'Headphones'], ['viking', 'Viking helmet']],
+    wings: [['angel', 'Angel'], ['demon', 'Demon'], ['dragon', 'Dragon'], ['butterfly', 'Butterfly'], ['bat', 'Bat']],
+  };
+  function drawTemplates() {
+    const el = $('templates');
+    el.replaceChildren(...TEMPLATES[mode].map(([t, label]) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.onclick = () => { snapshot(); vox.clear(); if (mode === 'wings') wingTemplate(t); else T[t](); rebuild(); };
+      return b;
+    }));
+  }
+
+  /** Switches between making a hat and wings (each keeps its own draft). */
+  function setMode(m, fresh) {
+    mode = m === 'wings' ? 'wings' : 'hat';
+    document.querySelectorAll('#mode button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+    $('mirror').setAttribute('aria-pressed', String(mode === 'wings' || mirror));
+    $('mirror').disabled = mode === 'wings';
+    $('ghost').textContent = mode === 'wings' ? 'Show body' : 'Show head';
+    $('modehint').textContent = mode === 'wings'
+      ? 'Build on the back. You build both sides here, the game uses the right one (x 0 and up) and mirrors it, then flaps them.'
+      : 'Build a hat out of blocks on the head. One block is one pixel of a Minecraft head.';
+    $('flip').hidden = mode === 'wings';
+    drawTemplates();
+    showGhost();
+    yaw = mode === 'wings' ? 0.5 : Math.PI - 0.6;
+    pitch = mode === 'wings' ? 0.25 : 0.45;
+    dist = mode === 'wings' ? 52 : 34;
+    if (fresh) {
+      hist.length = 0; redoStack.length = 0; vox.clear();
+      let restored = false;
+      try { const d = JSON.parse(localStorage.getItem(draftKey()) || 'null'); if (d && d.vox && d.vox.length) { loadProject(d); restored = true; } } catch (e) { /* no draft */ }
+      if (!restored) {
+        if (mode === 'wings') { $('hid').value = 'my_wings'; $('hname').value = 'My Wings'; wingTemplate('angel'); }
+        else { $('hid').value = 'my_hat'; $('hname').value = 'My Hat'; T.tophat(); }
+      }
+      rebuild();
+    }
+    renderCfg();
+  }
+  document.querySelectorAll('#mode button').forEach(b => b.onclick = () => { if (b.dataset.mode !== mode) { keepDraftNow(); setMode(b.dataset.mode, true); history.replaceState(null, '', location.pathname + (b.dataset.mode === 'wings' ? '?mode=wings' : '')); } });
 
   // ---------- export ----------
-  function slug(s) { return (s || 'my_hat').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'my_hat'; }
+  function slug(s) { const d = mode === 'wings' ? 'my_wings' : 'my_hat'; return (s || d).toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || d; }
   function renderCfg() {
-    const id = slug($('hid').value), name = ($('hname').value || 'My Hat').replace(/'/g, "''");
-    $('cfg').textContent = `  ${id}: {name: '${name}', category: hat, model: 'hats/${id}.bbmodel', price: 2000, description: 'Made with the Hat Maker'}`;
+    const w = mode === 'wings';
+    const id = slug($('hid').value), name = ($('hname').value || (w ? 'My Wings' : 'My Hat')).replace(/'/g, "''");
+    $('cfg').textContent = w
+      ? `  ${id}: {name: '${name}', category: wings, model: 'wings/${id}.bbmodel', price: 8000, description: 'Made with the Cosmetic Maker'}`
+      : `  ${id}: {name: '${name}', category: hat, model: 'hats/${id}.bbmodel', price: 2000, description: 'Made with the Cosmetic Maker'}`;
   }
   $('hid').addEventListener('input', () => { renderCfg(); keepDraft(); }); $('hname').addEventListener('input', () => { renderCfg(); keepDraft(); });
 
   /** Merges runs of same-colored blocks along x, then y, into boxes (fewer faces). */
   function boxes() {
-    const left = new Map(vox), out = [];
+    // wings: only the right wing goes in the file (the client mirrors it)
+    const left = new Map(mode === 'wings' ? [...vox].filter(([k]) => Number(k.split(',')[0]) >= 0) : vox), out = [];
     const sorted = [...left.keys()].map(k => k.split(',').map(Number)).sort((a,b) => a[1]-b[1] || a[2]-b[2] || a[0]-b[0]);
     for (const [x,y,z] of sorted) {
       const c = left.get(key(x,y,z)); if (!c) continue;
@@ -284,7 +408,7 @@
     if (!vox.size) { status('Place some blocks first.', true); return; }
     const m = bbmodel();
     const faces = m.elements.length * 6;
-    if (faces > 3000) { status('That has ' + faces + ' faces. A hat can have at most 3000, so remove some blocks.', true); return; }
+    if (faces > 3000) { status('That has ' + faces + ' faces. A model can have at most 3000, so remove some blocks.', true); return; }
     if (await download(slug($('hid').value) + '.bbmodel', JSON.stringify(m))) {
       status('Saved ' + slug($('hid').value) + '.bbmodel (' + m.elements.length + ' cubes).');
     }
@@ -293,14 +417,15 @@
     try { await navigator.clipboard.writeText($('cfg').textContent); status('Config line copied.'); }
     catch (e) { status('Copy failed. Select the line below and copy it.', true); }
   };
-  $('save').onclick = () => download(slug($('hid').value) + '.hat.json', JSON.stringify({ v: 1, id: $('hid').value, name: $('hname').value, vox: [...vox] }));
+  $('save').onclick = () => download(slug($('hid').value) + '.' + mode + '.json', JSON.stringify({ v: 1, kind: mode, id: $('hid').value, name: $('hname').value, vox: [...vox] }));
   $('load').onclick = () => {
     const i = document.createElement('input'); i.type = 'file'; i.accept = '.json,application/json';
     i.onchange = async () => {
       try {
         const d = JSON.parse(await i.files[0].text());
+        if (d && (d.kind === 'wings' || d.kind === 'hat') && d.kind !== mode) setMode(d.kind, false);
         snapshot(); loadProject(d); status('Opened ' + i.files[0].name + '.');
-      } catch (e) { status('That isn’t a Hat Maker project.', true); }
+      } catch (e) { status('That isn’t a Cosmetic Maker project.', true); }
     };
     i.click();
   };
@@ -348,13 +473,15 @@
     if (!vox.size) { status('Place some blocks first.', true); return; }
     snapshotPng(1200, 900).toBlob(b => { if (b) download(slug($('hid').value) + '.png', b); }, 'image/png');
   };
-  const DRAFT = 'plebmc.hatmaker.draft';
+  const draftKey = () => (mode === 'wings' ? 'plebmc.wingmaker.draft' : 'plebmc.hatmaker.draft');
   let draftTimer = 0;
+  function keepDraftNow() {
+    clearTimeout(draftTimer);
+    try { localStorage.setItem(draftKey(), JSON.stringify({ v: 1, kind: mode, id: $('hid').value, name: $('hname').value, vox: [...vox] })); } catch (e) { /* private window */ }
+  }
   function keepDraft() {
     clearTimeout(draftTimer);
-    draftTimer = setTimeout(() => {
-      try { localStorage.setItem(DRAFT, JSON.stringify({ v: 1, id: $('hid').value, name: $('hname').value, vox: [...vox] })); } catch (e) { /* private window */ }
-    }, 400);
+    draftTimer = setTimeout(keepDraftNow, 400);
   }
   function loadProject(d) {
     if (!d || !Array.isArray(d.vox)) throw new Error('not a project');
@@ -366,30 +493,34 @@
     rebuild();
   }
   window.PlebTool.mount($('account'), {
-    kind: 'hat',
+    kind: () => mode,
+    accepts: (k) => k === 'hat' || k === 'wings',
     status,
     get() {
       if (!vox.size) throw new Error('Place some blocks first.');
       const thumb = snapshotPng(160, 120).toDataURL('image/png');
-      return { name: $('hname').value || 'My Hat', itemId: slug($('hid').value),
-        data: JSON.stringify({ v: 1, id: $('hid').value, name: $('hname').value, vox: [...vox] }), extra: {}, thumb };
+      return { name: $('hname').value || (mode === 'wings' ? 'My Wings' : 'My Hat'), itemId: slug($('hid').value),
+        data: JSON.stringify({ v: 1, kind: mode, id: $('hid').value, name: $('hname').value, vox: [...vox] }), extra: {}, thumb };
     },
-    set(d) { loadProject(JSON.parse(d.data)); if (!d.mine) $('hname').value = d.name + ' (remix)'; renderCfg(); },
+    set(d) {
+      if (d.kind !== mode) setMode(d.kind, false);
+      loadProject(JSON.parse(d.data));
+      if (!d.mine) $('hname').value = d.name + ' (copy)';
+      renderCfg();
+    },
     publishFile() {
       if (!vox.size) throw new Error('Place some blocks first.');
       const m = bbmodel();
-      if (m.elements.length * 6 > 3000) throw new Error('That has too many faces for a hat (3000 at most). Try Hollow out.');
+      if (!m.elements.length) throw new Error('Build the right wing too (x 0 and up): that is the one the game uses.');
+      if (m.elements.length * 6 > 3000) throw new Error('That has too many faces (3000 at most). Try Hollow out.');
       return { file: JSON.stringify(m) };
     },
   });
 
   // ---------- go ----------
   drawPalette();
-  let restored = false;
-  if (!new URLSearchParams(location.search).get('design')) {
-    try { const d = JSON.parse(localStorage.getItem(DRAFT) || 'null'); if (d && d.vox && d.vox.length) { loadProject(d); restored = true; } } catch (e) { /* no draft */ }
-  }
-  if (!restored) T.tophat();
+  if (want.get('design')) setMode(mode, false); // the saved design sets the mode when it loads
+  else setMode(mode, true);
   rebuild();
   resize();
   (function loop() {

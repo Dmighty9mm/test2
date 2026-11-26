@@ -62,7 +62,7 @@ CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 MAX_FAILS = 5
 FAIL_WINDOW = 10 * 60
 COMMAND_ACTIONS = ("coins", "give", "remove", "equip", "kick", "signout")
-CATEGORIES = ("hat", "trail", "cloak")
+CATEGORIES = ("hat", "trail", "cloak", "wings")
 ITEM_ID_RE = re.compile(r"^[a-z0-9_]{2,32}$")
 VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+){0,3}$")
 PAGE = 50
@@ -70,7 +70,7 @@ MAX_DESIGNS = 30
 # a design's data: hat projects are small JSON; cloaks are a PNG (base64) up to 8 MB
 MAX_DESIGN_BYTES = 12 * 1024 * 1024
 MAX_THUMB_BYTES = 200 * 1024
-DESIGN_KINDS = ("hat", "cloak")
+DESIGN_KINDS = ("hat", "cloak", "wings")
 
 
 def version_key(v):
@@ -672,6 +672,16 @@ class Panel:
     def admin_command(self, actor, body):
         target = str(body.get("name") or "")
         action = str(body.get("action") or "")
+        if action == "coinsall":
+            try:
+                amount = int(body.get("amount"))
+            except (TypeError, ValueError):
+                amount = -1
+            if amount <= 0 or amount > 10 ** 9:
+                raise ApiError(400, "Give a whole number above 0.")
+            cid = self.queue(actor["name"], "*", "coinsall", [amount])
+            self.audit(actor["name"], "queue-coinsall", "%d to everyone online" % amount)
+            return {"ok": True, "id": cid}
         if name_problem(target):
             raise ApiError(400, "Pick a player.")
         if action == "coins":
@@ -830,18 +840,31 @@ class Panel:
                 "clients": self.client_versions(), "server": self.server_status(),
                 "designs": self.db.one("SELECT COUNT(*) n FROM designs")["n"]}
 
-    def leaderboard(self, offset=0, limit=25):
+    def leaderboard(self, offset=0, limit=10, q=""):
+        """The richest players (at most the top 100), or with q the players whose name has q, with their rank."""
         try:
-            offset = max(0, int(offset))
+            offset = max(0, min(100, int(offset)))
         except (TypeError, ValueError):
             offset = 0
-        limit = max(1, min(100, int(limit)))
-        total = self.db.one("SELECT COUNT(DISTINCT name_key) n FROM players")["n"]
-        rows = self.db.all("SELECT name, MAX(coins) coins, MAX(streak) streak, MAX(owned) owned FROM players "
-                           "GROUP BY name_key ORDER BY coins DESC, name_key LIMIT ? OFFSET ?", limit, offset)
-        return {"rows": [{"rank": offset + i + 1, "name": r["name"], "coins": r["coins"], "streak": r["streak"],
-                          "items": len(json.loads(r["owned"]))} for i, r in enumerate(rows)],
-                "total": total, "offset": offset, "more": offset + len(rows) < total}
+        try:
+            limit = max(1, min(25, int(limit)))
+        except (TypeError, ValueError):
+            limit = 10
+        ranked = ("SELECT name, name_key, coins, streak, owned, ROW_NUMBER() OVER (ORDER BY coins DESC, name_key) rank FROM "
+                  "(SELECT MAX(name) name, name_key, MAX(coins) coins, MAX(streak) streak, MAX(owned) owned FROM players "
+                  "GROUP BY name_key)")
+        q = str(q or "").strip().lower()[:16]
+        if q:
+            like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            rows = self.db.all("SELECT * FROM (" + ranked + ") WHERE name_key LIKE ? ESCAPE '\\' "
+                               "ORDER BY (name_key = ?) DESC, rank LIMIT ?", like, q, limit)
+            total = len(rows)
+        else:
+            total = self.db.one("SELECT COUNT(DISTINCT name_key) n FROM players")["n"]
+            rows = self.db.all(ranked + " ORDER BY rank LIMIT ? OFFSET ?", limit, offset)
+        return {"rows": [{"rank": r["rank"], "name": r["name"], "coins": r["coins"], "streak": r["streak"],
+                          "items": len(json.loads(r["owned"] or "[]"))} for r in rows],
+                "total": total, "offset": offset, "more": False}
 
     def public_info(self):
         st = self.server_status()
@@ -960,20 +983,6 @@ class Panel:
                            "WHERE d.account_id=? ORDER BY d.updated_at DESC", acc["id"])
         return [self.design_out(d, viewer=acc) for d in rows]
 
-    def public_designs(self, kind=None, sort="new", offset=0, viewer=None):
-        try:
-            offset = max(0, int(offset))
-        except (TypeError, ValueError):
-            offset = 0
-        where = "d.public=1" + (" AND d.kind=?" if kind in DESIGN_KINDS else "")
-        args = [kind] if kind in DESIGN_KINDS else []
-        order = "d.likes DESC, d.updated_at DESC" if sort == "top" else "d.updated_at DESC"
-        total = self.db.one("SELECT COUNT(*) n FROM designs d WHERE " + where, *args)["n"]
-        rows = self.db.all("SELECT d.*, a.name author FROM designs d JOIN accounts a ON a.id=d.account_id WHERE " +
-                           where + " ORDER BY " + order + " LIMIT ? OFFSET ?", *(args + [24, offset]))
-        return {"designs": [self.design_out(d, viewer=viewer) for d in rows], "total": total,
-                "more": offset + len(rows) < total}
-
     def get_design(self, did, viewer):
         d = self.db.one("SELECT d.*, a.name author FROM designs d JOIN accounts a ON a.id=d.account_id WHERE d.id=?", did)
         if not d or not (d["public"] or (viewer and (d["account_id"] == viewer["id"] or viewer["role"] != "player"))):
@@ -993,18 +1002,18 @@ class Panel:
             raise ApiError(413, "That design is too big to save.")
         if kind == "cloak" and not data.startswith("data:image/png;base64,"):
             raise ApiError(400, "Cloaks are saved as a PNG.")
-        if kind == "hat":
+        if kind in ("hat", "wings"):
             try:
                 v = json.loads(data)
                 assert isinstance(v.get("vox"), list)
             except Exception:
-                raise ApiError(400, "That isn't a Hat Maker project.")
+                raise ApiError(400, "That isn't a Cosmetic Maker project.")
         thumb = str(body.get("thumb") or "")
         if thumb and (not thumb.startswith("data:image/png;base64,") or len(thumb) > MAX_THUMB_BYTES):
             thumb = ""
         extra = body.get("extra") if isinstance(body.get("extra"), dict) else {}
         extra = {k: extra[k] for k in ("frametime", "description", "price", "frames", "resolution") if k in extra}
-        public = 1 if body.get("public") else 0
+        public = 0  # no gallery any more
         now = self.now()
         did = body.get("id")
         if did:
@@ -1032,25 +1041,13 @@ class Panel:
             self.audit(acc["name"], "delete-design", "%s (#%d)" % (d["name"], did))
         return {"ok": True}
 
-    def like_design(self, acc, did):
-        d = self.db.one("SELECT * FROM designs WHERE id=? AND public=1", did)
-        if not d:
-            raise ApiError(404, "That design isn't shared.")
-        with self.db.tx() as c:
-            if c.execute("SELECT 1 FROM design_likes WHERE design_id=? AND account_id=?", (did, acc["id"])).fetchone():
-                c.execute("DELETE FROM design_likes WHERE design_id=? AND account_id=?", (did, acc["id"]))
-            else:
-                c.execute("INSERT INTO design_likes(design_id,account_id) VALUES(?,?)", (did, acc["id"]))
-            c.execute("UPDATE designs SET likes=(SELECT COUNT(*) FROM design_likes WHERE design_id=?) WHERE id=?", (did, did))
-        return {"ok": True}
-
     def publish(self, actor, body):
         """Adds a hat or cloak to the server's shop: PlebioAPI saves the file, adds the item and reloads."""
         kind = str(body.get("kind") or "")
         item_id = str(body.get("itemId") or "")
         name = str(body.get("name") or "").strip()[:40]
         if kind not in DESIGN_KINDS:
-            raise ApiError(400, "Pick hat or cloak.")
+            raise ApiError(400, "Pick hat, wings or cloak.")
         if not ITEM_ID_RE.match(item_id):
             raise ApiError(400, "Item ids are 2-32 lowercase letters, digits or _.")
         if any(i["id"] == item_id for i in self.catalog()):
@@ -1073,7 +1070,7 @@ class Panel:
             try:
                 json.loads(data)
             except ValueError:
-                raise ApiError(400, "Hats are a .bbmodel (JSON).")
+                raise ApiError(400, "Hats and wings are a .bbmodel (JSON).")
             raw = base64.b64encode(data.encode("utf-8")).decode("ascii")
         if len(raw) > MAX_DESIGN_BYTES:
             raise ApiError(413, "That file is too big for the shop (8 MB at most).")
@@ -1304,31 +1301,26 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET" and route == "info":
             return self.send_json(200, {"ok": True, **p.public_info()})
         if method == "GET" and route == "leaderboard":
-            return self.send_json(200, {"ok": True, **p.leaderboard(one("offset", "0"), one("limit", "25"))})
+            return self.send_json(200, {"ok": True, **p.leaderboard(one("offset", "0"), one("limit", "10"), one("q"))})
         if method == "GET" and route == "shop":
             return self.send_json(200, {"ok": True, "catalog": p.catalog(), "currency": p.server_status()["currency"]})
         # ---------- designs (hat and cloak makers) ----------
-        if method == "GET" and route == "designs/public":
-            viewer = self.web_user(required=False)
-            return self.send_json(200, {"ok": True, **p.public_designs(one("kind"), one("sort", "new"), one("offset", "0"), viewer)})
+        # the makers are for admins (they make what goes in the shop)
         if method == "GET" and route == "designs/get":
-            viewer = self.web_user(required=False)
+            viewer = self.web_user(role="admin")
             try:
                 did = int(one("id", "0"))
             except ValueError:
                 did = 0
             return self.send_json(200, {"ok": True, "design": p.get_design(did, viewer)})
         if method == "GET" and route == "designs/mine":
-            return self.send_json(200, {"ok": True, "designs": p.my_designs(self.web_user())})
+            return self.send_json(200, {"ok": True, "designs": p.my_designs(self.web_user(role="admin"))})
         if method == "POST" and route == "designs/save":
-            acc = self.web_user()
+            acc = self.web_user(role="admin")
             return self.send_json(200, p.save_design(acc, self.body(limit=MAX_DESIGN_BYTES + 400 * 1024)))
         if method == "POST" and route == "designs/delete":
-            acc = self.web_user()
+            acc = self.web_user(role="admin")
             return self.send_json(200, p.delete_design(acc, int(self.body().get("id") or 0)))
-        if method == "POST" and route == "designs/like":
-            acc = self.web_user()
-            return self.send_json(200, p.like_design(acc, int(self.body().get("id") or 0)))
         if method == "POST" and route == "register":
             b = self.body()
             acc = p.web_register(str(b.get("name") or ""), b.get("code"), b.get("password"), self.address())

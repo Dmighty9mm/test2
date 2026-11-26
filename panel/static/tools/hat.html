@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hat Maker · PlebMc</title>
+<title>Cosmetic Maker · PlebMc</title>
 <link rel="icon" type="image/png" href="/static/favicon.png">
 <link rel="stylesheet" href="/static/style.css">
 <link rel="stylesheet" href="/static/tools/tools.css">
@@ -15,14 +15,19 @@
 <div class="toolbar">
   <a class="brand" href="/#home"><img src="/static/logo.png" alt=""><span>PlebMc</span></a>
   <span class="spacer"></span>
-  <a class="btn small" href="/#gallery">Gallery</a>
+  <a class="btn small" href="/#makers">My designs</a>
   <a class="btn small" href="/static/tools/cloak.html">Cloak Maker</a>
-  <a class="btn small" href="/#me">My account</a>
+  <a class="btn small" href="/#admin">Dashboard</a>
 </div>
 <div class="maker">
   <header>
-    <h1>PlebMc <span>Hat Maker</span></h1>
-    <p class="sub">Build a hat out of blocks on your head. Save it to your account, share it in the gallery, or download a Blockbench model PlebioAPI can sell. One block here is one pixel of a Minecraft head.</p>
+    <h1>PlebMc <span>Cosmetic Maker</span></h1>
+    <p class="sub">Build hats and wings out of blocks. Save them to your account, publish them to the shop, or download a Blockbench model PlebioAPI can sell. One block is one pixel of a Minecraft skin.</p>
+    <div class="row" id="mode" style="margin-top:12px">
+      <button data-mode="hat" aria-pressed="true">Hat</button>
+      <button data-mode="wings" aria-pressed="false">Wings</button>
+    </div>
+    <p class="hint" id="modehint"></p>
   </header>
 
   <div class="bench">
@@ -54,16 +59,6 @@
       <section class="step">
         <h2><b>3</b>Start from</h2>
         <div class="row" id="templates">
-          <button data-t="tophat">Top hat</button>
-          <button data-t="crown">Crown</button>
-          <button data-t="cap">Cap</button>
-          <button data-t="beanie">Beanie</button>
-          <button data-t="horns">Horns</button>
-          <button data-t="halo">Halo</button>
-          <button data-t="witch">Witch hat</button>
-          <button data-t="straw">Straw hat</button>
-          <button data-t="headphones">Headphones</button>
-          <button data-t="viking">Viking helmet</button>
         </div>
       </section>
 
@@ -78,14 +73,14 @@
           <button data-m="0,0,1">Back</button>
         </div>
         <div class="row">
-          <button id="flip" title="Turn the whole hat around">Turn around</button>
+          <button id="flip" title="Turn it around">Turn around</button>
           <button id="hollow" title="Remove blocks you can't see from outside">Hollow out</button>
         </div>
       </section>
 
       <section class="step">
         <h2><b>5</b>Name it</h2>
-        <label class="f">Hat id<input type="text" id="hid" value="my_hat" spellcheck="false" maxlength="32"></label>
+        <label class="f">Item id<input type="text" id="hid" value="my_hat" spellcheck="false" maxlength="32"></label>
         <label class="f">Name in the shop<input type="text" id="hname" value="My Hat" maxlength="40"></label>
       </section>
 
@@ -105,7 +100,7 @@
           <button id="load">Open project file</button>
         </div>
         <pre class="cfg" id="cfg"></pre>
-        <p class="hint">By hand: put the .bbmodel in <code>plugins/PlebioAPI/hats/</code>, add the line to <code>items:</code> in config.yml and run <code>/pleb reload</code>. Admins can use Publish to shop above instead.</p>
+        <p class="hint">By hand: put the .bbmodel in <code>plugins/PlebioAPI/hats/</code> (wings: <code>wings/</code>), add the line to <code>items:</code> in config.yml and run <code>/pleb reload</code>. Admins can use Publish to shop above instead.</p>
       </section>
     </div>
 

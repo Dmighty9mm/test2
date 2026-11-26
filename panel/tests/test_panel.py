@@ -195,6 +195,11 @@ class PanelLogic(unittest.TestCase):
         self.assertEqual(cmds[0]["args"], ["give", 50])
         # each command is handed out once
         self.assertEqual(self.p.pending(), [])
+        self.p.admin_command(owner, {"action": "coinsall", "amount": 250})
+        with self.assertRaises(app.ApiError):
+            self.p.admin_command(owner, {"action": "coinsall", "amount": 0})
+        everyone = self.p.pending()
+        self.assertEqual([(c["target"], c["action"], c["args"]) for c in everyone], [("*", "coinsall", [250])])
         self.p.ack(cmds[0]["id"], True, "Bob now has 550")
         detail = self.p.admin_player("Bob")
         self.assertEqual(detail["commands"][-1]["status"], "done")
@@ -226,8 +231,12 @@ class PanelLogic(unittest.TestCase):
         self.assertEqual(self.p.admin_players(sort="name")["players"][0]["name"], "P000")
         self.assertEqual(self.p.admin_players(sort="bogus")["players"][0]["name"], "P119")
         lb = self.p.leaderboard(0, 10)
-        self.assertEqual((lb["rows"][0]["name"], lb["rows"][0]["rank"], lb["total"], lb["more"]), ("P119", 1, 120, True))
-        self.assertEqual(self.p.leaderboard(115, 10)["rows"][-1]["rank"], 120)
+        self.assertEqual((lb["rows"][0]["name"], lb["rows"][0]["rank"], lb["total"], len(lb["rows"])), ("P119", 1, 120, 10))
+        self.assertEqual(self.p.leaderboard(0, 500)["rows"][-1]["rank"], 25)  # at most 25 at a time
+        found = self.p.leaderboard(q="p005")["rows"]
+        self.assertEqual((found[0]["name"], found[0]["rank"]), ("P005", 115))  # the exact name first, with its rank
+        self.assertEqual(len(self.p.leaderboard(q="P11")["rows"]), 10)
+        self.assertEqual(self.p.leaderboard(q="%")["rows"], [])  # LIKE wildcards are plain text
 
     def test_dashboard_notes_and_announcements(self):
         owner = self.p.create_account("Owner", "password1", "owner")
@@ -296,23 +305,16 @@ class PanelLogic(unittest.TestCase):
                 self.p.save_design(amy, bad)
         with self.assertRaises(app.ApiError):
             self.p.save_design(bob, {"id": did, "kind": "hat", "data": hat})  # not his
-        self.assertEqual([d["name"] for d in self.p.public_designs()["designs"]], ["Red Hat"])
-        self.assertEqual(self.p.public_designs(kind="cloak")["total"], 0)
         with self.assertRaises(app.ApiError):
             self.p.get_design(priv, bob)
         self.assertEqual(self.p.get_design(priv, amy)["data"], "data:image/png;base64,AAAA")
-        self.assertEqual(self.p.get_design(did, None)["author"], "Amy")
-        self.p.like_design(bob, did)
-        self.assertEqual(self.p.get_design(did, bob)["likes"], 1)
-        self.assertTrue(self.p.get_design(did, bob)["liked"])
-        self.p.like_design(bob, did)  # again = unlike
-        self.assertEqual(self.p.get_design(did, bob)["likes"], 0)
-        with self.assertRaises(app.ApiError):
-            self.p.like_design(bob, priv)
+        self.assertFalse(self.p.get_design(did, amy)["public"])  # no gallery: nothing is shared
+        wings = self.p.save_design(amy, {"kind": "wings", "name": "Bat", "data": hat})["id"]
+        self.assertEqual(self.p.get_design(wings, admin)["kind"], "wings")
         with self.assertRaises(app.ApiError):
             self.p.delete_design(bob, did)
-        self.p.delete_design(admin, did)  # admins can take down shared designs
-        self.assertEqual(self.p.public_designs()["total"], 0)
+        self.p.delete_design(admin, did)
+        self.p.delete_design(admin, wings)
         for i in range(app.MAX_DESIGNS - 1):
             self.p.save_design(amy, {"kind": "hat", "name": "H%d" % i, "data": hat})
         with self.assertRaises(app.ApiError):
@@ -475,7 +477,7 @@ class PanelHttp(unittest.TestCase):
         self.assertTrue(j["ok"])
         self.assertEqual(h["Access-Control-Allow-Origin"], "*")
         s, j, _ = self.call("/api/designs/public")
-        self.assertEqual((s, j["total"]), (200, 0))
+        self.assertEqual(s, 404)  # the gallery is gone
         s, _, _ = self.call("/api/designs/save", {"kind": "hat", "data": "{}"})
         self.assertEqual(s, 401)
         s, _, _ = self.call("/api/admin/dashboard")

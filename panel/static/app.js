@@ -50,6 +50,8 @@ const ICONS = {
   online: "M5 12.5a10 10 0 0114 0M8.5 16a5 5 0 017 0M12 19.5h.01M2 9a14 14 0 0120 0",
   shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z",
   hat: "M4 17h16M7 17V9a5 5 0 0110 0v8M9 6h6",
+  wings: "M12 8v10M12 9C9 5 4 4 2 5c1 4 3 8 10 9M12 9c3-4 8-5 10-4-1 4-3 8-10 9",
+  search: "M11 18a7 7 0 100-14 7 7 0 000 14zM21 21l-5-5",
   cloak: "M8 3h8l3 18H5L8 3zM10 3v4M14 3v4",
   download: "M12 4v12M7 11l5 5 5-5M4 20h16",
   note: "M5 4h14v16H5zM9 8h6M9 12h6M9 16h3",
@@ -202,9 +204,9 @@ function pager(container, load, render, opts = {}) {
 // ==================== shell ====================
 
 const NAV = [
-  ["General", [["home", "Home", "home"], ["leaderboard", "Leaderboard", "trophy"], ["shop", "Shop", "bag"], ["gallery", "Gallery", "image"], ["makers", "Makers", "hammer"]]],
+  ["General", [["home", "Home", "home"], ["leaderboard", "Leaderboard", "trophy"], ["shop", "Shop", "bag"]]],
   ["You", [["me", "My account", "user", true]]],
-  ["Admin", [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["announce", "Announcements", "megaphone"], ["publish", "Publish to shop", "upload"], ["client", "Client updates", "refresh"], ["audit", "Admin log", "list"]], "admin"],
+  ["Admin", [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["announce", "Announcements", "megaphone"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Client updates", "refresh"], ["audit", "Admin log", "list"]], "admin"],
 ];
 
 function setNav(view) {
@@ -216,7 +218,7 @@ function setNav(view) {
       if (signedIn && !me) continue;
       g.append(h("a", { href: "#" + id, class: view === id || (view === "player" && id === "players") ? "on" : null }, icon(ic), label));
     }
-    nav.append(g);
+    if (g.children.length > 1) nav.append(g); // no empty group (like "You" when signed out)
   }
   if (!me) nav.append(h("div", { class: "navgroup" }, h("span", {}, "Account"), h("a", { href: "#login", class: view === "login" ? "on" : null }, icon("user"), "Sign in"),
     h("a", { href: "#register", class: view === "register" ? "on" : null }, icon("plus"), "Create account")));
@@ -257,18 +259,18 @@ async function homeView() {
   const wrap = h("div");
   wrap.append(announcementBanner() || "");
   wrap.append(h("div", { class: "card hero" }, h("img", { src: "/static/logo.png", alt: "" }),
-    h("div", {}, h("h1", {}, info.site), h("p", { class: "muted" }, me ? "Welcome back, " + me.name + "." : "Your account, your coins and cosmetics, the leaderboard, and makers for hats and cloaks."),
+    h("div", {}, h("h1", {}, info.site), h("p", { class: "muted" }, me ? "Welcome back, " + me.name + "." : "Your account, your coins and cosmetics, the shop and the leaderboard."),
       h("div", { class: "row" },
         me ? h("a", { class: "btn primary", href: "#me" }, icon("user"), "My account") : h("a", { class: "btn primary", href: "#register" }, icon("plus"), "Create account"),
         me ? null : h("a", { class: "btn", href: "#login" }, "Sign in"),
-        h("a", { class: "btn", href: "#makers" }, icon("hammer"), "Make a hat or cloak"),
+        isAdmin() ? h("a", { class: "btn", href: "#makers" }, icon("hammer"), "Cosmetic makers") : null,
         c.url ? h("a", { class: "btn", href: c.url, target: "_blank", rel: "noopener" }, icon("download"), "Get PlebClient" + (c.latest ? " " + c.latest : "")) : null))));
   wrap.append(h("div", { class: "tiles" },
     tile("online", "Server", h("span", {}, h("span", { class: "dot" + (s.connected ? " on" : "") }), s.connected ? "Online" : "Offline"), s.connected ? fmt(s.online) + " playing now" : "The panel can't see the server right now"),
     tile("refresh", "Latest PlebClient", c.latest || "–", c.minimum ? "Oldest allowed: " + c.minimum : "Your client tells you when it's out of date"),
     tile("coin", "Currency", coinName(), "Earn it by playing, spend it in the shop")));
   const board = h("tbody");
-  wrap.append(card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "Richest players"), h("span", { class: "spacer" }), h("a", { href: "#leaderboard" }, "Full leaderboard")),
+  wrap.append(card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "Richest players"), h("span", { class: "spacer" }), h("a", { href: "#leaderboard" }, "Top 10 and search")),
     h("div", { class: "scroll" }, h("table", {}, h("tbody", {}, board)))));
   api("leaderboard?limit=5").then((r) => {
     if (!r.rows.length) board.append(h("tr", {}, h("td", { class: "muted" }, "Nobody yet.")));
@@ -284,13 +286,30 @@ function leaderRow(p) {
 }
 
 async function leaderboardView() {
-  const body = h("tbody");
-  const p = pager(body, async (offset) => {
-    const r = await api("leaderboard?offset=" + offset + "&limit=50");
-    return { items: r.rows, total: r.total, more: r.more };
-  }, leaderRow, { empty: () => h("tr", {}, h("td", { class: "muted" }, "Nobody has coins yet.")) });
-  p.reset();
-  return card("Leaderboard", h("p", { class: "muted" }, "Everyone who joined, by " + coinName() + "."), h("div", { class: "scroll" }, h("table", {}, body)), p.more);
+  const top = h("tbody");
+  const found = h("tbody");
+  const q = h("input", { type: "search", placeholder: "Find a player", "aria-label": "Find a player", maxlength: 16, spellcheck: "false" });
+  const foundCard = card("Search", h("div", { class: "scroll" }, h("table", {}, found)));
+  foundCard.hidden = true;
+  const fill = (body, rows, none) => {
+    body.replaceChildren(...(rows.length ? rows.map(leaderRow) : [h("tr", {}, h("td", { class: "muted" }, none))]));
+  };
+  api("leaderboard?limit=10").then((r) => fill(top, r.rows, "Nobody has coins yet.")).catch((e) => fill(top, [], e.message));
+  let timer;
+  const search = () => {
+    const v = q.value.trim();
+    if (!v) { foundCard.hidden = true; return; }
+    api("leaderboard?q=" + encodeURIComponent(v) + "&limit=25").then((r) => {
+      if (q.value.trim() !== v) return;
+      foundCard.hidden = false;
+      fill(found, r.rows, "No player called " + v + ".");
+    }).catch((e) => { foundCard.hidden = false; fill(found, [], e.message); });
+  };
+  q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(search, 250); });
+  return h("div", {},
+    card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "Top 10"), h("span", { class: "spacer" }), h("label", { class: "searchbox" }, icon("search"), q)),
+      h("p", { class: "muted" }, "The richest players by " + coinName() + ". Search to see anyone's rank."), h("div", { class: "scroll" }, h("table", {}, top))),
+    h("div", { style: "height:18px" }), foundCard);
 }
 
 async function shopView() {
@@ -316,25 +335,15 @@ async function shopView() {
 // ==================== designs ====================
 
 function toolUrl(kind, id) {
+  // hats and wings are both made in the Cosmetic Maker (hat.html)
+  if (kind === "wings") return "/static/tools/hat.html?" + (id ? "design=" + id : "mode=wings");
   return "/static/tools/" + kind + ".html" + (id ? "?design=" + id : "");
 }
 
 function designCard(d, opts = {}) {
-  const pic = h("div", { class: "pic" }, d.thumb ? h("img", { src: d.thumb, alt: "" }) : icon(d.kind === "hat" ? "hat" : "cloak"));
-  const like = h("button", { class: "small like", "aria-pressed": String(!!d.liked), title: me ? "Like" : "Sign in to like",
-    onclick: async () => {
-      if (!me) { location.hash = "#login"; return; }
-      try {
-        await api("designs/like", { id: d.id });
-        d.liked = !d.liked;
-        d.likes += d.liked ? 1 : -1;
-        like.setAttribute("aria-pressed", String(d.liked));
-        like.lastChild.textContent = " " + d.likes;
-      } catch (e) { toast(e.message, false); }
-    } }, icon("heart"), " " + d.likes);
+  const pic = h("div", { class: "pic" }, d.thumb ? h("img", { src: d.thumb, alt: "" }) : icon(d.kind));
   const actions = h("div", { class: "row" });
-  if (d.public) actions.append(like);
-  actions.append(h("a", { class: "btn small", href: toolUrl(d.kind, d.id) }, d.mine ? "Open" : "Remix"));
+  actions.append(h("a", { class: "btn small", href: toolUrl(d.kind, d.id) }, "Open"));
   if (d.mine || (opts.admin && isAdmin())) {
     actions.append(h("button", { class: "small danger", title: "Delete", onclick: async () => {
       if (!confirm("Delete " + d.name + "?")) return;
@@ -343,48 +352,27 @@ function designCard(d, opts = {}) {
   }
   const el = h("div", { class: "design" }, pic, h("div", { class: "body" }, h("b", {}, d.name),
     h("small", { class: "muted" }, d.kind + (d.author ? " by " + d.author : "") + " · " + ago(d.updated)),
-    h("div", { class: "row", style: "gap:6px" }, d.public ? h("span", { class: "pill good" }, "shared") : opts.mine ? h("span", { class: "pill" }, "private") : null,
-      d.published ? h("span", { class: "pill admin" }, "in shop") : null),
+    h("div", { class: "row", style: "gap:6px" }, d.published ? h("span", { class: "pill admin" }, "in shop") : null),
     actions));
   return el;
 }
 
-async function galleryView() {
-  const p0 = params();
-  let kind = p0.kind || "";
-  let sort = p0.sort || "top";
-  const grid = h("div", { class: "designs" });
-  const pg = pager(grid, async (offset) => {
-    const r = await api("designs/public?kind=" + kind + "&sort=" + sort + "&offset=" + offset);
-    return { items: r.designs, total: r.total, more: r.more };
-  }, (d) => designCard(d, { admin: true }), { empty: () => empty("image", "No shared designs yet. Make one and tick Share.") });
-  const chips = h("div", { class: "chips" });
-  const draw = () => {
-    chips.replaceChildren(
-      ...[["", "All"], ["hat", "Hats"], ["cloak", "Cloaks"]].map(([k, t]) => h("button", { class: "chip", "aria-pressed": String(k === kind), onclick: () => { kind = k; draw(); pg.reset(); } }, t)),
-      h("span", { style: "width:12px" }),
-      ...[["top", "Most liked"], ["new", "Newest"]].map(([k, t]) => h("button", { class: "chip", "aria-pressed": String(k === sort), onclick: () => { sort = k; draw(); pg.reset(); } }, t)));
-  };
-  draw();
-  pg.reset();
-  return h("div", {}, card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "Gallery"), h("span", { class: "spacer" }), h("a", { class: "btn primary small", href: "#makers" }, icon("hammer"), "Make your own")),
-    h("p", { class: "muted" }, "Hats and cloaks players made and shared. Like the ones you want in the shop, or open one to remix it."), chips, h("div", { style: "height:14px" }), grid, pg.more));
-}
-
-function makersView() {
+async function makersView() {
+  const designs = h("div", { class: "designs" });
+  api("designs/mine").then((d) => {
+    if (!d.designs.length) designs.replaceWith(empty("image", "Nothing saved yet. Make something and press Save to my account."));
+    for (const x of d.designs) designs.append(designCard(x, { mine: true }));
+  }).catch((e) => message(designs, e.message));
   return h("div", {},
     h("div", { class: "tools" },
-      h("a", { class: "tool-card", href: toolUrl("hat") }, icon("hat"), h("h2", {}, "Hat Maker"),
+      h("a", { class: "tool-card", href: toolUrl("hat") }, icon("hat"), h("h2", {}, "Cosmetic Maker: hats"),
         h("span", { class: "muted" }, "Build a hat out of blocks right on a Minecraft head. Templates, mirror, recolor, undo, and a Blockbench export.")),
+      h("a", { class: "tool-card", href: toolUrl("wings") }, icon("wings"), h("h2", {}, "Cosmetic Maker: wings"),
+        h("span", { class: "muted" }, "Build wings on a player's back. You build one side, the other is mirrored, and they flap in game.")),
       h("a", { class: "tool-card", href: toolUrl("cloak") }, icon("cloak"), h("h2", {}, "Cloak Maker"),
         h("span", { class: "muted" }, "Turn a GIF, frames or a picture into an animated cloak, or use a generated effect. Live 3D preview."))),
     h("div", { style: "height:18px" }),
-    card("What you can do with them",
-      h("ul", { class: "muted" },
-        h("li", {}, "Save designs to your account (up to 30) and keep editing later."),
-        h("li", {}, "Share them in the ", h("a", { href: "#gallery" }, "Gallery"), " where others can like and remix them."),
-        h("li", {}, "Admins can publish a design straight into the server's shop with a price."),
-        h("li", {}, "Download the files (.bbmodel or .png) to use anywhere."))));
+    card("Your designs", h("p", { class: "muted" }, "Only admins can use the makers. Save up to 30 designs, then publish them to the shop with a price."), designs));
 }
 
 // ==================== sign in / register ====================
@@ -476,13 +464,6 @@ async function meView() {
     tile("trophy", "Login streak", fmt(p ? p.streak : 0) + " days"),
     tile("shield", "Remembered clients", fmt(r.devices))));
   wrap.append(card("Your cosmetics", itemList(p && p.owned, p && p.equipped, r.catalog)));
-  const designs = h("div", { class: "designs" });
-  wrap.append(card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "My designs"), h("span", { class: "spacer" }),
-    h("a", { class: "btn small", href: toolUrl("hat") }, icon("hat"), "New hat"), h("a", { class: "btn small", href: toolUrl("cloak") }, icon("cloak"), "New cloak")), designs));
-  api("designs/mine").then((d) => {
-    if (!d.designs.length) designs.replaceWith(empty("image", "Nothing saved yet. Make a hat or cloak and press Save to my account."));
-    for (const x of d.designs) designs.append(designCard(x, { mine: true }));
-  }).catch((e) => message(designs, e.message));
   wrap.append(h("div", { class: "grid g2" }, passwordCard(), signoutCard()));
   return wrap;
 }
@@ -568,9 +549,29 @@ async function dashboardView() {
       h("a", { class: "btn", href: "#players" }, icon("users"), "Players"),
       h("a", { class: "btn", href: "#announce" }, icon("megaphone"), "Announce"),
       h("a", { class: "btn", href: "#publish" }, icon("upload"), "Publish to shop"),
-      h("a", { class: "btn", href: "#gallery" }, icon("image"), "Gallery"),
+      h("a", { class: "btn", href: "#makers" }, icon("hammer"), "Cosmetic makers"),
       h("a", { class: "btn", href: "#audit" }, icon("list"), "Admin log")))));
+  wrap.append(h("div", { style: "height:18px" }));
+  wrap.append(giveAllCard());
   return wrap;
+}
+
+function giveAllCard() {
+  const out = h("div");
+  const amount = h("input", { type: "number", min: 1, step: 50, value: 100, "aria-label": "Amount", style: "max-width:140px" });
+  const btn = h("button", { class: "primary", onclick: async () => {
+    const n = Math.floor(Number(amount.value));
+    if (!(n > 0)) return message(out, "Give a whole number above 0.");
+    if (!confirm("Give " + fmt(n) + " " + coinName() + " to everyone online right now?")) return;
+    btn.disabled = true;
+    try {
+      await api("admin/command", { action: "coinsall", amount: n });
+      message(out, "Sent. Everyone online gets " + fmt(n) + " " + coinName() + " within a few seconds.", true);
+    } catch (e) { message(out, e.message); }
+    btn.disabled = false;
+  } }, icon("coin"), "Give to everyone online");
+  return card("Give coins to everyone online", h("p", { class: "muted" }, "A gift for everyone playing right now (players on PlebClient when plebclient-only is on)."),
+    h("div", { class: "row" }, amount, btn), out);
 }
 
 // ==================== admin: players ====================
@@ -759,7 +760,7 @@ async function announceView() {
 async function publishView() {
   const out = h("div");
   const pre = params();
-  const kind = select("pkind", [["cloak", "Cloak (PNG)"], ["hat", "Hat (.bbmodel)"]], pre.kind || "cloak");
+  const kind = select("pkind", [["cloak", "Cloak (PNG)"], ["hat", "Hat (.bbmodel)"], ["wings", "Wings (.bbmodel, the right wing)"]], pre.kind || "cloak");
   const fileIn = h("input", { type: "file", id: "pfile", accept: ".png,.bbmodel,image/png,application/json" });
   const fileNote = h("small", { class: "muted" }, "Or pick one of your saved designs below.");
   let file = null;
@@ -808,8 +809,8 @@ async function publishView() {
       mine.append(h("div", { class: "design" }, h("div", { class: "pic" }, x.thumb ? h("img", { src: x.thumb, alt: "" }) : icon(x.kind)),
         h("div", { class: "body" }, h("b", {}, x.name), h("small", { class: "muted" }, x.kind), h("div", { class: "row" },
           h("button", { class: "small", onclick: async () => {
-            if (x.kind === "hat") {
-              location.href = toolUrl("hat", x.id);
+            if (x.kind === "hat" || x.kind === "wings") {
+              location.href = toolUrl(x.kind, x.id);
               return;
             }
             try {
@@ -826,7 +827,7 @@ async function publishView() {
               fileNote.textContent = "Using your design " + full.name;
               message(out, "");
             } catch (e) { message(out, e.message); }
-          } }, x.kind === "hat" ? "Publish from the Hat Maker" : "Use this")))));
+          } }, x.kind === "cloak" ? "Use this" : "Publish from the Cosmetic Maker")))));
     }
   }).catch(() => {});
   const cmds = h("tbody");
@@ -915,8 +916,7 @@ const VIEWS = {
   home: ["Home", homeView],
   leaderboard: ["Leaderboard", leaderboardView],
   shop: ["Shop", shopView],
-  gallery: ["Gallery", galleryView],
-  makers: ["Makers", makersView],
+  makers: ["Cosmetic makers", makersView, "admin"],
   login: ["Sign in", loginView],
   register: ["Create account", registerView],
   me: ["My account", meView],

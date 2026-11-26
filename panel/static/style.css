@@ -208,3 +208,6 @@ tr.click { cursor: pointer; }
 .acct .designs { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; max-height: 340px; overflow-y: auto; }
 .acct .design .pic { aspect-ratio: 1; }
 .acct .design .body { padding: 6px 8px; font-size: 12px; }
+.searchbox { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 240px; position: relative; }
+.searchbox svg { position: absolute; left: 10px; width: 16px; height: 16px; color: var(--muted); pointer-events: none; }
+.searchbox input { padding-left: 32px; width: 100%; }
