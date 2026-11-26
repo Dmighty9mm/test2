@@ -1,0 +1,30 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "net.plebmc.forge.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "MixinArmorStandRenderer",
+    "MixinBlockEntityRenderDispatcher",
+    "MixinCapeLayer",
+    "MixinEntity",
+    "MixinEntityRenderDispatcher",
+    "MixinEntityRenderer",
+    "MixinGameRenderer",
+    "MixinGui",
+    "MixinHumanoidArmorLayer",
+    "MixinLevelRenderer",
+    "MixinLightTexture",
+    "MixinLivingEntityRenderer",
+    "MixinLocalPlayer",
+    "MixinMinecraft",
+    "MixinPlayerRenderer",
+    "MixinPlayerTabOverlay",
+    "MixinSheepFurLayer",
+    "MixinTitleScreen",
+    "MixinTntRenderer"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
