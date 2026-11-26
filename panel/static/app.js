@@ -1057,6 +1057,14 @@ async function publishView() {
 
 // ==================== admin: client updates ====================
 
+/** True when version a is older than b ("2.0" vs "2.0.1"; "2.0" and "2.0.0" are the same). */
+function olderVersion(a, b) {
+  const k = (v) => { const p = String(v || "0").split(".").map((x) => parseInt(x, 10) || 0).slice(0, 4); while (p.length < 4) p.push(0); return p; };
+  const x = k(a), y = k(b);
+  for (let i = 0; i < 4; i++) if (x[i] !== y[i]) return x[i] < y[i];
+  return false;
+}
+
 async function clientView() {
   const r = await api("admin/client");
   const c = r.client;
@@ -1067,7 +1075,7 @@ async function clientView() {
   const url = h("input", { id: "curl", value: c.url, placeholder: "https://client.plebmc.top/download", disabled: ro });
   const msg = h("input", { id: "cmsg", value: c.message, maxlength: 200, placeholder: "New: faster loading and new cloaks", disabled: ro });
   const vbody = h("tbody", {}, r.versions.map((v) => h("tr", {}, h("td", {}, "PlebClient " + v.version), h("td", {}, v.platform), h("td", { class: "num" }, fmt(v.n)),
-    h("td", {}, c.latest && v.version !== c.latest ? h("span", { class: "pill warn" }, "outdated") : h("span", { class: "pill good" }, "latest")))));
+    h("td", {}, c.latest && olderVersion(v.version, c.latest) ? h("span", { class: "pill warn" }, "outdated") : h("span", { class: "pill good" }, "up to date")))));
   return h("div", { class: "grid g2" },
     card("Update checker",
       h("p", { class: "muted" }, "Every PlebClient asks the panel when it starts. Older than Latest: it shows an Update screen with a Later button. Older than Oldest allowed: it can't be played until updated."),
