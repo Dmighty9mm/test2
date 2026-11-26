@@ -716,7 +716,7 @@ final class ShopCore {
 			r.put("allowed", false);
 			r.put("ok", false);
 			r.put("message", adminGroup(p)
-					? "Your name has no staff password yet. Set one in the proxy console (plebshop staff set <name> <password>), then rejoin."
+					? "Type /adminlogin <admin password> in chat first (set in the proxy console: plebshop adminpass set <name> <password>)."
 					: "Only website Owners can use the admin menu.");
 			send(p, r);
 			return;

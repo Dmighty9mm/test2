@@ -48,6 +48,10 @@ public final class BungeeShop extends Plugin implements Listener {
 
 	private ShopCore core;
 	private StaffLock staffLock;
+	/** Admin passwords (plugins/PlebioAPI/admin-passwords.yml): a second password, only for the admin menu. */
+	private StaffLock adminPasswords;
+	/** Players who typed their admin password with /adminlogin this session. */
+	private final java.util.Set<UUID> adminUnlocked = ConcurrentHashMap.newKeySet();
 	private final BungeeNet bnet = new BungeeNet();
 	/** Players who gave their staff password at this login (the only ones who get admin powers). */
 	private final java.util.Set<UUID> staffVerified = ConcurrentHashMap.newKeySet();
@@ -102,6 +106,7 @@ public final class BungeeShop extends Plugin implements Listener {
 					Cfg.load(cfg), getLogger());
 			core.folder(getDataFolder());
 			staffLock = new StaffLock(new File(getDataFolder(), "staff-lock.yml"), getLogger());
+			adminPasswords = new StaffLock(new File(getDataFolder(), "admin-passwords.yml"), getLogger());
 			core.reloader = this::reload;
 		} catch (IOException e) {
 			getLogger().severe("Could not load config.yml: " + e);
@@ -110,6 +115,11 @@ public final class BungeeShop extends Plugin implements Listener {
 		getProxy().registerChannel(CHANNEL);
 		getProxy().getPluginManager().registerListener(this, this);
 		getProxy().getPluginManager().registerCommand(this, new AdminCommand());
+		getProxy().getPluginManager().registerCommand(this, new AdminLoginCommand());
+		if (adminPasswordRequired() && adminPasswords.all().isEmpty()) {
+			getLogger().warning("Admin menu is OFF for everyone until you set an admin password in this console:"
+					+ " plebshop adminpass set <name> <password>  (then in game: /login, then /adminlogin <password>)");
+		}
 		eaglerAuth = registerEaglerAuth();
 		if (usingNLogin()) {
 			getLogger().info(findNLogin() ? "nLogin found: shop, account and admin actions need /login first"
@@ -208,6 +218,63 @@ public final class BungeeShop extends Plugin implements Listener {
 
 	private boolean usingNLogin() {
 		return getProxy().getPluginManager().getPlugin("nLogin") != null;
+	}
+
+	private boolean adminPasswordRequired() {
+		return core != null && core.config.bool("admin-menu.require-password", true);
+	}
+
+	/** Logged in for this session: nLogin /login, or (without nLogin) the staff lock if the name is protected. */
+	private boolean loggedIn(ProxiedPlayer p) {
+		if (usingNLogin()) {
+			return authenticated(p.getUniqueId());
+		}
+		return !staffLockOn() || !staffLock.isProtected(p.getName()) || staffVerified.contains(p.getUniqueId());
+	}
+
+	/** /adminlogin <password>: unlocks the admin menu for this session. Handled on the proxy, never reaches a server. */
+	private final class AdminLoginCommand extends Command {
+		AdminLoginCommand() {
+			super("adminlogin", null, "alogin");
+		}
+
+		@Override
+		@SuppressWarnings("deprecation")
+		public void execute(CommandSender sender, String[] args) {
+			if (!(sender instanceof ProxiedPlayer)) {
+				sender.sendMessage(TextComponent.fromLegacyText("Players only. Set passwords with: plebshop adminpass set <name> <password>"));
+				return;
+			}
+			ProxiedPlayer p = (ProxiedPlayer) sender;
+			java.util.function.Consumer<String> reply = line -> p.sendMessage(TextComponent.fromLegacyText(line));
+			if (!loggedIn(p)) {
+				reply.accept("\u00a7cLog in first (/login <password>).");
+				return;
+			}
+			if (args.length != 1) {
+				reply.accept("\u00a7eUsage: /adminlogin <admin password>");
+				return;
+			}
+			String ip = p.getAddress() == null || p.getAddress().getAddress() == null ? null : p.getAddress().getAddress().getHostAddress();
+			if (adminPasswords.nameThrottled(p.getName())) {
+				p.disconnect(TextComponent.fromLegacyText("\u00a7cToo many wrong admin passwords. Try again in 10 minutes."));
+				return;
+			}
+			if (!adminPasswords.checkPlain(p.getName(), ip, args[0])) {
+				getLogger().warning("Wrong /adminlogin for " + p.getName() + " from " + ip);
+				reply.accept("\u00a7cWrong admin password.");
+				for (ProxiedPlayer o : getProxy().getPlayers()) {
+					if (adminUnlocked.contains(o.getUniqueId())) {
+						o.sendMessage(TextComponent.fromLegacyText("\u00a7c[Admin] Wrong admin password typed by " + p.getName() + "."));
+					}
+				}
+				return;
+			}
+			adminUnlocked.add(p.getUniqueId());
+			getLogger().info("Admin menu unlocked for " + p.getName() + " from " + ip);
+			reply.accept("\u00a7aAdmin menu unlocked for this session.");
+			core.authChanged(p.getUniqueId());
+		}
 	}
 
 	private boolean staffLockOn() {
@@ -330,6 +397,7 @@ public final class BungeeShop extends Plugin implements Listener {
 	public void onQuit(PlayerDisconnectEvent e) {
 		String server = lastServer.remove(e.getPlayer().getUniqueId());
 		staffVerified.remove(e.getPlayer().getUniqueId());
+		adminUnlocked.remove(e.getPlayer().getUniqueId());
 		lastAuth.remove(e.getPlayer().getUniqueId());
 		core.quit(e.getPlayer().getUniqueId(), server);
 	}
@@ -428,7 +496,10 @@ public final class BungeeShop extends Plugin implements Listener {
 				return true;
 			}
 			// with nLogin, its /login password is the proof; without it, the staff lock password
-			return usingNLogin() ? BungeeShop.this.authenticated(player) : staffVerified.contains(player);
+			boolean loggedIn = usingNLogin() ? BungeeShop.this.authenticated(player) : staffVerified.contains(player);
+			// and on top of that the separate admin password (/adminlogin), which doesn't depend on
+			// nLogin's sessions or on players' IPs (Eaglercraft players can all share one IP)
+			return loggedIn && (!adminPasswordRequired() || adminUnlocked.contains(player));
 		}
 
 		@Override
@@ -491,6 +562,10 @@ public final class BungeeShop extends Plugin implements Listener {
 		@Override
 		@SuppressWarnings("deprecation")
 		public void execute(CommandSender sender, String[] args) {
+			if (args.length > 0 && "adminpass".equalsIgnoreCase(args[0])) {
+				adminPassCommand(sender, args);
+				return;
+			}
 			if (args.length > 0 && "staff".equalsIgnoreCase(args[0])) {
 				staffCommand(sender, args);
 				return;
@@ -499,7 +574,7 @@ public final class BungeeShop extends Plugin implements Listener {
 					&& !bnet.staffVerified(((ProxiedPlayer) sender).getUniqueId())) {
 				// BungeeCord permissions go by name, which a cracked player can just type
 				bnet.protectStaff(((ProxiedPlayer) sender).getUniqueId());
-				sender.sendMessage(TextComponent.fromLegacyText(usingNLogin() ? "\u00a7cLog in first (/login <password>)."
+				sender.sendMessage(TextComponent.fromLegacyText(usingNLogin() ? "\u00a7cLog in first: /login <password>, then /adminlogin <admin password>."
 						: "\u00a7cYour name has no staff password yet, so /plebshop is off for it."
 								+ " Set one in the proxy console: plebshop staff set " + sender.getName() + " <password>, then rejoin."));
 				return;
@@ -515,6 +590,43 @@ public final class BungeeShop extends Plugin implements Listener {
 					return sender.hasPermission(perm);
 				}
 			}, "plebshop", args, BungeeShop.this::reload);
+		}
+
+		/** /plebshop adminpass ...: console only. The second password /adminlogin checks. */
+		@SuppressWarnings("deprecation")
+		private void adminPassCommand(CommandSender sender, String[] a) {
+			java.util.function.Consumer<String> reply = line -> sender.sendMessage(TextComponent.fromLegacyText(line));
+			if (sender instanceof ProxiedPlayer) {
+				reply.accept("\u00a7cAdmin passwords can only be set from the proxy console.");
+				return;
+			}
+			String sub = a.length < 2 ? "help" : a[1].toLowerCase(java.util.Locale.ROOT);
+			ProxiedPlayer on = a.length >= 3 ? getProxy().getPlayer(a[2]) : null;
+			if ("set".equals(sub) && a.length == 4) {
+				String err = adminPasswords.setPassword(a[2], a[3]);
+				reply.accept(err != null ? "\u00a7c" + err
+						: "\u00a7a" + a[2] + " can use the admin menu after /login and /adminlogin <password>."
+								+ " Use a different password from the /login one.");
+			} else if ("remove".equals(sub) && a.length == 3) {
+				reply.accept(adminPasswords.remove(a[2]) ? a[2] + " can no longer use the admin menu." : a[2] + " had no admin password.");
+			} else if ("list".equals(sub)) {
+				List<StaffLock.Entry> all = adminPasswords.all();
+				reply.accept("Names with an admin password (" + all.size() + "):");
+				for (StaffLock.Entry e : all) {
+					reply.accept(" - " + e.name);
+				}
+				return;
+			} else {
+				reply.accept("plebshop adminpass set <name> <password>  - allow a name to unlock the admin menu (/adminlogin)");
+				reply.accept("plebshop adminpass remove <name>");
+				reply.accept("plebshop adminpass list");
+				reply.accept("The name also needs a website group from admin-menu.groups and nLogin /login.");
+				return;
+			}
+			if (on != null) {
+				adminUnlocked.remove(on.getUniqueId());
+				core.authChanged(on.getUniqueId());
+			}
 		}
 
 		/** /plebshop staff ...: console only, since in-game the name proves nothing. */

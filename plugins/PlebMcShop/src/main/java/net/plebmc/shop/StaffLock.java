@@ -216,6 +216,33 @@ final class StaffLock {
 	}
 
 	/**
+	 * Checks a typed password (the in-game /adminlogin command). Wrong tries
+	 * count against the name AND the address, since on this network many
+	 * Eaglercraft players share one address.
+	 */
+	synchronized boolean checkPlain(String name, String address, String password) {
+		Entry e = entries.get(key(name));
+		String nameKey = "name:" + key(name);
+		if (e == null || !e.hasPassword() || password == null || throttled(nameKey) || address != null && throttled(address)) {
+			return false;
+		}
+		if (!MessageDigest.isEqual(storedHash(password, e.salt), e.hash)) {
+			fails.computeIfAbsent(nameKey, k -> new ArrayList<>()).add(clock.getAsLong());
+			if (address != null) {
+				fails.computeIfAbsent(address, k -> new ArrayList<>()).add(clock.getAsLong());
+			}
+			return false;
+		}
+		fails.remove(nameKey);
+		return true;
+	}
+
+	/** Too many wrong passwords for this name lately (it stays locked for a while). */
+	synchronized boolean nameThrottled(String name) {
+		return throttled("name:" + key(name));
+	}
+
+	/**
 	 * At the proxy's login: true (once) if this name just gave the right
 	 * password from this address.
 	 */

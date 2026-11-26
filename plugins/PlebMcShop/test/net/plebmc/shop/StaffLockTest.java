@@ -157,6 +157,20 @@ public class StaffLockTest {
 
         eaglerEvents(new File(dir, "staff-lock-2.yml"), log);
 
+        // admin password typed in chat (/adminlogin): wrong tries lock the NAME, since Eaglercraft players share one IP
+        StaffLock pins = new StaffLock(new File(dir, "admin-passwords.yml"), log);
+        long[] t = { 5_000_000 };
+        pins.clock = () -> t[0];
+        check(!pins.checkPlain("MightyMcYT", "192.168.0.189", "anything1"), "no admin password set: refused");
+        pins.setPassword("MightyMcYT", "adm1n-secret");
+        check(pins.checkPlain("mightymcyt", "192.168.0.189", "adm1n-secret"), "right admin password");
+        for (int i = 0; i < StaffLock.MAX_FAILS; i++) pins.checkPlain("MightyMcYT", "10.9.9." + i, "guess" + i);
+        check(pins.nameThrottled("MightyMcYT") && !pins.checkPlain("MightyMcYT", "1.1.1.1", "adm1n-secret"),
+                "5 wrong admin passwords from different IPs lock the name");
+        t[0] += StaffLock.FAIL_WINDOW_MS + 1;
+        check(pins.checkPlain("MightyMcYT", "1.1.1.1", "adm1n-secret"), "lock wears off");
+        check(!new String(Files.readAllBytes(new File(dir, "admin-passwords.yml").toPath()), StandardCharsets.UTF_8).contains("adm1n"), "admin password not stored in the file");
+
         System.out.println(checks - failed + "/" + checks + " staff lock checks passed");
         return failed;
     }

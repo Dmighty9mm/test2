@@ -125,6 +125,20 @@ Make sure staff names are registered in nLogin with strong passwords (an unregis
 can be registered by whoever joins with it first). The staff lock below is skipped when
 nLogin is installed.
 
+**Admin password (on by default):** the admin menu also needs a second password that only
+the proxy console can set, typed in chat each session after `/login`:
+
+```
+plebshop adminpass set <YourName> <a different password>     (proxy console)
+/adminlogin <that password>                                    (in game, after /login)
+```
+
+This doesn't depend on nLogin's auto-login sessions or on players' IPs (with
+`forward_ip: false` in EaglerXServer every Eaglercraft player shows up with the same IP, so
+IP-based sessions can't tell them apart). 5 wrong admin passwords lock that name out of
+`/adminlogin` for 10 minutes, and admins who are unlocked see a warning. Until a name has an
+admin password the admin menu is off for it. `admin-menu.require-password: false` turns this off.
+
 **Without nLogin:** use the staff lock.
 
 ### Staff lock (only without nLogin)

@@ -403,7 +403,7 @@ public class ShopTest {
         net.unverified.add(web.id);
         sleepCooldown();
         core.fromClient(web.id, "{\"type\":\"admin\",\"action\":\"coins\",\"op\":\"set\",\"amount\":999999,\"player\":\"" + web.id + "\"}");
-        check(Boolean.FALSE.equals(web.last("admin").get("allowed")) && String.valueOf(web.last("admin").get("message")).contains("staff password"),
+        check(Boolean.FALSE.equals(web.last("admin").get("allowed")) && String.valueOf(web.last("admin").get("message")).contains("/adminlogin"),
                 "unverified Owner name refused: " + web.last("admin"));
         check(!core.isAdmin(web.id) && net.protectedAsked.contains(web.id), "unverified Owner gets no admin flag and the name gets locked");
         net.unverified.remove(web.id);

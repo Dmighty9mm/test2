@@ -104,6 +104,10 @@ admin-menu:
   enabled: true
   groups: ['Owner']
   broadcast-title: '&b&lAnnouncement'
+  # A second password just for the admin menu: /login, then /adminlogin <password>.
+  # Set it in the proxy console: plebshop adminpass set <name> <password>
+  # (doesn't depend on nLogin sessions or players' IPs)
+  require-password: true
 
 # Logins: with nLogin on the proxy, account changes and the admin menu need /login first
 # (nothing to set). The staff lock below is only used without nLogin.
