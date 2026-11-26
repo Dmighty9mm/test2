@@ -34,6 +34,8 @@ final class Store {
 		/** Daily login: when the last reward was given (ms) and the streak. */
 		long lastLogin;
 		int streak;
+		/** When the player was last on the network (ms), for the panel. */
+		long seen;
 		/** Minutes online that haven't been paid out as playtime coins yet. */
 		int playMinutes;
 		/** Which day/week the quest progress belongs to (see Quests.dayKey/weekKey). */
@@ -88,13 +90,14 @@ final class Store {
 			d.name = s.str("name", "");
 			d.coins = s.num("coins", 0);
 			d.owned.addAll(s.list("owned"));
-			for (String cat : new String[] { Catalog.HAT, Catalog.CLOAK }) {
+			for (String cat : Catalog.CATEGORIES) {
 				String v = s.str("equipped." + cat, null);
 				if (v != null && !v.isEmpty()) {
 					d.equipped.put(cat, v);
 				}
 			}
 			d.lastLogin = s.num("login.last", 0);
+			d.seen = s.num("seen", 0);
 			d.streak = s.integer("login.streak", 0);
 			d.playMinutes = s.integer("play-minutes", 0);
 			d.dailyKey = s.str("quests.daily", "");
@@ -181,6 +184,9 @@ final class Store {
 				l.put("last", d.lastLogin);
 				l.put("streak", d.streak);
 				m.put("login", l);
+			}
+			if (d.seen != 0) {
+				m.put("seen", d.seen);
 			}
 			if (d.playMinutes != 0) {
 				m.put("play-minutes", d.playMinutes);

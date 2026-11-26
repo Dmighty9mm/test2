@@ -169,6 +169,21 @@ class PanelLogic(unittest.TestCase):
         self.p.admin_account(owner, {"name": "Mod2", "action": "role", "role": "player"})
         self.assertEqual(self.p.account("Mod2")["role"], "player")
 
+    def test_last_seen(self):
+        a, b = "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
+        t = self.clock.t
+        self.p.sync({"full": True, "players": [{"uuid": a, "name": "Old"}, {"uuid": b, "name": "Bob", "seen": (t - 3600) * 1000}],
+                     "online": []})
+        seen = {p["name"]: p["lastSeen"] for p in self.p.admin_players(sort="name")["players"]}
+        self.assertEqual(seen, {"Old": None, "Bob": t - 3600})  # syncing is not being seen
+        self.clock.t += 600
+        self.p.sync({"full": True, "players": [{"uuid": a, "name": "Old"}, {"uuid": b, "name": "Bob"}], "online": ["old"]})
+        seen = {p["name"]: p["lastSeen"] for p in self.p.admin_players(sort="name")["players"]}
+        self.assertEqual(seen, {"Old": self.clock.t, "Bob": t - 3600})  # online now; Bob's kept
+        self.p.sync({"full": True, "players": [{"uuid": a, "name": "Old"}], "online": []})
+        self.clock.t += 600
+        self.assertEqual(self.p.admin_players(sort="name")["players"][0]["lastSeen"], t + 600)
+
     def test_sync_and_commands(self):
         owner = self.p.create_account("Owner", "password1", "owner")
         self.p.sync({"full": True, "players": [

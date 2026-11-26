@@ -248,7 +248,8 @@ CREATE TABLE IF NOT EXISTS players (
   owned TEXT NOT NULL DEFAULT '[]',
   equipped TEXT NOT NULL DEFAULT '{}',
   streak INTEGER NOT NULL DEFAULT 0,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  last_seen INTEGER
 );
 CREATE INDEX IF NOT EXISTS players_name ON players(name_key);
 CREATE TABLE IF NOT EXISTS commands (
@@ -328,6 +329,10 @@ class Db:
                 self.conn.execute("PRAGMA journal_mode=WAL")
             self.conn.execute("PRAGMA foreign_keys=ON")
             self.conn.executescript(SCHEMA)
+            # columns added after a table first shipped
+            cols = {r[1] for r in self.conn.execute("PRAGMA table_info(players)")}
+            if "last_seen" not in cols:
+                self.conn.execute("ALTER TABLE players ADD COLUMN last_seen INTEGER")
 
     def all(self, sql, *args):
         with self.lock:
@@ -639,26 +644,40 @@ class Panel:
         now = self.now()
         if isinstance(players, list):
             with self.db.tx() as c:
+                # when each player was last on: PlebioAPI sends it ("seen", ms); older versions
+                # don't, so keep what we had (syncing is not being seen)
+                seen_before = {r[0]: r[1] for r in c.execute("SELECT uuid, last_seen FROM players").fetchall()}
                 if body.get("full"):
                     c.execute("DELETE FROM players")
                 for p in players:
                     if not isinstance(p, dict) or not p.get("uuid"):
                         continue
                     name = str(p.get("name") or "")[:32]
-                    c.execute("INSERT INTO players(uuid,name,name_key,coins,owned,equipped,streak,updated_at) "
-                              "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(uuid) DO UPDATE SET name=excluded.name, "
+                    uuid = str(p["uuid"]).lower()[:36]
+                    try:
+                        seen = int(p["seen"]) // 1000 if p.get("seen") else None
+                    except (TypeError, ValueError):
+                        seen = None
+                    if seen is None or seen > now + 60:
+                        seen = seen_before.get(uuid)
+                    c.execute("INSERT INTO players(uuid,name,name_key,coins,owned,equipped,streak,updated_at,last_seen) "
+                              "VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(uuid) DO UPDATE SET name=excluded.name, "
                               "name_key=excluded.name_key, coins=excluded.coins, owned=excluded.owned, "
-                              "equipped=excluded.equipped, streak=excluded.streak, updated_at=excluded.updated_at",
-                              (str(p["uuid"]).lower()[:36], name, name.lower(), int(p.get("coins") or 0),
+                              "equipped=excluded.equipped, streak=excluded.streak, updated_at=excluded.updated_at, "
+                              "last_seen=excluded.last_seen",
+                              (uuid, name, name.lower(), int(p.get("coins") or 0),
                                json.dumps([str(x) for x in (p.get("owned") or [])][:500]),
                                json.dumps({str(k): str(v) for k, v in (p.get("equipped") or {}).items()}),
-                               int(p.get("streak") or 0), now))
+                               int(p.get("streak") or 0), now, seen))
         if isinstance(body.get("catalog"), list):
             self.db.set_kv("catalog", [
                 {"id": str(i.get("id")), "name": str(i.get("name") or i.get("id")), "category": str(i.get("category")),
                  "price": i.get("price")} for i in body["catalog"] if isinstance(i, dict) and i.get("id")])
         if isinstance(body.get("online"), list):
-            self.db.set_kv("online", {"at": now, "players": [str(n) for n in body["online"]][:5000]})
+            names = [str(n) for n in body["online"]][:5000]
+            self.db.set_kv("online", {"at": now, "players": names})
+            for n in names:  # online right now = seen now
+                self.db.run("UPDATE players SET last_seen=? WHERE name_key=?", now, n.lower()[:32])
         if body.get("currency"):
             self.db.set_kv("currency", str(body["currency"])[:40])
         if isinstance(body.get("ranks"), dict):
@@ -827,7 +846,7 @@ class Panel:
     PLAYER_SORTS = {
         "coins": "COALESCE(p.coins,-1) DESC, n.name_key",
         "name": "n.name_key",
-        "recent": "MAX(COALESCE(a.last_login,0), COALESCE(p.updated_at,0)) DESC, n.name_key",
+        "recent": "MAX(COALESCE(a.last_login,0), COALESCE(p.last_seen,0)) DESC, n.name_key",
         "new": "COALESCE(a.created_at,0) DESC, n.name_key",
     }
 
@@ -843,21 +862,23 @@ class Panel:
             offset = 0
         limit = max(1, min(100, int(limit)))
         online = [n.lower() for n in self.online()]
+        now = self.now()
         base = ("FROM (SELECT name_key FROM accounts UNION SELECT name_key FROM players) n "
                 "LEFT JOIN accounts a ON a.name_key=n.name_key "
-                "LEFT JOIN (SELECT name_key, MAX(name) name, MAX(coins) coins, MAX(owned) owned, MAX(updated_at) updated_at "
+                "LEFT JOIN (SELECT name_key, MAX(name) name, MAX(coins) coins, MAX(owned) owned, MAX(last_seen) last_seen "
                 "FROM players GROUP BY name_key) p ON p.name_key=n.name_key "
                 "WHERE n.name_key LIKE ? ESCAPE '\\' AND " + self.PLAYER_FILTERS[filt])
         args = [like] + ([json.dumps(online)] if filt == "online" else [])
         total = self.db.one("SELECT COUNT(*) n " + base, *args)["n"]
         rows = self.db.all("SELECT n.name_key, a.name aname, a.role, a.locked, a.id aid, a.last_login, a.created_at, "
-                           "p.name pname, p.coins, p.owned, p.updated_at " + base + " ORDER BY " +
+                           "p.name pname, p.coins, p.owned, p.last_seen " + base + " ORDER BY " +
                            self.PLAYER_SORTS[sort] + " LIMIT ? OFFSET ?", *(args + [limit, offset]))
         on = set(online)
         out = [{"name": r["aname"] or r["pname"] or r["name_key"], "account": r["aid"] is not None,
                 "role": r["role"], "locked": bool(r["locked"]), "coins": r["coins"],
                 "items": len(json.loads(r["owned"])) if r["owned"] else 0, "online": r["name_key"] in on,
-                "lastSeen": max(r["last_login"] or 0, r["updated_at"] or 0) or None, "created": r["created_at"]}
+                "lastSeen": now if r["name_key"] in on else (max(r["last_login"] or 0, r["last_seen"] or 0) or None),
+                "created": r["created_at"]}
                for r in rows]
         return {"players": out, "total": total, "offset": offset, "more": offset + len(out) < total}
 

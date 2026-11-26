@@ -263,6 +263,10 @@ final class ShopCore {
 	}
 
 	synchronized void quit(UUID p, String server) {
+		Store.Data left = store.peek(p);
+		if (left != null) {
+			left.seen = net.now();
+		}
 		loginPending.remove(p);
 		lastAction.remove(p);
 		worlds.remove(p);
@@ -277,6 +281,10 @@ final class ShopCore {
 	synchronized void minute() {
 		long now = net.now();
 		for (UUID p : net.online()) {
+			Store.Data on = store.peek(p);
+			if (on != null) {
+				on.seen = now;
+			}
 			if (!earns(p)) {
 				continue;
 			}
@@ -1516,6 +1524,9 @@ final class ShopCore {
 			p.put("owned", new ArrayList<>(d.owned));
 			p.put("equipped", new LinkedHashMap<>(d.equipped));
 			p.put("streak", d.streak);
+			if (d.seen != 0) {
+				p.put("seen", d.seen);
+			}
 			players.add(p);
 		}
 		List<Map<String, Object>> items = new ArrayList<>();
