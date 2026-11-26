@@ -1099,14 +1099,20 @@ async function clientView() {
 
 function downloadsCard(list, ro) {
   const out = h("div");
-  const inputs = list.map((d) => h("input", { id: "dl-" + d.kind, type: "url", value: d.url, placeholder: "https://… (empty hides it)", disabled: ro, maxlength: 500 }));
-  return card("Downloads page links",
-    h("p", { class: "muted" }, "Where each Download button goes. The files stay where they're hosted; leave a box empty to hide that download."),
-    ...list.flatMap((d, i) => [h("label", { for: "dl-" + d.kind }, d.name), inputs[i]]),
-    h("div", { style: "height:14px" }),
+  const rows = list.map((d) => ({
+    kind: d.kind,
+    name: h("input", { id: "dln-" + d.kind, value: d.name, maxlength: 60, disabled: ro, "aria-label": "Name" }),
+    help: h("input", { id: "dlh-" + d.kind, value: d.help, maxlength: 200, disabled: ro, "aria-label": "Description" }),
+    url: h("input", { id: "dl-" + d.kind, type: "url", value: d.url, placeholder: "https://… (empty hides it)", disabled: ro, maxlength: 500, "aria-label": "Link" }),
+  }));
+  return card("Downloads page",
+    h("p", { class: "muted" }, "The name, description and link of each download. The files stay where they're hosted; leave a link empty to hide that download."),
+    ...rows.flatMap((r) => [h("label", { for: "dln-" + r.kind }, "Name"), r.name, h("label", { for: "dlh-" + r.kind }, "Description"), r.help,
+      h("label", { for: "dl-" + r.kind }, "Link"), r.url, h("div", { style: "height:12px;border-bottom:1px solid var(--line, rgba(255,255,255,.08));margin-bottom:6px" })]),
+    h("div", { style: "height:8px" }),
     ro ? h("p", { class: "muted" }, "Only owners can change these.") : h("button", { class: "primary", onclick: async () => {
       const body = {};
-      list.forEach((d, i) => { body[d.kind] = inputs[i].value.trim(); });
+      rows.forEach((r) => { body[r.kind] = { name: r.name.value.trim(), help: r.help.value.trim(), url: r.url.value.trim() }; });
       try {
         await api("admin/downloads", body);
         info = await api("info");

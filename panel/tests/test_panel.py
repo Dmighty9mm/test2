@@ -309,7 +309,11 @@ class PanelLogic(unittest.TestCase):
         self.assertTrue(all(d["url"].startswith("https://gitflic.ru/") for d in info))
         with self.assertRaises(app.ApiError):
             self.p.set_downloads(owner, {"offline": "javascript:alert(1)"})
-        self.p.set_downloads(owner, {"offline": "https://example.com/p.html", "wasm": "", "forge-1.8.9": info[2]["url"]})
+        self.assertEqual(info[0]["name"], "PlebClient JS")
+        self.p.set_downloads(owner, {"offline": {"url": "https://example.com/p.html", "name": "PlebClient Web"}, "wasm": {"url": ""},
+                                     "forge-1.8.9": {"url": info[2]["url"]}})
+        self.assertEqual(self.p.public_info()["downloads"][0]["name"], "PlebClient Web")
+        self.assertEqual(self.p.public_info()["downloads"][1]["help"], info[2]["help"])  # empty = the default
         self.assertEqual([d["kind"] for d in self.p.public_info()["downloads"]], ["offline", "forge-1.8.9"])
         self.assertEqual(self.p.public_info()["downloads"][0]["url"], "https://example.com/p.html")
 

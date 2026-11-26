@@ -68,7 +68,7 @@ PERM_NODE = re.compile(r"[A-Za-z0-9_.*-]{1,200}")
 # the Downloads page: links to where the builds are hosted (owners can change them
 # on Client updates). The panel never stores the files.
 DOWNLOADS = (
-    ("offline", "PlebClient (one HTML file)", "Open it in your browser and play, no install.",
+    ("offline", "PlebClient JS", "One HTML file. Open it in your browser and play, no install.",
      "https://gitflic.ru/project/mightymcyt/plebmc-client/blob/raw?file=PlebClient_Offline.html"),
     ("wasm", "PlebClient WASM", "The faster web version. Unzip it and open index.html (needs a recent Chrome or Edge).",
      "https://gitflic.ru/project/mightymcyt/plebmc-client/blob/raw?file=PlebClient_WASM.zip"),
@@ -930,18 +930,27 @@ class Panel:
     # ---------- downloads (links only) ----------
 
     def downloads(self):
-        links = self.db.get_kv("download_links", None) or {}
-        return [{"kind": k, "name": n, "help": h, "url": links.get(k, url)} for k, n, h, url in DOWNLOADS]
+        saved = self.db.get_kv("download_links", None) or {}
+        out = []
+        for k, n, h, url in DOWNLOADS:
+            v = saved.get(k, {})
+            if isinstance(v, str):  # saved before names could be changed
+                v = {"url": v}
+            out.append({"kind": k, "name": v.get("name") or n, "help": v.get("help") or h, "url": v.get("url", url)})
+        return out
 
     def set_downloads(self, actor, body):
         links = {}
         for k, n, _, _ in DOWNLOADS:
-            u = str(body.get(k) or "").strip()[:500]
+            v = body.get(k)
+            v = v if isinstance(v, dict) else {"url": v}
+            u = str(v.get("url") or "").strip()[:500]
             if u and not re.match(r"^https://\S+$", u):
                 raise ApiError(400, "%s: links must start with https://" % n)
-            links[k] = u
+            links[k] = {"url": u, "name": str(v.get("name") or "").strip()[:60],
+                        "help": str(v.get("help") or "").strip()[:200]}
         self.db.set_kv("download_links", links)
-        self.audit(actor["name"], "downloads", ", ".join("%s %s" % (k, "set" if v else "off") for k, v in links.items()))
+        self.audit(actor["name"], "downloads", ", ".join("%s %s" % (k, "on" if v["url"] else "off") for k, v in links.items()))
         return {"ok": True, "downloads": self.downloads()}
 
     # ---------- player notes (admins) ----------
