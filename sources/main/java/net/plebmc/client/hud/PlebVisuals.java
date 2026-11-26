@@ -10,6 +10,15 @@ import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiNewChat;
 import net.minecraft.client.gui.ScaledResolution;
+import net.minecraft.block.Block;
+import net.minecraft.block.material.Material;
+import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.util.AxisAlignedBB;
+import net.minecraft.util.BlockPos;
+import net.minecraft.util.MovingObjectPosition;
+import net.minecraft.world.World;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.scoreboard.Score;
 import net.minecraft.scoreboard.ScoreObjective;
@@ -19,6 +28,8 @@ import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.EnumChatFormatting;
 import net.minecraft.util.IChatComponent;
 import net.minecraft.util.MathHelper;
+import net.plebmc.client.mods.Mod;
+import net.plebmc.client.mods.ModRegistry;
 import net.plebmc.client.mods.MoreMods;
 
 /**
@@ -278,5 +289,140 @@ public final class PlebVisuals {
 			printing = false;
 		}
 		return true;
+	}
+
+	private static ModRegistry modsOrNull() {
+		try {
+			return PlebClient.mods();
+		} catch (Throwable t) {
+			return null;
+		}
+	}
+
+	private static boolean on(Mod m) {
+		return m != null && m.isActive();
+	}
+
+	// ==================== block outline ====================
+
+	/** Draws the Block Outline mod's box; false = vanilla draws its own. */
+	public static boolean blockOutline(EntityPlayer player, MovingObjectPosition hit, float pt) {
+		ModRegistry r = modsOrNull();
+		MoreMods.BlockOutline bo = r == null ? null : r.blockOutline;
+		if (!on(bo)) {
+			return false;
+		}
+		World w = Minecraft.getMinecraft().theWorld;
+		if (w == null || player == null || hit == null || hit.typeOfHit != MovingObjectPosition.MovingObjectType.BLOCK) {
+			return true;
+		}
+		BlockPos pos = hit.getBlockPos();
+		Block b = w.getBlockState(pos).getBlock();
+		if (b.getMaterial() == Material.air || !w.getWorldBorder().contains(pos)) {
+			return true;
+		}
+		b.setBlockBoundsBasedOnState(w, pos);
+		double x = player.lastTickPosX + (player.posX - player.lastTickPosX) * pt;
+		double y = player.lastTickPosY + (player.posY - player.lastTickPosY) * pt;
+		double z = player.lastTickPosZ + (player.posZ - player.lastTickPosZ) * pt;
+		AxisAlignedBB bb = b.getSelectedBoundingBox(w, pos).expand(0.002D, 0.002D, 0.002D).offset(-x, -y, -z);
+		long now = System.currentTimeMillis();
+		GlStateManager.enableBlend();
+		GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+		GlStateManager.disableTexture2D();
+		GlStateManager.depthMask(false);
+		int fill = bo.fillArgb(now);
+		if (fill != 0) {
+			color(fill);
+			fillBox(bb);
+		}
+		color(bo.lineArgb(now));
+		GlCompat.lineWidth(bo.lineWidth());
+		GlCompat.outline(bb);
+		GlCompat.lineWidth(2f);
+		GlStateManager.depthMask(true);
+		GlStateManager.enableTexture2D();
+		GlStateManager.disableBlend();
+		GlStateManager.color(1f, 1f, 1f, 1f);
+		return true;
+	}
+
+	private static void color(int argb) {
+		GlStateManager.color((argb >> 16 & 255) / 255f, (argb >> 8 & 255) / 255f, (argb & 255) / 255f, (argb >>> 24) / 255f);
+	}
+
+	private static void fillBox(AxisAlignedBB b) {
+		Tessellator t = Tessellator.getInstance();
+		net.lax1dude.eaglercraft.v1_8.opengl.WorldRenderer wr = t.getWorldRenderer();
+		wr.begin(7, DefaultVertexFormats.POSITION);
+		// bottom, top
+		wr.pos(b.minX, b.minY, b.minZ).endVertex(); wr.pos(b.maxX, b.minY, b.minZ).endVertex();
+		wr.pos(b.maxX, b.minY, b.maxZ).endVertex(); wr.pos(b.minX, b.minY, b.maxZ).endVertex();
+		wr.pos(b.minX, b.maxY, b.minZ).endVertex(); wr.pos(b.minX, b.maxY, b.maxZ).endVertex();
+		wr.pos(b.maxX, b.maxY, b.maxZ).endVertex(); wr.pos(b.maxX, b.maxY, b.minZ).endVertex();
+		// north, south
+		wr.pos(b.minX, b.minY, b.minZ).endVertex(); wr.pos(b.minX, b.maxY, b.minZ).endVertex();
+		wr.pos(b.maxX, b.maxY, b.minZ).endVertex(); wr.pos(b.maxX, b.minY, b.minZ).endVertex();
+		wr.pos(b.minX, b.minY, b.maxZ).endVertex(); wr.pos(b.maxX, b.minY, b.maxZ).endVertex();
+		wr.pos(b.maxX, b.maxY, b.maxZ).endVertex(); wr.pos(b.minX, b.maxY, b.maxZ).endVertex();
+		// west, east
+		wr.pos(b.minX, b.minY, b.minZ).endVertex(); wr.pos(b.minX, b.minY, b.maxZ).endVertex();
+		wr.pos(b.minX, b.maxY, b.maxZ).endVertex(); wr.pos(b.minX, b.maxY, b.minZ).endVertex();
+		wr.pos(b.maxX, b.minY, b.minZ).endVertex(); wr.pos(b.maxX, b.maxY, b.minZ).endVertex();
+		wr.pos(b.maxX, b.maxY, b.maxZ).endVertex(); wr.pos(b.maxX, b.minY, b.maxZ).endVertex();
+		t.draw();
+	}
+
+	// ==================== weather and overlays ====================
+
+	/** Clear Weather: skip drawing rain and snow. */
+	public static boolean hideWeather() {
+		ModRegistry r = modsOrNull();
+		return r != null && on(r.clearWeather);
+	}
+
+	/** Clear Weather: skip rain splash particles and the rain sound. */
+	public static boolean hideSplashes() {
+		ModRegistry r = modsOrNull();
+		return r != null && on(r.clearWeather) && r.clearWeather.splashes.on();
+	}
+
+	public static boolean hidePumpkin() {
+		ModRegistry r = modsOrNull();
+		return r != null && on(r.overlays) && r.overlays.pumpkin.on();
+	}
+
+	public static boolean hideVignette() {
+		ModRegistry r = modsOrNull();
+		return r != null && on(r.overlays) && r.overlays.vignette.on();
+	}
+
+	/** How far to push the on-fire overlay down: 0 = normal, -1 = hide it. */
+	public static float fireDrop() {
+		ModRegistry r = modsOrNull();
+		return r != null && on(r.overlays) ? r.overlays.fireDrop() : 0f;
+	}
+
+	// ==================== death coordinates ====================
+
+	private static boolean dead;
+
+	/** Called every HUD frame: prints where you died once, when you die. */
+	public static void deathCheck() {
+		Minecraft mc = Minecraft.getMinecraft();
+		if (mc.thePlayer == null || mc.theWorld == null) {
+			dead = false;
+			return;
+		}
+		boolean now = mc.thePlayer.getHealth() <= 0f || mc.thePlayer.isDead;
+		if (now && !dead) {
+			ModRegistry r = modsOrNull();
+			if (r != null && on(r.deathCoords)) {
+				String m = r.deathCoords.message(mc.thePlayer.posX, mc.thePlayer.posY, mc.thePlayer.posZ, mc.thePlayer.dimension);
+				mc.ingameGUI.getChatGUI().printChatMessage(new ChatComponentText(EnumChatFormatting.RED + "\u2620 "
+						+ EnumChatFormatting.GRAY + m));
+			}
+		}
+		dead = now;
 	}
 }

@@ -431,6 +431,35 @@ public class ClientModsTest {
                 check(pr.shiftOpens == 3 && pr.accent == 0, "out-of-range prefs are clamped");
                 pr.reset();
 
+                // HUD colors, brackets and text style
+                check(net.plebmc.client.mods.Mod.colorAt(7) == pr.accentColor(), "Accent text color follows the accent");
+                check(net.plebmc.client.mods.Mod.colorAt(8) == net.plebmc.client.mods.Mod.CHROMA, "Chroma is its own marker");
+                int c0 = net.plebmc.client.mods.Mod.chroma(0, 0), c1 = net.plebmc.client.mods.Mod.chroma(0, 1000);
+                check((c0 >>> 24) == 0xFF && c0 != c1, "Chroma is opaque and moves over time");
+                check(net.plebmc.client.mods.Mod.hsv(0f, 1f, 1f) == 0xFFFF0000 && net.plebmc.client.mods.Mod.hsv(1f / 3f, 1f, 1f) == 0xFF00FF00,
+                                "hsv: red and green");
+                check("FPS".equals(pr.decorateHud("FPS")), "no brackets by default");
+                pr.hudBrackets = 1;
+                check("[FPS]".equals(pr.decorateHud("FPS")), "square brackets");
+                pr.hudTextStyle = 1;
+                check("\u00a7l[FPS\u00a7l]".equals(pr.decorateHud("FPS")), "bold brackets");
+                pr.reset();
+                check(pr.hudBrackets == 0 && pr.hudTextStyle == 0, "bracket and style reset");
+
+                // block outline, overlays, death coords
+                ModRegistry rx = new ModRegistry();
+                check(rx.blockOutline.lineArgb(0) == 0xC04FE3F0, "outline: cyan at 75%");
+                check(rx.blockOutline.fillArgb(0) == 0, "outline: no fill by default");
+                rx.blockOutline.color.set(0);
+                rx.blockOutline.fill.set(2);
+                check(rx.blockOutline.fillArgb(0) == 0x44000000, "outline: black fill");
+                check(rx.overlays.fireDrop() == 0.3f, "fire low by default");
+                rx.overlays.fire.set(2);
+                check(rx.overlays.fireDrop() < 0, "fire hidden");
+                check("You died at X -13, Y 64, Z 7 in the Nether".equals(rx.deathCoords.message(-12.5, 64.9, 7.2, -1)), "death message");
+                rx.deathCoords.dimension.set(0);
+                check("You died at X 0, Y 1, Z 2".equals(rx.deathCoords.message(0.1, 1.5, 2.9, 0)), "death message without dimension");
+
                 System.out.println("ClientModsTest: " + checks + " checks, failures=" + failures);
                 System.exit(failures > 0 ? 1 : 0);
         }

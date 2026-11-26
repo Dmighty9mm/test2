@@ -43,6 +43,26 @@ public final class ClientPrefs {
 	public static final String[] WINDOW_OPACITY = { "Solid", "Glass", "Clear" };
 	/** How see-through menu windows are. */
 	public int windowOpacity;
+	public static final String[] HUD_BRACKETS = { "None", "[ ]", "( )", "< >", "| |" };
+	/** Brackets around every HUD text line. */
+	public int hudBrackets;
+	public static final String[] HUD_TEXT_STYLES = { "Normal", "Bold", "Italic", "Bold italic" };
+	/** Bold / italic for HUD text. */
+	public int hudTextStyle;
+
+	/** Applies the HUD bracket and text-style options to one line of HUD text. */
+	public String decorateHud(String s) {
+		if (s == null || s.isEmpty()) {
+			return s;
+		}
+		String style = new String[] { "", "\u00a7l", "\u00a7o", "\u00a7l\u00a7o" }[clamp(hudTextStyle, HUD_TEXT_STYLES.length)];
+		int b = clamp(hudBrackets, HUD_BRACKETS.length);
+		if (b > 0) {
+			String br = HUD_BRACKETS[b];
+			s = br.charAt(0) + s + style + br.charAt(2);
+		}
+		return style + s;
+	}
 
 	// ---- title screen ----
 	public static final String[] SIDEBAR_MODES = { "Opens on hover", "Always open", "Icons only" };
@@ -119,6 +139,8 @@ public final class ClientPrefs {
 		backdrop = d.backdrop;
 		menuBackground = d.menuBackground;
 		windowOpacity = d.windowOpacity;
+		hudBrackets = d.hudBrackets;
+		hudTextStyle = d.hudTextStyle;
 		titleSidebar = d.titleSidebar;
 		titlePanorama = d.titlePanorama;
 		titleBackground = d.titleBackground;
@@ -158,6 +180,8 @@ public final class ClientPrefs {
 		backdrop = idx(m.get("backdrop"), backdrop, BACKDROPS.length);
 		menuBackground = idx(m.get("menuBackground"), menuBackground, MENU_BACKGROUNDS.length);
 		windowOpacity = idx(m.get("windowOpacity"), windowOpacity, WINDOW_OPACITY.length);
+		hudBrackets = idx(m.get("hudBrackets"), hudBrackets, HUD_BRACKETS.length);
+		hudTextStyle = idx(m.get("hudTextStyle"), hudTextStyle, HUD_TEXT_STYLES.length);
 		titleSidebar = idx(m.get("titleSidebar"), titleSidebar, SIDEBAR_MODES.length);
 		titlePanorama = idx(m.get("titlePanorama"), titlePanorama, PANORAMA_DIMS.length);
 		titleBackground = idx(m.get("titleBackground"), titleBackground, BACKGROUNDS.length);
@@ -184,6 +208,8 @@ public final class ClientPrefs {
 		m.put("backdrop", (double) backdrop);
 		m.put("menuBackground", (double) menuBackground);
 		m.put("windowOpacity", (double) windowOpacity);
+		m.put("hudBrackets", (double) hudBrackets);
+		m.put("hudTextStyle", (double) hudTextStyle);
 		m.put("titleSidebar", (double) titleSidebar);
 		m.put("titlePanorama", (double) titlePanorama);
 		m.put("titleBackground", (double) titleBackground);

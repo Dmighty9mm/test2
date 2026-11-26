@@ -1714,6 +1714,9 @@ public class RenderGlobal implements IWorldAccess, IResourceManagerReloadListene
 	 */
 	public void drawSelectionBox(EntityPlayer player, MovingObjectPosition movingObjectPositionIn, int partialTicks,
 			float parFloat1) {
+		if (partialTicks == 0 && net.plebmc.client.hud.PlebVisuals.blockOutline(player, movingObjectPositionIn, parFloat1)) {
+			return;
+		}
 		if (partialTicks == 0 && movingObjectPositionIn != null
 				&& movingObjectPositionIn.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
 			GlStateManager.enableBlend();

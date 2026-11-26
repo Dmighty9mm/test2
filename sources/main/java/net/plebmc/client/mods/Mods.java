@@ -47,7 +47,18 @@ public final class Mods {
                 @Override
                 public HudBox layout(ClientView v, HudBox.Measure m) {
                         List<String> l = lines(v);
-                        return l.isEmpty() ? null : HudBox.lines(l, m);
+                        if (l.isEmpty()) {
+                                return null;
+                        }
+                        ClientPrefs pr = ClientPrefs.get();
+                        if (pr.hudBrackets != 0 || pr.hudTextStyle != 0) {
+                                List<String> d = new java.util.ArrayList<>(l.size());
+                                for (String s : l) {
+                                        d.add(pr.decorateHud(s));
+                                }
+                                l = d;
+                        }
+                        return HudBox.lines(l, m);
                 }
         }
 

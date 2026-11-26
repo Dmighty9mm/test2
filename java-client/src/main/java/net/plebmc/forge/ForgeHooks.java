@@ -129,6 +129,26 @@ public final class ForgeHooks {
 		}
 	}
 
+	/** Overlays mod: no pumpkin blur. */
+	@SubscribeEvent
+	public void onHelmet(RenderGameOverlayEvent.Pre e) {
+		if (e.type == RenderGameOverlayEvent.ElementType.HELMET && mc.thePlayer != null
+				&& net.plebmc.client.hud.PlebVisuals.hidePumpkin()) {
+			net.minecraft.item.ItemStack head = mc.thePlayer.inventory.armorItemInSlot(3);
+			if (head != null && head.getItem() == net.minecraft.item.Item.getItemFromBlock(net.minecraft.init.Blocks.pumpkin)) {
+				e.setCanceled(true);
+			}
+		}
+	}
+
+	/** Block Outline mod: our own color, thickness and fill. */
+	@SubscribeEvent
+	public void onBlockHighlight(net.minecraftforge.client.event.DrawBlockHighlightEvent e) {
+		if (e.subID == 0 && net.plebmc.client.hud.PlebVisuals.blockOutline(e.player, e.target, e.partialTicks)) {
+			e.setCanceled(true);
+		}
+	}
+
 	/** Chat mod: timestamps and stacked repeats (game-info messages above the hotbar are left alone). */
 	@SubscribeEvent
 	public void onChat(ClientChatReceivedEvent e) {

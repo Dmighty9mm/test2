@@ -457,6 +457,11 @@ public final class PlebClient {
 			return;
 		}
 		framePartialTicks = partialTicks;
+		try {
+			PlebVisuals.deathCheck();
+		} catch (Throwable t) {
+			LOG.warn("death check failed: " + t);
+		}
 		int guiW = res.getScaledWidth();
 		int guiH = res.getScaledHeight();
 		try {
@@ -531,10 +536,15 @@ public final class PlebClient {
 			// text over the icons (item models draw in front of z 0)
 			net.minecraft.client.renderer.GlStateManager.translate(0f, 0f, 200f);
 		}
+		long now = System.currentTimeMillis();
 		for (HudBox.Text t : box.texts) {
 			int c = textColor != 0 && t.argb == HudBox.TEXT ? textColor : t.argb;
 			float tx = t.centered ? t.x - Draw.width(t.text) / 2f : t.x;
-			Draw.text(t.text, tx, t.y, c, shadow);
+			if (c == Mod.CHROMA) {
+				drawChroma(t.text, tx, t.y, p[0] + tx * sc, now, shadow);
+			} else {
+				Draw.text(t.text, tx, t.y, c, shadow);
+			}
 		}
 		net.minecraft.client.renderer.GlStateManager.popMatrix();
 		if (outline != 0) {
@@ -544,6 +554,25 @@ public final class PlebClient {
 			Draw.fill(p[0] + w, p[1], 1, h, outline);
 		}
 		return new int[] { p[0], p[1], w, h };
+	}
+
+	/** Rainbow text, one character at a time; screenX keeps the wave lined up across boxes. */
+	static void drawChroma(String text, float x, float y, float screenX, long now, boolean shadow) {
+		String fmt = "";
+		for (int i = 0; i < text.length(); i++) {
+			char ch = text.charAt(i);
+			if (ch == '\u00a7' && i + 1 < text.length()) {
+				char k = Character.toLowerCase(text.charAt(i + 1));
+				fmt = k >= 'k' && k <= 'o' ? fmt + "\u00a7" + k : "";
+				i++;
+				continue;
+			}
+			String one = fmt + ch;
+			Draw.text(one, x, y, Mod.chroma(screenX, now), shadow);
+			float cw = Draw.width(one);
+			x += cw;
+			screenX += cw;
+		}
 	}
 
 	/** Real item icons (the stack when there is one, else the named item). */

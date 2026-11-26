@@ -1390,6 +1390,9 @@ public class EntityRenderer implements IResourceManagerReloadListener {
 	}
 
 	private void addRainParticles() {
+		if (net.plebmc.client.hud.PlebVisuals.hideSplashes()) {
+			return;
+		}
 		float f = this.mc.theWorld.getRainStrength(1.0F);
 		if (!this.mc.gameSettings.fancyGraphics) {
 			f /= 2.0F;
@@ -1463,6 +1466,9 @@ public class EntityRenderer implements IResourceManagerReloadListener {
 	 * Render rain and snow
 	 */
 	protected void renderRainSnow(float partialTicks) {
+		if (net.plebmc.client.hud.PlebVisuals.hideWeather()) {
+			return;
+		}
 		float f = this.mc.theWorld.getRainStrength(partialTicks);
 		if (f > 0.0F) {
 			boolean df = DeferredStateManager.isInDeferredPass();

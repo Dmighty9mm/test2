@@ -794,6 +794,9 @@ public class GuiIngame extends Gui {
 	}
 
 	private void renderPumpkinOverlay(ScaledResolution parScaledResolution) {
+		if (net.plebmc.client.hud.PlebVisuals.hidePumpkin()) {
+			return;
+		}
 		GlStateManager.disableDepth();
 		GlStateManager.depthMask(false);
 		GlStateManager.tryBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, 1, 0);
@@ -820,6 +823,9 @@ public class GuiIngame extends Gui {
 	 * light level.
 	 */
 	public void renderVignette(float parFloat1, int scaledWidth, int scaledHeight) {
+		if (net.plebmc.client.hud.PlebVisuals.hideVignette()) {
+			return;
+		}
 		parFloat1 = 1.0F - parFloat1;
 		parFloat1 = MathHelper.clamp_float(parFloat1, 0.0F, 1.0F);
 		WorldBorder worldborder = this.mc.theWorld.getWorldBorder();

@@ -40,4 +40,20 @@ public abstract class MixinEntityRenderer {
 			ci.cancel();
 		}
 	}
+
+	/** Clear Weather mod: no rain or snow. */
+	@Inject(method = "renderRainSnow", at = @At("HEAD"), cancellable = true)
+	private void plebmc$weather(float partialTicks, CallbackInfo ci) {
+		if (net.plebmc.client.hud.PlebVisuals.hideWeather()) {
+			ci.cancel();
+		}
+	}
+
+	/** Clear Weather mod: no splash particles or rain sound. */
+	@Inject(method = "addRainParticles", at = @At("HEAD"), cancellable = true)
+	private void plebmc$splashes(CallbackInfo ci) {
+		if (net.plebmc.client.hud.PlebVisuals.hideSplashes()) {
+			ci.cancel();
+		}
+	}
 }

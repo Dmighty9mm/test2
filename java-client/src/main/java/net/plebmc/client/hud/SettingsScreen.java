@@ -199,6 +199,16 @@ public final class SettingsScreen extends PlebScreen {
 			add(toggle("Text shadow", "A shadow under HUD text, easier to read on bright ground", lx, y, lw, h,
 					() -> pr.hudShadow, saved(() -> pr.hudShadow = !pr.hudShadow)), clip);
 			y += step;
+			add(choice("Brackets", "Wrap every HUD text in brackets, like [FPS: 120]", lx, y, lw, h,
+					() -> ClientPrefs.HUD_BRACKETS[pr.hudBrackets],
+					saved(() -> pr.hudBrackets = wrap(pr.hudBrackets + 1, ClientPrefs.HUD_BRACKETS.length)),
+					saved(() -> pr.hudBrackets = wrap(pr.hudBrackets - 1, ClientPrefs.HUD_BRACKETS.length))), clip);
+			y += step;
+			add(choice("Text style", "Bold or italic HUD text", lx, y, lw, h,
+					() -> ClientPrefs.HUD_TEXT_STYLES[pr.hudTextStyle],
+					saved(() -> pr.hudTextStyle = wrap(pr.hudTextStyle + 1, ClientPrefs.HUD_TEXT_STYLES.length)),
+					saved(() -> pr.hudTextStyle = wrap(pr.hudTextStyle - 1, ClientPrefs.HUD_TEXT_STYLES.length))), clip);
+			y += step;
 			Button edit = button("Open HUD editor", lx, y, lw, 20, () -> this.mc.displayGuiScreen(new HudEditorScreen(this)));
 			edit.style(Style.PRIMARY).icon("drag");
 			add(edit, clip);

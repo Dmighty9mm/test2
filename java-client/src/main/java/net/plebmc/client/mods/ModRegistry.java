@@ -50,6 +50,10 @@ public final class ModRegistry {
         public final MoreMods.Scoreboard scoreboard = add(new MoreMods.Scoreboard());
         public final MoreMods.Chat chat = add(new MoreMods.Chat());
         public final MoreMods.HurtCam hurtCam = add(new MoreMods.HurtCam());
+        public final MoreMods.BlockOutline blockOutline = add(new MoreMods.BlockOutline());
+        public final MoreMods.ClearWeather clearWeather = add(new MoreMods.ClearWeather());
+        public final MoreMods.Overlays overlays = add(new MoreMods.Overlays());
+        public final MoreMods.DeathCoords deathCoords = add(new MoreMods.DeathCoords());
 
         private <T extends Mod> T add(T m) {
                 mods.add(m);

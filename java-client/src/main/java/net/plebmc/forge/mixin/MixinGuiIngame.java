@@ -20,4 +20,12 @@ public abstract class MixinGuiIngame {
 			ci.cancel();
 		}
 	}
+
+	/** Overlays mod: no dark vignette. */
+	@Inject(method = "renderVignette", at = @At("HEAD"), cancellable = true)
+	private void plebmc$vignette(float brightness, int w, int h, CallbackInfo ci) {
+		if (PlebVisuals.hideVignette()) {
+			ci.cancel();
+		}
+	}
 }

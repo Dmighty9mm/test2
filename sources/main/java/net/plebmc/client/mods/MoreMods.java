@@ -267,7 +267,8 @@ public final class MoreMods {
 		public final Setting style, color, size, gap, dot, outline, invert;
 
 		public int argb() {
-			return COLORS[Math.max(0, Math.min(COLORS.length - 1, color.get()))];
+			int c = colorAt(color.get());
+			return c == CHROMA ? chroma(0, System.currentTimeMillis()) : c;
 		}
 
 		public int length() {
@@ -357,6 +358,104 @@ public final class MoreMods {
 
 		public float factor() {
 			return new float[] { 1f, 0.5f, 0.25f, 0f }[amount.get()];
+		}
+	}
+
+	public static final class BlockOutline extends Mod {
+		public static final String[] COLORS_ = new String[COLOR_NAMES.length + 1];
+		static {
+			COLORS_[0] = "Black";
+			System.arraycopy(COLOR_NAMES, 0, COLORS_, 1, COLOR_NAMES.length);
+		}
+		public static final String[] WIDTHS = { "Thin", "Normal", "Thick", "Extra thick" };
+		public static final String[] OPACITY = { "25%", "50%", "75%", "100%" };
+		public static final String[] FILLS = { "Off", "Light", "Medium", "Strong" };
+
+		public BlockOutline() {
+			super("block-outline", "Block Outline", "Color, thickness and fill for the box around the block you look at", false, 0f, 0f);
+			category(VISUAL);
+			color = setting("color", "Color", "The outline's color", COLORS_, 2);
+			width = setting("width", "Thickness", "How thick the lines are", WIDTHS, 1);
+			opacity = setting("opacity", "Opacity", "How see-through the lines are", OPACITY, 2);
+			fill = setting("fill", "Fill", "Tint the faces of the block too", FILLS, 0);
+		}
+
+		public final Setting color, width, opacity, fill;
+
+		/** Line color with the chosen opacity. */
+		public int lineArgb(long now) {
+			return withAlpha(rgb(now), new int[] { 0x40, 0x80, 0xC0, 0xFF }[opacity.get()]);
+		}
+
+		/** Fill color, or 0 for no fill. */
+		public int fillArgb(long now) {
+			int a = new int[] { 0, 0x22, 0x44, 0x70 }[fill.get()];
+			return a == 0 ? 0 : withAlpha(rgb(now), a);
+		}
+
+		public float lineWidth() {
+			return new float[] { 1f, 2f, 3.5f, 5f }[width.get()];
+		}
+
+		private int rgb(long now) {
+			int i = color.get();
+			if (i == 0) {
+				return 0xFF000000;
+			}
+			int c = colorAt(i - 1);
+			return c == CHROMA ? chroma(0, now) : c;
+		}
+
+		static int withAlpha(int c, int a) {
+			return (a << 24) | (c & 0xFFFFFF);
+		}
+	}
+
+	public static final class ClearWeather extends Mod {
+		public ClearWeather() {
+			super("clear-weather", "Clear Weather", "Hides rain and snow so you can see (the server still has weather)", false, 0f, 0f);
+			category(VISUAL);
+			splashes = setting("splashes", "Rain splashes", "Hide the splash particles and rain sound too", OFF_ON, 1);
+		}
+
+		public final Setting splashes;
+	}
+
+	public static final class Overlays extends Mod {
+		public static final String[] FIRE = { "Normal", "Low", "Hidden" };
+
+		public Overlays() {
+			super("overlays", "Overlays", "Clean up screen overlays: pumpkin, fire and the dark vignette", false, 0f, 0f);
+			category(VISUAL);
+			pumpkin = setting("pumpkin", "Hide pumpkin", "No orange blur when wearing a pumpkin", OFF_ON, 1);
+			fire = setting("fire", "Fire on screen", "How much fire covers your view when burning", FIRE, 1);
+			vignette = setting("vignette", "Hide vignette", "No dark corners around the screen", OFF_ON, 0);
+		}
+
+		public final Setting pumpkin, fire, vignette;
+
+		/** How far down the fire overlay is pushed (0 = normal), or -1 to hide it. */
+		public float fireDrop() {
+			return new float[] { 0f, 0.3f, -1f }[fire.get()];
+		}
+	}
+
+	public static final class DeathCoords extends Mod {
+		public DeathCoords() {
+			super("death-coords", "Death Coordinates", "Puts where you died in chat so you can go back for your stuff", true, 0f, 0f);
+			category(VISUAL);
+			dimension = setting("dimension", "Show dimension", "Say if it was the Nether or the End", OFF_ON, 1);
+		}
+
+		public final Setting dimension;
+
+		/** The chat line for a death at x/y/z in a dimension (0 overworld, -1 nether, 1 end). */
+		public String message(double x, double y, double z, int dim) {
+			String where = "";
+			if (dimension.on()) {
+				where = dim == -1 ? " in the Nether" : dim == 1 ? " in the End" : " in the Overworld";
+			}
+			return "You died at X " + (int) Math.floor(x) + ", Y " + (int) Math.floor(y) + ", Z " + (int) Math.floor(z) + where;
 		}
 	}
 }

@@ -16,6 +16,7 @@
     "MixinGuiScreen",
     "MixinGuiSlider",
     "MixinGuiSlot",
+    "MixinItemRenderer",
     "MixinLayerArmorBase",
     "MixinLayerCape",
     "MixinLayerSheepWool",
