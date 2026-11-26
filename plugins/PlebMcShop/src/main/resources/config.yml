@@ -139,7 +139,7 @@ staff-lock:
 accounts:
   enabled: false
   # Where the proxy reaches the panel. Same machine: http://127.0.0.1:8080
-  url: 'https://panel.plebmc.top'
+  url: 'https://client.plebmc.top'
   # The link players see (leave empty to use url)
   public-url: ''
   # PANEL_SERVER_KEY from the panel's .env (keep it secret)

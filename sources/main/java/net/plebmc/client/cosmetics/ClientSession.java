@@ -16,7 +16,7 @@ import net.plebmc.client.mods.SettingsStore;
 public final class ClientSession {
 
 	/** Where the account panel lives. A server can't change it. */
-	public static final String DEFAULT_PANEL = "https://panel.plebmc.top";
+	public static final String DEFAULT_PANEL = "https://client.plebmc.top";
 
 	public enum State {
 		/** Not signed in: the start screen shows. */
