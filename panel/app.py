@@ -63,6 +63,20 @@ MAX_FAILS = 5
 FAIL_WINDOW = 10 * 60
 COMMAND_ACTIONS = ("coins", "give", "remove", "equip", "kick", "signout")
 CATEGORIES = ("hat", "trail", "cloak")
+ITEM_ID_RE = re.compile(r"^[a-z0-9_]{2,32}$")
+VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+){0,3}$")
+PAGE = 50
+MAX_DESIGNS = 30
+# a design's data: hat projects are small JSON; cloaks are a PNG (base64) up to 8 MB
+MAX_DESIGN_BYTES = 12 * 1024 * 1024
+MAX_THUMB_BYTES = 200 * 1024
+DESIGN_KINDS = ("hat", "cloak")
+
+
+def version_key(v):
+    """'1.10.2' -> (1, 10, 2, 0) so versions compare like numbers."""
+    parts = [int(x) for x in str(v or "0").split(".") if x.isdigit()][:4]
+    return tuple(parts + [0] * (4 - len(parts)))
 
 
 def env(name, default=None):
@@ -216,6 +230,44 @@ CREATE TABLE IF NOT EXISTS audit (
 CREATE TABLE IF NOT EXISTS kv (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS audit_at ON audit(id);
+CREATE TABLE IF NOT EXISTS designs (
+  id INTEGER PRIMARY KEY,
+  account_id INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  name TEXT NOT NULL,
+  item_id TEXT NOT NULL,
+  data TEXT NOT NULL,
+  extra TEXT NOT NULL DEFAULT '{}',
+  thumb TEXT NOT NULL DEFAULT '',
+  public INTEGER NOT NULL DEFAULT 0,
+  published TEXT,
+  likes INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS designs_owner ON designs(account_id);
+CREATE INDEX IF NOT EXISTS designs_public ON designs(public, updated_at);
+CREATE TABLE IF NOT EXISTS design_likes (
+  design_id INTEGER NOT NULL,
+  account_id INTEGER NOT NULL,
+  PRIMARY KEY (design_id, account_id)
+);
+CREATE TABLE IF NOT EXISTS notes (
+  id INTEGER PRIMARY KEY,
+  name_key TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  by_name TEXT NOT NULL,
+  text TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS notes_name ON notes(name_key);
+CREATE TABLE IF NOT EXISTS client_seen (
+  day INTEGER NOT NULL,
+  version TEXT NOT NULL,
+  platform TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, version, platform)
 );
 """
 
@@ -599,7 +651,13 @@ class Panel:
 
     def pending(self):
         with self.db.tx() as c:
-            rows = [dict(r) for r in c.execute("SELECT * FROM commands WHERE status='pending' ORDER BY id LIMIT 100")]
+            rows, size = [], 0
+            for r in c.execute("SELECT * FROM commands WHERE status='pending' ORDER BY id LIMIT 100"):
+                # big shop uploads go one at a time
+                if rows and size + len(r["args"]) > 12 * 1024 * 1024:
+                    break
+                rows.append(dict(r))
+                size += len(r["args"])
             for r in rows:
                 c.execute("UPDATE commands SET status='sent' WHERE id=?", (r["id"],))
         return [{"id": r["id"], "target": r["target"], "action": r["action"], "args": json.loads(r["args"]),
@@ -692,6 +750,365 @@ class Panel:
             raise ApiError(400, "Unknown action.")
         return {"ok": True, "account": self.public_account(self.account_by_id(acc["id"]))}
 
+    # ---------- players list (paged) ----------
+
+    PLAYER_FILTERS = {
+        "all": "1=1",
+        "online": "n.name_key IN (SELECT value FROM json_each(?))",
+        "accounts": "a.id IS NOT NULL",
+        "noaccount": "a.id IS NULL",
+        "staff": "a.role IN ('admin','owner')",
+        "locked": "a.locked=1",
+    }
+    PLAYER_SORTS = {
+        "coins": "COALESCE(p.coins,-1) DESC, n.name_key",
+        "name": "n.name_key",
+        "recent": "MAX(COALESCE(a.last_login,0), COALESCE(p.updated_at,0)) DESC, n.name_key",
+        "new": "COALESCE(a.created_at,0) DESC, n.name_key",
+    }
+
+    def admin_players(self, q="", filt="all", sort="coins", offset=0, limit=PAGE):
+        """One page of players (accounts and players who joined), so a big network never loads all at once."""
+        q = str(q or "").lower()[:32]
+        like = "%" + q.replace("\\", "").replace("%", "").replace("_", "\\_") + "%"
+        filt = filt if filt in self.PLAYER_FILTERS else "all"
+        sort = sort if sort in self.PLAYER_SORTS else "coins"
+        try:
+            offset = max(0, int(offset))
+        except (TypeError, ValueError):
+            offset = 0
+        limit = max(1, min(100, int(limit)))
+        online = [n.lower() for n in self.online()]
+        base = ("FROM (SELECT name_key FROM accounts UNION SELECT name_key FROM players) n "
+                "LEFT JOIN accounts a ON a.name_key=n.name_key "
+                "LEFT JOIN (SELECT name_key, MAX(name) name, MAX(coins) coins, MAX(owned) owned, MAX(updated_at) updated_at "
+                "FROM players GROUP BY name_key) p ON p.name_key=n.name_key "
+                "WHERE n.name_key LIKE ? ESCAPE '\\' AND " + self.PLAYER_FILTERS[filt])
+        args = [like] + ([json.dumps(online)] if filt == "online" else [])
+        total = self.db.one("SELECT COUNT(*) n " + base, *args)["n"]
+        rows = self.db.all("SELECT n.name_key, a.name aname, a.role, a.locked, a.id aid, a.last_login, a.created_at, "
+                           "p.name pname, p.coins, p.owned, p.updated_at " + base + " ORDER BY " +
+                           self.PLAYER_SORTS[sort] + " LIMIT ? OFFSET ?", *(args + [limit, offset]))
+        on = set(online)
+        out = [{"name": r["aname"] or r["pname"] or r["name_key"], "account": r["aid"] is not None,
+                "role": r["role"], "locked": bool(r["locked"]), "coins": r["coins"],
+                "items": len(json.loads(r["owned"])) if r["owned"] else 0, "online": r["name_key"] in on,
+                "lastSeen": max(r["last_login"] or 0, r["updated_at"] or 0) or None, "created": r["created_at"]}
+               for r in rows]
+        return {"players": out, "total": total, "offset": offset, "more": offset + len(out) < total}
+
+    # ---------- dashboard, leaderboard, shop ----------
+
+    def dashboard(self):
+        now = self.now()
+        day = 86400
+        c = self.db.one("SELECT COUNT(*) accounts, SUM(role<>'player') staff, SUM(locked) locked, "
+                        "SUM(created_at>=?) new_day, SUM(created_at>=?) new_week, SUM(last_login>=?) active_day, "
+                        "SUM(last_login>=?) active_week FROM accounts", now - day, now - 7 * day, now - day, now - 7 * day)
+        p = self.db.one("SELECT COUNT(DISTINCT name_key) players, COALESCE(SUM(coins),0) coins, "
+                        "COALESCE(MAX(coins),0) richest FROM players")
+        signups = []
+        start = (now // day - 13) * day
+        counts = {r["d"]: r["n"] for r in self.db.all(
+            "SELECT (created_at/86400)*86400 d, COUNT(*) n FROM accounts WHERE created_at>=? GROUP BY d", start)}
+        for i in range(14):
+            d = start + i * day
+            signups.append({"day": d, "count": counts.get(d, 0)})
+        owned = {}
+        for r in self.db.all("SELECT owned FROM players"):
+            for item in json.loads(r["owned"]):
+                owned[item] = owned.get(item, 0) + 1
+        names = {i["id"]: i for i in self.catalog()}
+        popular = sorted(owned.items(), key=lambda kv: -kv[1])[:8]
+        return {"accounts": c["accounts"] or 0, "staff": c["staff"] or 0, "locked": c["locked"] or 0,
+                "newDay": c["new_day"] or 0, "newWeek": c["new_week"] or 0,
+                "activeDay": c["active_day"] or 0, "activeWeek": c["active_week"] or 0,
+                "players": p["players"] or 0, "coins": p["coins"] or 0, "richest": p["richest"] or 0,
+                "signups": signups, "popular": [{"id": k, "name": (names.get(k) or {}).get("name", k),
+                                                  "category": (names.get(k) or {}).get("category", ""), "owners": v}
+                                                 for k, v in popular],
+                "clients": self.client_versions(), "server": self.server_status(),
+                "designs": self.db.one("SELECT COUNT(*) n FROM designs")["n"]}
+
+    def leaderboard(self, offset=0, limit=25):
+        try:
+            offset = max(0, int(offset))
+        except (TypeError, ValueError):
+            offset = 0
+        limit = max(1, min(100, int(limit)))
+        total = self.db.one("SELECT COUNT(DISTINCT name_key) n FROM players")["n"]
+        rows = self.db.all("SELECT name, MAX(coins) coins, MAX(streak) streak, MAX(owned) owned FROM players "
+                           "GROUP BY name_key ORDER BY coins DESC, name_key LIMIT ? OFFSET ?", limit, offset)
+        return {"rows": [{"rank": offset + i + 1, "name": r["name"], "coins": r["coins"], "streak": r["streak"],
+                          "items": len(json.loads(r["owned"]))} for i, r in enumerate(rows)],
+                "total": total, "offset": offset, "more": offset + len(rows) < total}
+
+    def public_info(self):
+        st = self.server_status()
+        return {"site": self.cfg.site_name, "openRegistration": self.cfg.open_registration,
+                "server": {"connected": st["connected"], "online": st["online"], "currency": st["currency"]},
+                "client": self.client_release(), "announcement": self.db.get_kv("announcement", None)}
+
+    # ---------- player notes (admins) ----------
+
+    def notes(self, name):
+        return self.db.all("SELECT id, at, by_name, text FROM notes WHERE name_key=? ORDER BY id DESC LIMIT 50",
+                           str(name or "").lower())
+
+    def add_note(self, actor, name, text):
+        text = str(text or "").strip()[:1000]
+        if name_problem(str(name or "")) or not text:
+            raise ApiError(400, "Write a note first.")
+        self.db.run("INSERT INTO notes(name_key,at,by_name,text) VALUES(?,?,?,?)", name.lower(), self.now(),
+                    actor["name"], text)
+        self.audit(actor["name"], "note", name)
+
+    def delete_note(self, actor, nid):
+        n = self.db.one("SELECT * FROM notes WHERE id=?", nid)
+        if not n:
+            raise ApiError(404, "No such note.")
+        if n["by_name"].lower() != actor["name_key"] and actor["role"] != "owner":
+            raise ApiError(403, "Only the note's author or an owner can delete it.")
+        self.db.run("DELETE FROM notes WHERE id=?", nid)
+
+    # ---------- announcements ----------
+
+    def announce(self, actor, body):
+        text = str(body.get("text") or "").strip()[:200]
+        if not text:
+            raise ApiError(400, "Write a message first.")
+        targets = []
+        if body.get("site"):
+            self.db.set_kv("announcement", {"text": text, "by": actor["name"], "at": self.now()})
+            targets.append("website")
+        if body.get("game"):
+            self.queue(actor["name"], "*", "broadcast", [text])
+            targets.append("game")
+        if not targets:
+            raise ApiError(400, "Pick the website, the game or both.")
+        self.audit(actor["name"], "announce", "%s: %s" % ("+".join(targets), text))
+        return {"ok": True}
+
+    def clear_announcement(self, actor):
+        self.db.set_kv("announcement", None)
+        self.audit(actor["name"], "announce", "cleared the website banner")
+
+    # ---------- client releases and the update checker ----------
+
+    def client_release(self):
+        r = self.db.get_kv("client_release", None) or {}
+        return {"latest": r.get("latest") or "", "minimum": r.get("minimum") or "", "url": r.get("url") or "",
+                "message": r.get("message") or "", "at": r.get("at")}
+
+    def set_client_release(self, actor, body):
+        latest = str(body.get("latest") or "").strip()
+        minimum = str(body.get("minimum") or "").strip()
+        url = str(body.get("url") or "").strip()[:300]
+        message = str(body.get("message") or "").strip()[:200]
+        for v in (latest, minimum):
+            if v and not VERSION_RE.match(v):
+                raise ApiError(400, "Versions look like 2.1 or 2.1.3.")
+        if minimum and latest and version_key(minimum) > version_key(latest):
+            raise ApiError(400, "The minimum can't be newer than the latest version.")
+        if url and not re.match(r"^https?://", url):
+            raise ApiError(400, "The download link must start with https://")
+        self.db.set_kv("client_release", {"latest": latest, "minimum": minimum, "url": url, "message": message,
+                                          "at": self.now()})
+        self.audit(actor["name"], "client-release", "latest %s, minimum %s" % (latest or "-", minimum or "-"))
+        return {"ok": True, "client": self.client_release()}
+
+    def client_version(self, version, platform):
+        """The client asks at start: is there a newer version? Also counts which versions are in use."""
+        version = str(version or "")[:20]
+        platform = re.sub(r"[^a-z0-9_-]", "", str(platform or "").lower())[:16] or "unknown"
+        if VERSION_RE.match(version):
+            self.db.run("INSERT INTO client_seen(day,version,platform,count) VALUES(?,?,?,1) "
+                        "ON CONFLICT(day,version,platform) DO UPDATE SET count=count+1",
+                        self.now() // 86400 * 86400, version, platform)
+        r = self.client_release()
+        have = version_key(version)
+        outdated = bool(r["latest"]) and VERSION_RE.match(version) is not None and have < version_key(r["latest"])
+        required = bool(r["minimum"]) and VERSION_RE.match(version) is not None and have < version_key(r["minimum"])
+        return {"ok": True, "latest": r["latest"], "minimum": r["minimum"], "url": r["url"] or self.cfg.public_url,
+                "message": r["message"], "outdated": outdated, "required": required}
+
+    def client_versions(self):
+        since = self.now() // 86400 * 86400 - 6 * 86400
+        rows = self.db.all("SELECT version, platform, SUM(count) n FROM client_seen WHERE day>=? GROUP BY version, platform",
+                           since)
+        rows.sort(key=lambda r: (version_key(r["version"]), r["n"]), reverse=True)
+        return rows[:30]
+
+    # ---------- designs (hat and cloak makers) ----------
+
+    def design_out(self, d, full=False, viewer=None):
+        out = {"id": d["id"], "kind": d["kind"], "name": d["name"], "itemId": d["item_id"], "thumb": d["thumb"],
+               "public": bool(d["public"]), "published": d["published"], "likes": d["likes"],
+               "created": d["created_at"], "updated": d["updated_at"], "extra": json.loads(d["extra"] or "{}")}
+        if "author" in d:
+            out["author"] = d["author"]
+        if viewer:
+            out["mine"] = d["account_id"] == viewer["id"]
+            out["liked"] = self.db.one("SELECT 1 x FROM design_likes WHERE design_id=? AND account_id=?",
+                                       d["id"], viewer["id"]) is not None
+        if full:
+            out["data"] = d["data"]
+        return out
+
+    def my_designs(self, acc):
+        rows = self.db.all("SELECT d.*, a.name author FROM designs d JOIN accounts a ON a.id=d.account_id "
+                           "WHERE d.account_id=? ORDER BY d.updated_at DESC", acc["id"])
+        return [self.design_out(d, viewer=acc) for d in rows]
+
+    def public_designs(self, kind=None, sort="new", offset=0, viewer=None):
+        try:
+            offset = max(0, int(offset))
+        except (TypeError, ValueError):
+            offset = 0
+        where = "d.public=1" + (" AND d.kind=?" if kind in DESIGN_KINDS else "")
+        args = [kind] if kind in DESIGN_KINDS else []
+        order = "d.likes DESC, d.updated_at DESC" if sort == "top" else "d.updated_at DESC"
+        total = self.db.one("SELECT COUNT(*) n FROM designs d WHERE " + where, *args)["n"]
+        rows = self.db.all("SELECT d.*, a.name author FROM designs d JOIN accounts a ON a.id=d.account_id WHERE " +
+                           where + " ORDER BY " + order + " LIMIT ? OFFSET ?", *(args + [24, offset]))
+        return {"designs": [self.design_out(d, viewer=viewer) for d in rows], "total": total,
+                "more": offset + len(rows) < total}
+
+    def get_design(self, did, viewer):
+        d = self.db.one("SELECT d.*, a.name author FROM designs d JOIN accounts a ON a.id=d.account_id WHERE d.id=?", did)
+        if not d or not (d["public"] or (viewer and (d["account_id"] == viewer["id"] or viewer["role"] != "player"))):
+            raise ApiError(404, "That design doesn't exist or is private.")
+        return self.design_out(d, full=True, viewer=viewer)
+
+    def save_design(self, acc, body):
+        kind = str(body.get("kind") or "")
+        if kind not in DESIGN_KINDS:
+            raise ApiError(400, "Unknown design type.")
+        name = str(body.get("name") or "").strip()[:40] or "Untitled"
+        item_id = re.sub(r"[^a-z0-9_]+", "_", str(body.get("itemId") or name).lower()).strip("_")[:32] or "my_" + kind
+        data = body.get("data")
+        if not isinstance(data, str) or not data:
+            raise ApiError(400, "Nothing to save.")
+        if len(data) > MAX_DESIGN_BYTES:
+            raise ApiError(413, "That design is too big to save.")
+        if kind == "cloak" and not data.startswith("data:image/png;base64,"):
+            raise ApiError(400, "Cloaks are saved as a PNG.")
+        if kind == "hat":
+            try:
+                v = json.loads(data)
+                assert isinstance(v.get("vox"), list)
+            except Exception:
+                raise ApiError(400, "That isn't a Hat Maker project.")
+        thumb = str(body.get("thumb") or "")
+        if thumb and (not thumb.startswith("data:image/png;base64,") or len(thumb) > MAX_THUMB_BYTES):
+            thumb = ""
+        extra = body.get("extra") if isinstance(body.get("extra"), dict) else {}
+        extra = {k: extra[k] for k in ("frametime", "description", "price", "frames", "resolution") if k in extra}
+        public = 1 if body.get("public") else 0
+        now = self.now()
+        did = body.get("id")
+        if did:
+            d = self.db.one("SELECT * FROM designs WHERE id=?", did)
+            if not d or d["account_id"] != acc["id"]:
+                raise ApiError(404, "That design isn't yours.")
+            self.db.run("UPDATE designs SET name=?, item_id=?, data=?, extra=?, thumb=?, public=?, updated_at=? WHERE id=?",
+                        name, item_id, data, json.dumps(extra), thumb, public, now, did)
+        else:
+            n = self.db.one("SELECT COUNT(*) n FROM designs WHERE account_id=?", acc["id"])["n"]
+            if n >= MAX_DESIGNS:
+                raise ApiError(400, "You have %d designs, the most you can keep. Delete one first." % MAX_DESIGNS)
+            did = self.db.run("INSERT INTO designs(account_id,kind,name,item_id,data,extra,thumb,public,created_at,updated_at) "
+                              "VALUES(?,?,?,?,?,?,?,?,?,?)", acc["id"], kind, name, item_id, data, json.dumps(extra),
+                              thumb, public, now, now).lastrowid
+        return {"ok": True, "id": did}
+
+    def delete_design(self, acc, did):
+        d = self.db.one("SELECT * FROM designs WHERE id=?", did)
+        if not d or (d["account_id"] != acc["id"] and acc["role"] == "player"):
+            raise ApiError(404, "That design isn't yours.")
+        self.db.run("DELETE FROM designs WHERE id=?", did)
+        self.db.run("DELETE FROM design_likes WHERE design_id=?", did)
+        if d["account_id"] != acc["id"]:
+            self.audit(acc["name"], "delete-design", "%s (#%d)" % (d["name"], did))
+        return {"ok": True}
+
+    def like_design(self, acc, did):
+        d = self.db.one("SELECT * FROM designs WHERE id=? AND public=1", did)
+        if not d:
+            raise ApiError(404, "That design isn't shared.")
+        with self.db.tx() as c:
+            if c.execute("SELECT 1 FROM design_likes WHERE design_id=? AND account_id=?", (did, acc["id"])).fetchone():
+                c.execute("DELETE FROM design_likes WHERE design_id=? AND account_id=?", (did, acc["id"]))
+            else:
+                c.execute("INSERT INTO design_likes(design_id,account_id) VALUES(?,?)", (did, acc["id"]))
+            c.execute("UPDATE designs SET likes=(SELECT COUNT(*) FROM design_likes WHERE design_id=?) WHERE id=?", (did, did))
+        return {"ok": True}
+
+    def publish(self, actor, body):
+        """Adds a hat or cloak to the server's shop: PlebioAPI saves the file, adds the item and reloads."""
+        kind = str(body.get("kind") or "")
+        item_id = str(body.get("itemId") or "")
+        name = str(body.get("name") or "").strip()[:40]
+        if kind not in DESIGN_KINDS:
+            raise ApiError(400, "Pick hat or cloak.")
+        if not ITEM_ID_RE.match(item_id):
+            raise ApiError(400, "Item ids are 2-32 lowercase letters, digits or _.")
+        if any(i["id"] == item_id for i in self.catalog()):
+            raise ApiError(409, "The shop already has an item called %s. Pick another id." % item_id)
+        if not name:
+            raise ApiError(400, "Give it a name.")
+        try:
+            price = int(body.get("price"))
+        except (TypeError, ValueError):
+            raise ApiError(400, "Price is a whole number (-1 = not for sale).")
+        if price < -1 or price > 10 ** 9:
+            raise ApiError(400, "Price is a whole number (-1 = not for sale).")
+        data = str(body.get("file") or "")
+        if kind == "cloak":
+            prefix = "data:image/png;base64,"
+            if not data.startswith(prefix):
+                raise ApiError(400, "Cloaks are a PNG.")
+            raw = data[len(prefix):]
+        else:
+            try:
+                json.loads(data)
+            except ValueError:
+                raise ApiError(400, "Hats are a .bbmodel (JSON).")
+            raw = base64.b64encode(data.encode("utf-8")).decode("ascii")
+        if len(raw) > MAX_DESIGN_BYTES:
+            raise ApiError(413, "That file is too big for the shop (8 MB at most).")
+        item = {"id": item_id, "name": name, "category": kind, "price": price,
+                "description": str(body.get("description") or "").strip()[:100]}
+        for k in ("collection", "creator"):
+            v = str(body.get(k) or "").strip()[:40]
+            if v:
+                item[k] = v
+        if kind == "cloak":
+            try:
+                ft = int(body.get("frametime") or 0)
+            except (TypeError, ValueError):
+                ft = 0
+            if 20 <= ft <= 2000:
+                item["frametime"] = ft
+        cid = self.queue(actor["name"], "*", "additem", [json.dumps(item), raw])
+        if body.get("designId"):
+            self.db.run("UPDATE designs SET published=? WHERE id=?", item_id, body.get("designId"))
+        self.audit(actor["name"], "publish", "%s %s (%s, %d)" % (kind, item_id, name, price))
+        return {"ok": True, "id": cid}
+
+    def audit_page(self, q="", before=None):
+        args = []
+        where = "1=1"
+        if q:
+            like = "%" + str(q)[:40].replace("%", "") + "%"
+            where = "(actor LIKE ? OR action LIKE ? OR detail LIKE ?)"
+            args += [like, like, like]
+        if before:
+            where += " AND id<?"
+            args.append(int(before))
+        rows = self.db.all("SELECT * FROM audit WHERE " + where + " ORDER BY id DESC LIMIT ?", *(args + [PAGE + 1]))
+        return {"audit": rows[:PAGE], "more": len(rows) > PAGE}
+
     def admin_search(self, q):
         q = str(q or "").lower()
         like = "%" + q.replace("%", "").replace("_", "\\_") + "%"
@@ -767,7 +1184,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Security-Policy",
-                         "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+                         "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; "
                          "script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 
     def body(self, limit=64 * 1024):
@@ -802,7 +1219,7 @@ class Handler(BaseHTTPRequestHandler):
         if not acc and required:
             raise ApiError(401, "Sign in first.")
         if acc and role and ROLES.index(acc["role"]) < ROLES.index(role):
-            raise ApiError(403, "Admins only.")
+            raise ApiError(403, "Owners only." if role == "owner" else "Admins only.")
         return acc
 
     def server_auth(self):
@@ -882,9 +1299,35 @@ class Handler(BaseHTTPRequestHandler):
     def web_api(self, method, route, url):
         p = self.panel
         q = parse_qs(url.query)
+        one = lambda k, d="": (q.get(k) or [d])[0]
         if method == "GET" and route == "info":
-            return self.send_json(200, {"site": p.cfg.site_name, "openRegistration": p.cfg.open_registration,
-                                        "server": p.server_status()})
+            return self.send_json(200, {"ok": True, **p.public_info()})
+        if method == "GET" and route == "leaderboard":
+            return self.send_json(200, {"ok": True, **p.leaderboard(one("offset", "0"), one("limit", "25"))})
+        if method == "GET" and route == "shop":
+            return self.send_json(200, {"ok": True, "catalog": p.catalog(), "currency": p.server_status()["currency"]})
+        # ---------- designs (hat and cloak makers) ----------
+        if method == "GET" and route == "designs/public":
+            viewer = self.web_user(required=False)
+            return self.send_json(200, {"ok": True, **p.public_designs(one("kind"), one("sort", "new"), one("offset", "0"), viewer)})
+        if method == "GET" and route == "designs/get":
+            viewer = self.web_user(required=False)
+            try:
+                did = int(one("id", "0"))
+            except ValueError:
+                did = 0
+            return self.send_json(200, {"ok": True, "design": p.get_design(did, viewer)})
+        if method == "GET" and route == "designs/mine":
+            return self.send_json(200, {"ok": True, "designs": p.my_designs(self.web_user())})
+        if method == "POST" and route == "designs/save":
+            acc = self.web_user()
+            return self.send_json(200, p.save_design(acc, self.body(limit=MAX_DESIGN_BYTES + 400 * 1024)))
+        if method == "POST" and route == "designs/delete":
+            acc = self.web_user()
+            return self.send_json(200, p.delete_design(acc, int(self.body().get("id") or 0)))
+        if method == "POST" and route == "designs/like":
+            acc = self.web_user()
+            return self.send_json(200, p.like_design(acc, int(self.body().get("id") or 0)))
         if method == "POST" and route == "register":
             b = self.body()
             acc = p.web_register(str(b.get("name") or ""), b.get("code"), b.get("password"), self.address())
@@ -923,11 +1366,45 @@ class Handler(BaseHTTPRequestHandler):
         # ---------- admin ----------
         if method == "GET" and route == "admin/players":
             self.web_user(role="admin")
-            return self.send_json(200, {"ok": True, "players": p.admin_search((q.get("q") or [""])[0]),
+            return self.send_json(200, {"ok": True, **p.admin_players(one("q"), one("filter", "all"), one("sort", "coins"),
+                                                                        one("offset", "0")),
                                         "server": p.server_status()})
+        if method == "GET" and route == "admin/dashboard":
+            self.web_user(role="admin")
+            return self.send_json(200, {"ok": True, **p.dashboard()})
+        if method == "POST" and route == "admin/note":
+            actor = self.web_user(role="admin")
+            b = self.body()
+            if b.get("delete"):
+                p.delete_note(actor, int(b.get("delete")))
+            else:
+                p.add_note(actor, str(b.get("name") or ""), b.get("text"))
+            return self.send_json(200, {"ok": True, "notes": p.notes(str(b.get("name") or ""))})
+        if method == "POST" and route == "admin/announce":
+            actor = self.web_user(role="admin")
+            b = self.body()
+            if b.get("clear"):
+                p.clear_announcement(actor)
+                return self.send_json(200, {"ok": True})
+            return self.send_json(200, p.announce(actor, b))
+        if method == "GET" and route == "admin/client":
+            self.web_user(role="admin")
+            return self.send_json(200, {"ok": True, "client": p.client_release(), "versions": p.client_versions()})
+        if method == "POST" and route == "admin/client":
+            actor = self.web_user(role="owner")
+            return self.send_json(200, p.set_client_release(actor, self.body()))
+        if method == "POST" and route == "admin/publish":
+            actor = self.web_user(role="admin")
+            return self.send_json(200, p.publish(actor, self.body(limit=MAX_DESIGN_BYTES + 400 * 1024)))
+        if method == "GET" and route == "admin/commands":
+            self.web_user(role="admin")
+            rows = p.db.all("SELECT id, created_at, by_name, target, action, status, result FROM commands "
+                            "ORDER BY id DESC LIMIT 50")
+            return self.send_json(200, {"ok": True, "commands": rows})
         if method == "GET" and route == "admin/player":
             self.web_user(role="admin")
-            return self.send_json(200, {"ok": True, "catalog": p.catalog(), **p.admin_player((q.get("name") or [""])[0])})
+            name = one("name")
+            return self.send_json(200, {"ok": True, "catalog": p.catalog(), "notes": p.notes(name), **p.admin_player(name)})
         if method == "POST" and route == "admin/command":
             actor = self.web_user(role="admin")
             return self.send_json(200, p.admin_command(actor, self.body()))
@@ -936,7 +1413,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, p.admin_account(actor, self.body()))
         if method == "GET" and route == "admin/audit":
             self.web_user(role="admin")
-            return self.send_json(200, {"ok": True, "audit": p.db.all("SELECT * FROM audit ORDER BY id DESC LIMIT 200")})
+            before = one("before")
+            return self.send_json(200, {"ok": True, **p.audit_page(one("q"), int(before) if before.isdigit() else None)})
         raise ApiError(404, "Not found.")
 
     def client_api(self, route):
@@ -953,6 +1431,8 @@ class Handler(BaseHTTPRequestHandler):
         if route == "logout":
             p.forget_game_token(b.get("token"))
             return self.send_json(200, {"ok": True})
+        if route == "version":
+            return self.send_json(200, p.client_version(b.get("version"), b.get("platform")))
         raise ApiError(404, "Not found.")
 
     def server_api(self, method, route, url):

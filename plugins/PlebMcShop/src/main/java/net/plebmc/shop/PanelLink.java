@@ -20,11 +20,11 @@ import com.google.gson.Gson;
 final class PanelLink {
 
 	private final Gson gson = new Gson();
-	private final Website.Http http;
+	private final PanelHttp http;
 	final String url;
 	private final String key;
 
-	PanelLink(Website.Http http, String url, String key) {
+	PanelLink(PanelHttp http, String url, String key) {
 		this.http = http;
 		this.url = url == null ? "" : url.trim().replaceAll("/+$", "");
 		this.key = key == null ? "" : key.trim();

@@ -11,11 +11,10 @@ work on every server behind the proxy.
   weekly quests in **categories**: by default **General** (counts on every server) and
   **PlebNite** (counts only on PlebNite). The client shows All / General / PlebNite.
 - **Spending**: hats and HD cloaks, in shop collections (PlebMc, Partners, ...). Everyone on the PlebMc client sees each other's (per server).
-- **plebmc.top login**: players log in to the client with their website (NamelessMC)
-  account and see their website name and rank (Right Shift > Account), and log out.
-
-Players on other clients still earn coins (they get chat messages instead of popups) and
-can spend them once they use the PlebMc client.
+- **PlebMc accounts**: players sign in to their PlebMc account (the panel, `panel/`), which
+  proves who they are on a cracked server. Admin and owner accounts get the client's admin menu.
+- **Publish from the panel**: hats and cloaks made in the panel's makers go straight into the
+  shop (the file is saved, the item is added to `items:` and the shop reloads).
 
 Quest events (kills, wins, matches...) come from the small **PlebMcBridge** plugin on each
 backend server (`plugins/PlebMcBridge`). The protocol is in `docs/PLEBMC.md`.
@@ -32,10 +31,7 @@ Your items, collections and quests are never touched.
    (Spigot/Paper/Purpur 1.13+) and restart them.
 3. **Wins (PlebNite):** in `plugins/BattleRoyaleX/config.yml`, under
    `Executed-Commands > Player-Win`, add `- plebquest %player% win`, then `/brx reload`.
-4. **Website login:** on plebmc.top, StaffCP > Configuration > API: turn the API on and copy
-   the key into `website.api-key` in the proxy's `plugins/PlebioAPI/config.yml`. Under
-   StaffCP > Integrations > Minecraft, keep Minecraft linking on and turn "UUID linking" off
-   (Eaglercraft names usually aren't Mojang accounts, so the website can't look them up).
+4. **Accounts:** set up the PlebMc Panel and fill in `accounts:` (see below).
 5. Edit `plugins/PlebioAPI/config.yml` on the proxy if you like, then `/plebshop reload`.
 
 ## Quest categories
@@ -93,21 +89,6 @@ Only players on the PlebMc client earn any of this (`plebclient-only: true`, the
 Players on other clients get no login rewards, online-time coins or quest progress. Coins
 they already had are kept; set `plebclient-only: false` to let everyone earn again.
 
-## plebmc.top login
-
-NamelessMC's API can't check an email and password, so players link once instead:
-
-1. Log in on plebmc.top (email and password, as usual).
-2. Account > Connections > Minecraft > **Link**. The site shows a code (`/verify ABC123`).
-3. In the client: Right Shift > **Account**, type the code, **Log in**.
-
-The proxy sends the code to NamelessMC (`integration/verify`) with the API key, which links
-this Minecraft account to the website account. On every join after that the proxy looks
-the account up (`users/integration_id:minecraft:<uuid>`) and the client shows
-"Logged in as <name>" with their website groups. **Log out** in the client (or unlinking
-on the website) removes the link; they can link again with a new code.
-Passwords never go through the game, and the API key never leaves the proxy.
-
 ## Commands on the proxy (`plebshop.admin`)
 
 | Command | What |
@@ -126,7 +107,7 @@ Passwords never go through the game, and the API key never leaves the proxy.
 
 Host the **PlebMc Panel** (`panel/` in this repo, steps in `panel/README.md`) on a VPS and
 set `accounts:` in `config.yml`. Then a player must sign in to the account that owns their
-name before they can buy, equip, link the website or open the admin menu, and a name with
+name before they can buy, equip or open the admin menu, and a name with
 an account that doesn't sign in within `sign-in-seconds` is kicked. It doesn't use IPs or
 nLogin sessions, so Eaglercraft players sharing the proxy's IP can't ride on each other.
 
@@ -142,7 +123,7 @@ The PlebMc client itself can't be used without an account: it opens on a start s
 (Sign in / Create account) that talks to the panel, and you then play under that account's
 name. The server signs you in with the same sign-in automatically when you join.
 
-Admins manage coins, cosmetics, kicks, locks and password resets on the panel's website;
+Admins manage coins, cosmetics, kicks, locks, password resets, announcements and new shop items on the panel's website;
 PlebioAPI applies the changes within seconds. With accounts on, the staff lock below is
 skipped, and `/adminlogin` needs an account sign-in instead of nLogin's `/login`.
 
@@ -153,7 +134,7 @@ gets the Owner's UUID, so the proxy needs a login plugin to know who is who.
 
 **With nLogin on the proxy (recommended, what plebmc.top runs):** nothing to set up. PlebioAPI
 asks nLogin whether each player has typed `/login` this session. Until they have, nothing on
-their account can change: no admin menu, no buying or equipping, no website link or unlink,
+their account can change: no admin menu, no buying or equipping,
 and in-game `/plebshop` is refused. The admin door appears within 2 seconds of `/login`.
 Make sure staff names are registered in nLogin with strong passwords (an unregistered name
 can be registered by whoever joins with it first). The staff lock below is skipped when
@@ -209,14 +190,14 @@ What it does:
   for 10 minutes. Without the password the proxy refuses the login before any server sees it.
 - Java players (Forge, vanilla) can't use a protected name unless the proxy is in online mode.
 - The admin menu and in-game `/plebshop` also need a name that gave its password at this
-  login. If a website Owner/staff name or a `plebshop.admin` player shows up unprotected,
+  login. If an admin-role name or a `plebshop.admin` player shows up unprotected,
   that name is locked on the spot (logged in the console) until you set its password.
 - Turn it off with `staff-lock.enabled: false` (not recommended on a cracked server).
 
 ## Admin menu in the client
 
-Players logged in on the website (see above) whose website group is in `admin-menu.groups`
-(default `['Owner']`) get an **Admin** door on the client's home screen. From there they can
+Players signed in to a PlebMc account whose role is in `admin-menu.roles` (default
+`['admin', 'owner']`; set roles on the panel) get an **Admin** door on the client's home screen. From there they can
 see everyone online, give/take/set PlebMc Coins, give or take cosmetics, send a player to
 another server, kick them, broadcast an announcement and reload the config. Every action is
 checked again on the proxy, so a modified client can't use it. Turn it off with

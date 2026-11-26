@@ -131,6 +131,11 @@ public final class BungeeShop extends Plugin implements Listener {
 			signin = new SignIn(bnet, getLogger());
 			signin.mayRegister = p -> !usingNLogin() || nLoginAuthenticated(p);
 			signin.changed = p -> core.authChanged(p);
+			// the admin menu goes by the PlebMc account's role (admin, owner)
+			core.panelRole = p -> {
+				SignIn.Session s = signin.session(p);
+				return s != null && s.signedIn ? s.role : null;
+			};
 			core.signin = signin;
 			configureAccounts();
 		} catch (IOException e) {
@@ -168,8 +173,7 @@ public final class BungeeShop extends Plugin implements Listener {
 		getProxy().getScheduler().schedule(this, core::minute, 1, 1, TimeUnit.MINUTES);
 		getProxy().getScheduler().schedule(this, core::saveIfDirty, 30, 30, TimeUnit.SECONDS);
 		getLogger().info(core.catalog.all().size() + " cosmetics, " + core.quests.allQuests().size() + " quests in "
-				+ core.quests.categories.keySet() + (core.website.configured() ? ", website login via " + core.website.url
-						: ", website login off (set website.url and website.api-key)"));
+				+ core.quests.categories.keySet());
 	}
 
 	@Override
@@ -415,11 +419,11 @@ public final class BungeeShop extends Plugin implements Listener {
 
 	private void configureAccounts() {
 		Cfg c = core.config;
-		panelLink = new PanelLink(Website.REAL, c.str("accounts.url", ""), c.str("accounts.server-key", ""));
+		panelLink = new PanelLink(PanelHttp.REAL, c.str("accounts.url", ""), c.str("accounts.server-key", ""));
 		boolean was = signin.enabled();
 		signin.configure(c, panelLink);
 		if (signin.enabled() && !was) {
-			getLogger().info("PlebMc accounts ON (panel " + panelLink.url + "): coins, shop, website link and admin menu need"
+			getLogger().info("PlebMc accounts ON (panel " + panelLink.url + "): coins, shop and admin menu need"
 					+ " /account login (or the client's Sign in) first");
 			for (ProxiedPlayer p : getProxy().getPlayers()) {
 				signin.joined(p.getUniqueId(), p.getName());
@@ -542,6 +546,22 @@ public final class BungeeShop extends Plugin implements Listener {
 		}
 		case "signout":
 			return signin.signOutName(target) ? "signed out in game" : "not online";
+		case "broadcast":
+			return args.isEmpty() ? "!empty message" : "sent to " + core.announce(args.get(0)) + " players";
+		case "additem": {
+			if (args.size() < 2) {
+				return "!bad upload";
+			}
+			Map<?, ?> item;
+			byte[] file;
+			try {
+				item = gson.fromJson(args.get(0), Map.class);
+				file = java.util.Base64.getDecoder().decode(args.get(1));
+			} catch (RuntimeException e) {
+				return "!bad upload: " + e.getMessage();
+			}
+			return core.publishItem(item, file);
+		}
 		default:
 			break;
 		}
@@ -829,7 +849,7 @@ public final class BungeeShop extends Plugin implements Listener {
 				reply.accept("plebshop adminpass set <name> <password>  - allow a name to unlock the admin menu (/adminlogin)");
 				reply.accept("plebshop adminpass remove <name>");
 				reply.accept("plebshop adminpass list");
-				reply.accept("The name also needs a website group from admin-menu.groups and nLogin /login.");
+				reply.accept("The name also needs a PlebMc account with a role from admin-menu.roles (admin, owner), signed in.");
 				return;
 			}
 			if (on != null) {

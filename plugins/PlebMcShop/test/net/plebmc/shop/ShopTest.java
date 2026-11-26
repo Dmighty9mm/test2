@@ -3,6 +3,7 @@ package net.plebmc.shop;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.logging.Logger;
 
@@ -49,40 +50,6 @@ public class ShopTest {
         }
         long progress(String id) { Map<?, ?> q = quest(id); return q == null ? -1 : ((Number) q.get("progress")).longValue(); }
         boolean done(String id) { Map<?, ?> q = quest(id); return q != null && Boolean.TRUE.equals(q.get("done")); }
-    }
-
-    /** A fake NamelessMC API: one account "Master" linked by code ABC123. */
-    static class FakeSite implements Website.Http {
-        final List<String> calls = new ArrayList<>();
-        String lastBody = "";
-        boolean linked, verified = true, down;
-        String linkedId = "";
-        public Object[] request(String method, String url, String key, String body) throws java.io.IOException {
-            calls.add(method + " " + url + " key=" + key);
-            if (down) throw new java.io.IOException("connect timed out");
-            if (body != null) lastBody = body;
-            if (url.endsWith("/api/v2/integration/verify")) {
-                Map<?, ?> b = new Gson().fromJson(body, Map.class);
-                if (!"ABC123".equals(b.get("code"))) return new Object[] { 400, "{\"error\":\"core:invalid_code\"}" };
-                linked = true; linkedId = (String) b.get("identifier");
-                return new Object[] { 200, "{\"message\":\"ok\"}" };
-            }
-            if (url.endsWith("/integrations/unlink")) {
-                String id = url.substring(url.indexOf("minecraft:") + 10, url.indexOf("/integrations"));
-                if (!new Gson().fromJson(body, Map.class).get("integration").equals("Minecraft")) return new Object[] { 400, "{\"error\":\"core:invalid_integration\"}" };
-                if (!linked || !id.equals(linkedId)) return new Object[] { 400, "{\"error\":\"core:integration_not_linked\"}" };
-                linked = false;
-                return new Object[] { 200, "{\"success\":true}" };
-            }
-            if (url.contains("/api/v2/users/integration_id:minecraft:")) {
-                String id = url.substring(url.lastIndexOf(':') + 1);
-                if (!linked || !id.equals(linkedId)) return new Object[] { 400, "{\"error\":\"nameless:cannot_find_user\"}" };
-                return new Object[] { 200, "{\"id\":7,\"username\":\"Master\",\"displayname\":\"MasterPleb\",\"banned\":false,"
-                        + "\"groups\":[{\"id\":1,\"name\":\"Member\",\"staff\":false,\"order\":5},{\"id\":2,\"name\":\"Owner\",\"staff\":true,\"order\":1}],"
-                        + "\"integrations\":[{\"integration\":\"Minecraft\",\"identifier\":\"" + linkedId + "\",\"username\":\"Webby\",\"verified\":" + verified + "}]}" };
-            }
-            return new Object[] { 404, "{\"error\":\"nameless:invalid_api_method\"}" };
-        }
     }
 
     static FakeNet net;
@@ -426,31 +393,19 @@ public class ShopTest {
         core.fromClient(mighty.id, "{\"type\":\"dev\",\"action\":\"coins\",\"amount\":5}");
         check(mighty.got.size() == got, "old dev messages are ignored");
 
-        // ---- plebmc.top login (a fake NamelessMC) ----
-        FakeSite site = new FakeSite();
-        Cfg withSite = cfg("daily-count: 3", "daily-count: 99", "weekly-count: 2", "weekly-count: 99", "api-key: ''", "api-key: 'secret123'");
-        ShopCore old = core;
-        core = new ShopCore(net, old.store, withSite, log, site);
-        check(core.website.configured() && core.website.url.equals("https://plebmc.top"), "website configured");
+        // ---- admin menu: PlebMc accounts with the admin or owner role, checked on every action ----
+        Map<UUID, String> roles = new HashMap<>();
+        core.panelRole = roles::get;
         P web = join("Webby", "lobby", true);
         Map<?, ?> acc = web.last("account");
-        check(acc != null && Boolean.FALSE.equals(acc.get("linked")) && Boolean.TRUE.equals(acc.get("enabled")), "not linked yet: " + acc);
-        check(String.valueOf(acc.get("linkUrl")).equals("https://plebmc.top/index.php?route=/user/connections"), "link url");
-        check(site.calls.get(0).startsWith("GET https://plebmc.top/index.php?route=/api/v2/users/integration_id:minecraft:" + Website.identifier(web.id))
-                && site.calls.get(0).endsWith("key=secret123"), "lookup call: " + site.calls.get(0));
-        core.fromClient(web.id, "{\"type\":\"link\",\"code\":\"bad code!\"}");
-        check(Boolean.FALSE.equals(web.last("account").get("ok")) && site.calls.size() == 1, "junk code refused without calling the site");
-        core.fromClient(web.id, "{\"type\":\"link\",\"code\":\"WRONG1\"}");
-        check(String.valueOf(web.last("account").get("message")).contains("isn't right"), "wrong code: " + web.last("account"));
-        core.fromClient(web.id, "{\"type\":\"link\",\"code\":\"ABC123\"}");
-        check(String.valueOf(web.last("account").get("message")).contains("Wait"), "link cooldown");
-        Thread.sleep(4100);
-        core.fromClient(web.id, "{\"type\":\"link\",\"code\":\"/verify ABC123\"}");
+        check(acc != null && Boolean.FALSE.equals(acc.get("enabled")) && Boolean.FALSE.equals(acc.get("admin")), "no website login, no admin yet: " + acc);
+        roles.put(web.id, "player");
+        core.authChanged(web.id);
+        check(Boolean.FALSE.equals(web.last("account").get("admin")), "a signed-in player isn't admin");
+        roles.put(web.id, "owner");
+        core.authChanged(web.id);
         acc = web.last("account");
-        check(Boolean.TRUE.equals(acc.get("linked")) && "Master".equals(acc.get("username")) && "MasterPleb".equals(acc.get("displayName")), "linked: " + acc);
-
-        // ---- admin menu: website Owners only, checked on every action ----
-        check(Boolean.TRUE.equals(acc.get("admin")), "Owner gets the admin flag");
+        check(Boolean.TRUE.equals(acc.get("admin")) && "owner".equals(acc.get("role")), "owner gets the admin flag: " + acc);
         P nobody = join("Nobody", "lobby", true);
         check(Boolean.FALSE.equals(nobody.last("account") == null ? Boolean.FALSE : nobody.last("account").get("admin")), "others don't");
         core.fromClient(nobody.id, "{\"type\":\"admin\",\"action\":\"coins\",\"op\":\"set\",\"amount\":999999,\"player\":\"" + nobody.id + "\"}");
@@ -468,72 +423,62 @@ public class ShopTest {
         sleepCooldown();
         core.fromClient(web.id, "{\"type\":\"admin\",\"action\":\"broadcast\",\"message\":\"Hello all\"}");
         check(nobody.last("notify") != null && String.valueOf(nobody.last("notify").get("message")).contains("Hello all"), "broadcast popup");
+        check(core.announce("From the panel") == net.online.size() && String.valueOf(nobody.last("notify").get("message")).contains("From the panel"),
+                "panel announcement");
         sleepCooldown();
         core.fromClient(web.id, "{\"type\":\"admin\",\"action\":\"kick\",\"player\":\"" + web.id + "\"}");
         check(Boolean.FALSE.equals(web.last("admin").get("ok")), "can't kick yourself");
         sleepCooldown();
         core.fromClient(web.id, "{\"type\":\"admin\",\"action\":\"reload\"}");
         check(web.last("admin").get("message").toString().startsWith("Reloaded"), "admin reload");
-        // ---- cracked impostor: same name (so same UUID and website link), but no staff password at login ----
+        // ---- the admin password (/adminlogin) is still needed ----
         net.unverified.add(web.id);
         sleepCooldown();
         core.fromClient(web.id, "{\"type\":\"admin\",\"action\":\"coins\",\"op\":\"set\",\"amount\":999999,\"player\":\"" + web.id + "\"}");
         check(Boolean.FALSE.equals(web.last("admin").get("allowed")) && String.valueOf(web.last("admin").get("message")).contains("/adminlogin"),
-                "unverified Owner name refused: " + web.last("admin"));
-        check(!core.isAdmin(web.id) && net.protectedAsked.contains(web.id), "unverified Owner gets no admin flag and the name gets locked");
+                "owner without the admin password refused: " + web.last("admin"));
         net.unverified.remove(web.id);
-        check(core.isAdmin(web.id), "verified Owner is admin again");
-        // ---- nLogin: someone joined on the Owner's name but hasn't typed /login yet ----
+        check(core.isAdmin(web.id), "admin again with the password");
         net.notLoggedIn.add(web.id);
         check(!core.isAdmin(web.id), "not logged in: no admin");
-        sleepCooldown();
         long webCoins = web.coins();
-        core.fromClient(web.id, "{\"type\":\"admin\",\"action\":\"coins\",\"op\":\"set\",\"amount\":999999,\"player\":\"" + web.id + "\"}");
-        check(Boolean.FALSE.equals(web.last("admin").get("allowed")) && web.coins() == webCoins, "not logged in: admin action refused");
-        int sent = site.calls.size();
-        core.fromClient(web.id, "{\"type\":\"logout\"}");
-        check(site.calls.size() == sent, "not logged in: can't unlink the Owner's website account");
         core.fromClient(web.id, "{\"type\":\"buy\",\"id\":\"halo\"}");
-        check(web.coins() == webCoins, "not logged in: can't spend the Owner's coins");
+        check(web.coins() == webCoins, "not logged in: can't spend");
         net.notLoggedIn.remove(web.id);
-        core.authChanged(web.id);
-        check(Boolean.TRUE.equals(web.last("account").get("admin")), "after /login the admin flag comes back");
-        check(acc.get("groups").toString().equals("[Owner, Member]") && Boolean.TRUE.equals(acc.get("staff")), "groups by rank: " + acc.get("groups"));
-        check(site.lastBody.contains("\"code\":\"ABC123\"") && site.lastBody.contains("\"username\":\"Webby\"") && site.lastBody.contains(Website.identifier(web.id)), "verify body: " + site.lastBody);
-        // next join: logged in straight away, with a popup
-        quit(web);
-        web = join("Webby", "lobby", true);
-        check(Boolean.TRUE.equals(web.last("account").get("linked")), "still logged in after rejoin");
-        check(String.valueOf(web.last("notify").get("message")).contains("Logged in as MasterPleb"), "login popup");
+        roles.remove(web.id);
+        check(!core.isAdmin(web.id), "signed out: no admin");
         admin.clear();
         cmd("info", "Webby");
-        check(admin.get(admin.size() - 1).contains("Master [Owner, Member]"), "info shows website account: " + admin);
-        // log out from the client: unlinks on the website, and can link again
-        Thread.sleep(4100);
-        core.fromClient(web.id, "{\"type\":\"logout\"}");
-        check(Boolean.FALSE.equals(web.last("account").get("linked")) && !site.linked
-                && site.calls.get(site.calls.size() - 1).contains("/integrations/unlink"), "logout unlinks: " + web.last("account"));
-        Thread.sleep(4100);
-        core.fromClient(web.id, "{\"type\":\"link\",\"code\":\"ABC123\"}");
-        check(Boolean.TRUE.equals(web.last("account").get("linked")), "link again after logout");
-        // unlinked on the website: logged out next join
-        site.verified = false;
+        check(admin.get(admin.size() - 1).contains("not signed in"), "info shows the account: " + admin);
         quit(web);
-        web = join("Webby", "lobby", true);
-        check(Boolean.FALSE.equals(web.last("account").get("linked")), "unlinked on the website = logged out");
-        // the website being down doesn't break anything
-        site.down = true;
-        quit(web);
-        web = join("Webby", "lobby", true);
-        check(web.coins() >= 0 && Boolean.FALSE.equals(web.last("account").get("ok")), "website down: error shown, shop still works");
-        site.down = false;
-        // the real client reads it
-        Cosmetics.handle("{\"type\":\"account\",\"enabled\":true,\"linked\":true,\"username\":\"Master\",\"displayName\":\"MasterPleb\",\"groups\":[\"Owner\"],\"staff\":true,\"site\":\"https://plebmc.top\",\"linkUrl\":\"x\"}");
-        check(Cosmetics.account().linked && "Owner".equals(Cosmetics.account().rank()) && "MasterPleb".equals(Cosmetics.account().displayName), "client account");
-        // no key = feature off
-        check(!old.website.configured(), "no api key: login off");
-        quit(web);
-        core = old;
+        quit(nobody);
+
+        // ---- publish a hat or cloak from the panel ----
+        File pubDir = new File(dir, "publish");
+        pubDir.mkdirs();
+        String baseCfg = new String(Files.readAllBytes(Paths.get("src/main/resources/config.yml")), StandardCharsets.UTF_8);
+        Files.write(new File(pubDir, "config.yml").toPath(), baseCfg.getBytes(StandardCharsets.UTF_8));
+        ShopCore pub = new ShopCore(net, new Store(new File(pubDir, "players.yml"), log), Cfg.load(new File(pubDir, "config.yml")), log);
+        pub.folder(pubDir);
+        byte[] png = Files.readAllBytes(Paths.get("src/main/resources/cloaks/plebmc.png"));
+        Map<String, Object> item = new HashMap<>();
+        item.put("id", "panel_cloak"); item.put("name", "Panel's Cloak"); item.put("category", "cloak");
+        item.put("price", 4321.0); item.put("description", "Made on the panel"); item.put("frametime", 90.0);
+        String res = pub.publishItem(item, png);
+        check(res.startsWith("added") && pub.catalog.get("panel_cloak") != null && pub.catalog.get("panel_cloak").price == 4321, "cloak published: " + res);
+        String cfgNow = new String(Files.readAllBytes(new File(pubDir, "config.yml").toPath()), StandardCharsets.UTF_8);
+        check(cfgNow.contains("panel_cloak: {name: 'Panel''s Cloak', category: cloak, texture: 'cloaks/panel_cloak.png'")
+                && cfgNow.startsWith(baseCfg.substring(0, 200)) && new File(pubDir, "cloaks/panel_cloak.png").exists(), "config line and file written");
+        check(pub.publishItem(item, png).startsWith("!"), "same id twice refused");
+        Map<String, Object> bad = new HashMap<>(item);
+        bad.put("id", "broken_hat"); bad.put("category", "hat");
+        res = pub.publishItem(bad, "{not a model".getBytes(StandardCharsets.UTF_8));
+        String after = new String(Files.readAllBytes(new File(pubDir, "config.yml").toPath()), StandardCharsets.UTF_8);
+        check(res.startsWith("!") && !after.contains("broken_hat") && !new File(pubDir, "hats/broken_hat.bbmodel").exists()
+                && pub.catalog.get("panel_cloak") != null, "a broken hat is refused and undone: " + res);
+        check(ShopCore.withItem("a: 1\nitems:\n  x: {name: X}\n\n# after\nb: 2\n", "  y: {name: Y}")
+                .equals("a: 1\nitems:\n  x: {name: X}\n  y: {name: Y}\n\n# after\nb: 2\n"), "line goes at the end of items");
+        check(ShopCore.withItem("a: 1\n", "  y: {name: Y}").contains("items:\n  y: {name: Y}"), "items section made when missing");
 
         // ---- admin commands ----
         admin.clear();

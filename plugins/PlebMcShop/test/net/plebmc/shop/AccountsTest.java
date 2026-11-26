@@ -117,7 +117,7 @@ public class AccountsTest {
     }
 
     /** Local calls skip the proxy the test JVM may have configured. */
-    static final Website.Http DIRECT = (method, url, apiKey, jsonBody) -> {
+    static final PanelHttp DIRECT = (method, url, apiKey, jsonBody) -> {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection(java.net.Proxy.NO_PROXY);
         c.setRequestMethod(method);
         c.setRequestProperty("Authorization", "Bearer " + apiKey);

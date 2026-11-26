@@ -108,13 +108,11 @@ final class ShopCore {
 	/** Players whose client speaks plebmc:shop (sent any shop message). */
 	private final java.util.Set<UUID> clients = new java.util.HashSet<>();
 	private final Map<UUID, Long> lastAction = new HashMap<>();
-	/** plebmc.top logins: the website account of each online player (looked up on join). */
-	private final Website.Http http;
-	Website website;
-	private final Map<UUID, Website.Account> accounts = new HashMap<>();
-	private final java.util.Set<UUID> lookedUp = new java.util.HashSet<>();
-	private final Map<UUID, Long> lastLinkTry = new HashMap<>();
-	private static final long LINK_COOLDOWN_MS = 4000;
+	/**
+	 * The PlebMc account role (player, admin, owner) of a signed-in player, or
+	 * null when they haven't signed in. Set from SignIn by the proxy plugin.
+	 */
+	java.util.function.Function<UUID, String> panelRole;
 
 	/** The plugin folder (cloak textures are read from it); null in tests that don't need it. */
 	private java.io.File folder;
@@ -126,14 +124,9 @@ final class ShopCore {
 	}
 
 	ShopCore(Net net, Store store, Cfg config, Logger log) {
-		this(net, store, config, log, Website.REAL);
-	}
-
-	ShopCore(Net net, Store store, Cfg config, Logger log, Website.Http http) {
 		this.net = net;
 		this.store = store;
 		this.log = log;
-		this.http = http;
 		load(config);
 	}
 
@@ -147,7 +140,6 @@ final class ShopCore {
 		for (String w : quests.warnings) {
 			log.warning(w);
 		}
-		website = new Website(cfg, http);
 		currency = cfg.str("currency-name", "PlebMc Coins");
 		prefix = color(cfg.str("messages.prefix", "&8[&b&lPlebMc&8] &7"));
 		hiddenWorlds.clear();
@@ -232,7 +224,7 @@ final class ShopCore {
 		}
 		broadcastSlots(p);
 		if (firstJoin) {
-			lookupAccount(p, true);
+			sendAccount(p, null, true);
 		}
 	}
 
@@ -266,9 +258,6 @@ final class ShopCore {
 		lastAction.remove(p);
 		worlds.remove(p);
 		clients.remove(p);
-		accounts.remove(p);
-		lookedUp.remove(p);
-		lastLinkTry.remove(p);
 		lastChat.remove(p);
 		Map<String, Object> gone = new LinkedHashMap<>();
 		gone.put(p.toString(), null);
@@ -434,17 +423,7 @@ final class ShopCore {
 			}
 			break;
 		case "account":
-			if (lookedUp.contains(p) || !website.configured()) {
-				sendAccount(p, null, true);
-			} else {
-				lookupAccount(p, false);
-			}
-			break;
-		case "link":
-			link(p, str(m.get("code")));
-			break;
-		case "logout":
-			logout(p);
+			sendAccount(p, null, true);
 			break;
 		case "texture":
 			texture(p, str(m.get("id")));
@@ -459,139 +438,27 @@ final class ShopCore {
 
 	/** The player just logged in (or out) with the login plugin: resend their account and admin flag. */
 	synchronized void authChanged(UUID p) {
-		if (lookedUp.contains(p) || !website.configured()) {
-			sendAccount(p, null, true);
-		}
+		sendAccount(p, null, true);
 	}
 
-	// ==================== plebmc.top login ====================
+	// ==================== account flags ====================
 
-	/** Asks the website which account this player linked (off-thread), then tells the client. */
-	private void lookupAccount(UUID p, boolean greet) {
-		if (!website.configured()) {
-			return;
-		}
-		final Website w = website;
-		net.async(() -> {
-			Website.Result r = w.lookup(p);
-			synchronized (ShopCore.this) {
-				if (!net.online().contains(p)) {
-					return;
-				}
-				lookedUp.add(p);
-				if (r.account != null) {
-					accounts.put(p, r.account);
-				} else if (r.error == null) {
-					accounts.remove(p);
-				}
-				if (r.error != null) {
-					log.warning("website lookup for " + net.name(p) + ": " + r.error);
-				}
-				sendAccount(p, r.error, r.error == null);
-				if (greet && r.account != null) {
-					notify(p, msg("website-login-title", "&bplebmc.top"),
-							msg("website-login-message", "Logged in as %account%").replace("%account%", r.account.displayName));
-				}
-			}
-		});
+	/** The player's PlebMc account role when signed in, or null. */
+	private String role(UUID p) {
+		return panelRole == null ? null : panelRole.apply(p);
 	}
 
-	private void link(UUID p, String code) {
-		if (!website.configured()) {
-			sendAccount(p, "Website login isn't set up on this server.", false);
-			return;
-		}
-		code = code == null ? "" : code.trim();
-		if (code.startsWith("/verify ")) {
-			code = code.substring(8).trim(); // pasted the whole command
-		}
-		if (!code.matches("[A-Za-z0-9]{4,64}")) {
-			sendAccount(p, "Paste the code from the website (letters and numbers).", false);
-			return;
-		}
-		long now = System.currentTimeMillis();
-		Long last = lastLinkTry.get(p);
-		if (last != null && now - last < LINK_COOLDOWN_MS) {
-			sendAccount(p, "Wait a few seconds and try again.", false);
-			return;
-		}
-		lastLinkTry.put(p, now);
-		final String c = code;
-		final String name = net.name(p);
-		final Website w = website;
-		net.async(() -> {
-			Website.Result r = w.link(p, name, c);
-			synchronized (ShopCore.this) {
-				if (!net.online().contains(p)) {
-					return;
-				}
-				lookedUp.add(p);
-				if (r.account != null) {
-					accounts.put(p, r.account);
-					log.info(name + " logged in as " + r.account.username + " on the website");
-					sendAccount(p, "Logged in as " + r.account.displayName + "!", true);
-				} else {
-					sendAccount(p, r.error, false);
-				}
-			}
-		});
-	}
-
-	/** Unlinks the player's Minecraft account on the website (off-thread). */
-	private void logout(UUID p) {
-		if (!website.configured() || !accounts.containsKey(p)) {
-			sendAccount(p, null, true);
-			return;
-		}
-		long now = System.currentTimeMillis();
-		Long last = lastLinkTry.get(p);
-		if (last != null && now - last < LINK_COOLDOWN_MS) {
-			sendAccount(p, "Wait a few seconds and try again.", false);
-			return;
-		}
-		lastLinkTry.put(p, now);
-		final Website w = website;
-		final String name = net.name(p);
-		net.async(() -> {
-			String err = w.unlink(p);
-			synchronized (ShopCore.this) {
-				if (!net.online().contains(p)) {
-					return;
-				}
-				if (err == null) {
-					accounts.remove(p);
-					log.info(name + " logged out of the website (unlinked)");
-					sendAccount(p, "Logged out. Link again any time with a new code.", true);
-				} else {
-					sendAccount(p, err, false);
-				}
-			}
-		});
-	}
-
-	/** The website account of an online player, or null. */
-	synchronized Website.Account account(UUID p) {
-		return accounts.get(p);
-	}
-
+	/** Tells the client whether it may open the admin menu (the plebmc.top website login is gone). */
 	private void sendAccount(UUID p, String message, boolean ok) {
 		Map<String, Object> m = new LinkedHashMap<>();
 		m.put("type", "account");
-		m.put("enabled", website.configured());
-		Website.Account a = accounts.get(p);
-		m.put("linked", a != null);
-		if (a != null) {
-			m.put("username", a.username);
-			m.put("displayName", a.displayName);
-			m.put("groups", a.groups);
-			m.put("staff", a.staff);
-			if (a.staff && config.bool("staff-lock.protect-website-staff", true) && !net.staffVerified(p)) {
-				net.protectStaff(p);
-			}
+		m.put("enabled", false);
+		m.put("linked", false);
+		String r = role(p);
+		if (r != null) {
+			m.put("role", r);
 		}
 		m.put("admin", isAdmin(p));
-		m.put("site", website.url);
-		m.put("linkUrl", website.connectionsUrl());
 		if (message != null) {
 			m.put("message", message);
 			m.put("ok", ok);
@@ -720,9 +587,9 @@ final class ShopCore {
 	// ==================== admin menu ====================
 
 	/**
-	 * True when this player may use the admin menu: logged in on the website
-	 * with a group from admin-menu.groups (Owner by default). Checked again on
-	 * every admin message, so a client can't just claim it.
+	 * True when this player may use the admin menu: signed in to a PlebMc
+	 * account whose role is in admin-menu.roles (admin and owner by default).
+	 * Checked again on every admin message, so a client can't just claim it.
 	 */
 	synchronized boolean isAdmin(UUID p) {
 		if (!adminGroup(p)) {
@@ -732,32 +599,29 @@ final class ShopCore {
 			return false;
 		}
 		if (!net.staffVerified(p)) {
-			// right website group but the name wasn't password-checked: on a cracked
-			// server that could be anyone typing the Owner's name
+			// the admin password (/adminlogin) wasn't given this session
 			net.protectStaff(p);
 			return false;
 		}
 		return true;
 	}
 
-	/** Logged in on the website with a group from admin-menu.groups (says nothing about who typed the name). */
+	/** Signed in to an account with a role from admin-menu.roles (admin, owner). */
 	private boolean adminGroup(UUID p) {
 		if (!config.bool("admin-menu.enabled", true)) {
 			return false;
 		}
-		Website.Account a = accounts.get(p);
-		if (a == null) {
+		String r = role(p);
+		if (r == null) {
 			return false;
 		}
-		List<String> allowed = config.list("admin-menu.groups");
-		if (allowed.isEmpty() && !config.has("admin-menu.groups")) {
-			allowed = Arrays.asList("Owner");
+		List<String> allowed = config.list("admin-menu.roles");
+		if (allowed.isEmpty()) {
+			allowed = Arrays.asList("admin", "owner");
 		}
-		for (String g : a.groups) {
-			for (String ok : allowed) {
-				if (g != null && g.trim().equalsIgnoreCase(ok.trim())) {
-					return true;
-				}
+		for (String ok : allowed) {
+			if (r.equalsIgnoreCase(ok.trim())) {
+				return true;
 			}
 		}
 		return false;
@@ -771,7 +635,7 @@ final class ShopCore {
 			r.put("ok", false);
 			r.put("message", adminGroup(p)
 					? "Type /adminlogin <admin password> in chat first (set in the proxy console: plebshop adminpass set <name> <password>)."
-					: "Only website Owners can use the admin menu.");
+					: "Only PlebMc admins and owners can use the admin menu (sign in to your account first).");
 			send(p, r);
 			return;
 		}
@@ -884,16 +748,7 @@ final class ShopCore {
 				ok = false;
 				break;
 			}
-			text = text.length() > 200 ? text.substring(0, 200) : text;
-			String title = color(config.str("admin-menu.broadcast-title", "&b&lAnnouncement"));
-			for (UUID o : net.online()) {
-				if (clients.contains(o)) {
-					notify(o, title, color(text));
-				} else {
-					net.chat(o, prefix + color(text));
-				}
-			}
-			msg = "Sent to " + net.online().size() + " players.";
+			msg = "Sent to " + announce(text) + " players.";
 			break;
 		}
 		case "reload":
@@ -931,10 +786,10 @@ final class ShopCore {
 			pm.put("server", net.server(o));
 			pm.put("coins", d == null ? 0 : d.coins);
 			pm.put("client", clients.contains(o));
-			Website.Account a = accounts.get(o);
-			if (a != null) {
-				pm.put("account", a.username);
-				pm.put("groups", a.groups);
+			String pr = role(o);
+			if (pr != null) {
+				pm.put("account", net.name(o));
+				pm.put("groups", Arrays.asList(pr));
 			}
 			List<String> owned = new ArrayList<>();
 			if (d != null) {
@@ -1087,6 +942,164 @@ final class ShopCore {
 		}
 	}
 
+	/** An announcement to everyone online (a popup on the PlebMc client, chat elsewhere). Returns how many got it. */
+	synchronized int announce(String text) {
+		text = text.length() > 200 ? text.substring(0, 200) : text;
+		String title = color(config.str("admin-menu.broadcast-title", "&b&lAnnouncement"));
+		for (UUID o : net.online()) {
+			if (clients.contains(o)) {
+				notify(o, title, color(text));
+			} else {
+				net.chat(o, prefix + color(text));
+			}
+		}
+		return net.online().size();
+	}
+
+	private static final java.util.regex.Pattern ITEM_ID = java.util.regex.Pattern.compile("[a-z0-9_]{2,32}");
+
+	private static String yamlQuote(String v) {
+		return "'" + v.replace("'", "''").replace("\r", " ").replace("\n", " ") + "'";
+	}
+
+	/**
+	 * Adds a hat or cloak made on the panel to the shop: saves the file in the
+	 * plugin folder, adds the item to config.yml's items and reloads. Nothing
+	 * else in config.yml changes. Returns what happened ("!" first on failure).
+	 */
+	synchronized String publishItem(Map<?, ?> item, byte[] file) {
+		if (folder == null) {
+			return "!no plugin folder";
+		}
+		String id = str(item.get("id"));
+		String category = str(item.get("category"));
+		String name = str(item.get("name"));
+		if (id == null || !ITEM_ID.matcher(id).matches()) {
+			return "!bad item id";
+		}
+		if (!"hat".equals(category) && !"cloak".equals(category)) {
+			return "!only hats and cloaks can be published";
+		}
+		if (catalog.get(id) != null) {
+			return "!the shop already has " + id;
+		}
+		if (name == null || name.trim().isEmpty()) {
+			name = id;
+		}
+		if (file == null || file.length == 0 || file.length > 8 << 20) {
+			return "!the file is empty or over 8 MB";
+		}
+		String rel = "cloak".equals(category) ? "cloaks/" + id + ".png" : "hats/" + id + ".bbmodel";
+		java.io.File out = new java.io.File(folder, rel);
+		java.io.File cfgFile = new java.io.File(folder, "config.yml");
+		if (out.exists()) {
+			return "!" + rel + " already exists";
+		}
+		long price;
+		try {
+			price = Long.parseLong(String.valueOf(item.get("price") instanceof Number ? ((Number) item.get("price")).longValue() : item.get("price")));
+		} catch (NumberFormatException e) {
+			return "!bad price";
+		}
+		StringBuilder line = new StringBuilder("  ").append(id).append(": {name: ").append(yamlQuote(name.trim()))
+				.append(", category: ").append(category).append(", ")
+				.append("cloak".equals(category) ? "texture: " : "model: ").append(yamlQuote(rel));
+		if (item.get("frametime") instanceof Number) {
+			line.append(", frametime: ").append(((Number) item.get("frametime")).intValue());
+		}
+		line.append(", price: ").append(price);
+		for (String k : new String[] { "collection", "creator" }) {
+			String v = str(item.get(k));
+			if (v != null && !v.trim().isEmpty()) {
+				line.append(", ").append(k).append(": ").append(yamlQuote(v.trim()));
+			}
+		}
+		String desc = str(item.get("description"));
+		line.append(", description: ").append(yamlQuote(desc == null ? "" : desc.trim())).append("}");
+		String before;
+		try {
+			before = new String(java.nio.file.Files.readAllBytes(cfgFile.toPath()), java.nio.charset.StandardCharsets.UTF_8);
+		} catch (java.io.IOException e) {
+			return "!can't read config.yml: " + e.getMessage();
+		}
+		String after = withItem(before, line.toString());
+		try {
+			Cfg.load(new java.io.ByteArrayInputStream(after.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+			out.getParentFile().mkdirs();
+			java.nio.file.Files.write(out.toPath(), file);
+			java.nio.file.Files.write(cfgFile.toPath(), after.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			if (reloader != null) {
+				reloader.run();
+			} else {
+				load(Cfg.load(cfgFile));
+			}
+		} catch (java.io.IOException | RuntimeException e) {
+			undoPublish(out, cfgFile, before);
+			return "!couldn't add it: " + e.getMessage();
+		}
+		if (catalog.get(id) == null) {
+			String why = catalog.warnings().isEmpty() ? "it didn't load" : catalog.warnings().get(catalog.warnings().size() - 1);
+			undoPublish(out, cfgFile, before);
+			return "!the shop refused it: " + why;
+		}
+		refreshAll();
+		log.info("Published " + category + " " + id + " (" + name + ", " + price + ") from the panel");
+		return "added " + id + " to the shop";
+	}
+
+	private void undoPublish(java.io.File out, java.io.File cfgFile, String before) {
+		out.delete();
+		try {
+			java.nio.file.Files.write(cfgFile.toPath(), before.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			if (reloader != null) {
+				reloader.run();
+			} else {
+				load(Cfg.load(cfgFile));
+			}
+		} catch (java.io.IOException | RuntimeException e) {
+			log.warning("Couldn't put config.yml back: " + e);
+		}
+	}
+
+	/** config.yml text with one more line at the end of the items section (or a new items section). */
+	static String withItem(String text, String line) {
+		String nl = text.contains("\r\n") ? "\r\n" : "\n";
+		List<String> lines = new ArrayList<>(Arrays.asList(text.replace("\r\n", "\n").split("\n", -1)));
+		int start = -1;
+		for (int i = 0; i < lines.size(); i++) {
+			if (lines.get(i).startsWith("items:")) {
+				start = i;
+				break;
+			}
+		}
+		if (start < 0) {
+			while (!lines.isEmpty() && lines.get(lines.size() - 1).trim().isEmpty()) {
+				lines.remove(lines.size() - 1);
+			}
+			lines.add("");
+			lines.add("items:");
+			lines.add(line);
+			lines.add("");
+			return String.join(nl, lines);
+		}
+		if (lines.get(start).trim().equals("items: {}")) {
+			lines.set(start, "items:");
+		}
+		int last = start;
+		for (int i = start + 1; i < lines.size(); i++) {
+			String l = lines.get(i);
+			if (l.trim().isEmpty() || l.startsWith("#")) {
+				continue;
+			}
+			if (!l.startsWith(" ") && !l.startsWith("\t")) {
+				break;
+			}
+			last = i;
+		}
+		lines.add(last + 1, line);
+		return String.join(nl, lines);
+	}
+
 	private void refreshAll() {
 		for (UUID o : net.online()) {
 			if (clients.contains(o)) {
@@ -1226,8 +1239,8 @@ final class ShopCore {
 				s.reply(color("&7Hat: &f" + d.equipped.getOrDefault(Catalog.HAT, "none") + "  &7Cloak: &f"
 						+ d.equipped.getOrDefault(Catalog.CLOAK, "none")));
 				s.reply(color("&7Quests done: &f" + (d.done.isEmpty() ? "none" : String.join(", ", d.done))));
-				Website.Account acc = accounts.get(id);
-				s.reply(color("&7Website: &f" + (acc == null ? "not logged in (or offline)" : acc.username + " " + acc.groups)));
+				String r = role(id);
+				s.reply(color("&7PlebMc account: &f" + (r == null ? "not signed in (or offline)" : "signed in, " + r)));
 			}
 			return;
 		}

@@ -5,16 +5,6 @@
 
 currency-name: 'PlebMc Coins'
 
-# Log in with a plebmc.top account. NamelessMC can't check passwords over its API, so
-# players link once: on the website, Account > Connections > Minecraft > Link shows a
-# code, and they type it in the client (Right Shift > Account). After that they're logged
-# in on every join. Get the key in the website's StaffCP > Configuration > API (turn the
-# API on). The key stays on the proxy. Leave api-key empty to turn website login off.
-website:
-  url: 'https://plebmc.top'
-  api-key: ''
-  integration: 'Minecraft'
-
 # Quest days and the daily login use this time zone. Empty = the proxy's.
 timezone: 'America/Chicago'
 
@@ -101,12 +91,12 @@ hidden-in-worlds: []
 
 # The admin menu in the PlebMc client (Right Shift > Admin): online players with their coins
 # and cosmetics, give/take/set coins, give/take cosmetics, send a player to a server, kick,
-# announcements to everyone, and reload. Only for players logged in on the website (Right
-# Shift > Account) whose website groups include one of these. The proxy checks it again for
+# announcements to everyone, and reload. Only for players signed in to a PlebMc account
+# (the panel) whose role is one of these. The proxy checks it again for
 # every action, and logs each one in the console.
 admin-menu:
   enabled: true
-  groups: ['Owner']
+  roles: ['admin', 'owner']
   broadcast-title: '&b&lAnnouncement'
   # A second password just for the admin menu: /login, then /adminlogin <password>.
   # Set it in the proxy console: plebshop adminpass set <name> <password>
@@ -116,7 +106,7 @@ admin-menu:
 # Logins: with nLogin on the proxy, account changes and the admin menu need /login first
 # (nothing to set). The staff lock below is only used without nLogin.
 # Staff lock: on a cracked (offline-mode) server anyone can type the Owner's name and
-# get the Owner's UUID, rank and website link. Protected names need a password at login
+# get the Owner's UUID and rank. Protected names need a password at login
 # (the Eaglercraft password screen). Set them in the proxy console:
 #   plebshop staff set <name> <password>
 # Needs plugins/EaglercraftXBungee/authservice.yml: enable_authentication_system: true
@@ -125,13 +115,11 @@ admin-menu:
 # for a name that gave its password at this login.
 staff-lock:
   enabled: true
-  # names linked to a website staff group get locked automatically (until you set a password)
-  protect-website-staff: true
 
 # PlebMc accounts: the real fix for players spending each other's coins. Host the panel
 # (panel/ in this repo, see panel/README.md) on your VPS, then fill these in and
 # /plebshop reload. With accounts on, a player has to sign in to the account that owns
-# their name before they can buy, equip, link the website, or open the admin menu:
+# their name before they can buy, equip or open the admin menu:
 #   /account login <password>   (any client; the password never reaches a server or the log)
 #   Right Shift > Sign in       (PlebMc client; "Remember me" signs in by itself next time)
 # New players: /account register <password> <password>, or /account code for the website.
@@ -148,8 +136,6 @@ accounts:
   sign-in-seconds: 90
 
 messages:
-  website-login-title: '&bplebmc.top'
-  website-login-message: 'Logged in as %account%'
   prefix: '&8[&b&lPlebMc&8] &7'
   bought: 'Bought %item%!'
   not-enough: 'You need %need% more coins.'
