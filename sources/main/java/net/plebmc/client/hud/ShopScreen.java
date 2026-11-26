@@ -130,8 +130,15 @@ public final class ShopScreen extends PlebScreen {
 			sx += w + 2;
 		}
 
-		// category tabs (every category the shop knows)
+		// category tabs (every category the shop knows); without the counts when they don't fit
+		// next to the page arrows
 		int tx = gx;
+		int room = wx + ww - 10 - 72 - gx, full = 0;
+		for (String c : Cosmetics.CATEGORIES) {
+			List<Cosmetics.Item> all = items(c);
+			full += Ui.width(categoryName(c)) + 13 + Ui.pillWidth("0/" + all.size()) + 16 + 4 + 8;
+		}
+		boolean compact = full > room;
 		for (String c : Cosmetics.CATEGORIES) {
 			List<Cosmetics.Item> all = items(c);
 			int owned = 0;
@@ -141,7 +148,7 @@ public final class ShopScreen extends PlebScreen {
 				}
 			}
 			String label = categoryName(c);
-			int w = Ui.width(label) + 13 + Ui.pillWidth(owned + "/" + all.size()) + 16;
+			int w = Ui.width(label) + 13 + (compact ? 8 : Ui.pillWidth(owned + "/" + all.size()) + 16);
 			Tab t = tab(label, Ui.hasIcon(c) ? c : "shop", 0, tx, wy + 44, w, 18, () -> category.equals(c), () -> {
 				if (!category.equals(c)) {
 					category = c;
@@ -152,7 +159,7 @@ public final class ShopScreen extends PlebScreen {
 					rebuild();
 				}
 			});
-			t.badge = owned + "/" + all.size();
+			t.badge = compact ? null : owned + "/" + all.size();
 			t.tip = "You own " + owned + " of " + all.size();
 			tx += w + 4;
 		}
