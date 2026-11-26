@@ -37,7 +37,8 @@ public class CosmeticsTest {
 		});
 		Cosmetics.init(null);
 		PluginChannels.onJoin();
-		check(sent.size() == 1 && sent.get(0).contains("\"open\""), "join asks the server for the shop state");
+		check(sent.size() == 2 && sent.get(0).contains("\"open\"") && sent.get(1).equals("{\"type\":\"signin\"}"),
+				"join asks the server for the shop state and the account sign-in");
 		check(!Cosmetics.serverSupported() && Cosmetics.coins() == -1, "no server support before a message");
 		check(Cosmetics.catalog("hat").size() > 0 && Cosmetics.catalog("trail").size() > 0, "default catalog");
 

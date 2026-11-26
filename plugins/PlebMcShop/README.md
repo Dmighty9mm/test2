@@ -112,6 +112,26 @@ Passwords never go through the game, and the API key never leaves the proxy.
 | `/plebshop give <player> <item>` / `remove` | Give or take an item for free |
 | `/plebshop equip <player> <hat\|trail\|cloak> <item\|none>` | Put something on a player |
 
+## PlebMc accounts (recommended): stop players spending each other's coins
+
+Host the **PlebMc Panel** (`panel/` in this repo, steps in `panel/README.md`) on a VPS and
+set `accounts:` in `config.yml`. Then a player must sign in to the account that owns their
+name before they can buy, equip, link the website or open the admin menu, and a name with
+an account that doesn't sign in within `sign-in-seconds` is kicked. It doesn't use IPs or
+nLogin sessions, so Eaglercraft players sharing the proxy's IP can't ride on each other.
+
+| In game | What |
+| --- | --- |
+| `/account register <password> <password>` | Make an account for this name (with nLogin: after `/login`) |
+| `/account login <password>` | Sign in (any client) |
+| `/account code` | A code to make the account on the panel website instead |
+| `/account logout` | Sign out |
+| Right Shift > **Sign in** | Same on the PlebMc client; "Remember me" signs in by itself next time |
+
+Admins manage coins, cosmetics, kicks, locks and password resets on the panel's website;
+PlebioAPI applies the changes within seconds. With accounts on, the staff lock below is
+skipped, and `/adminlogin` needs an account sign-in instead of nLogin's `/login`.
+
 ## Logins on a cracked server: do this first
 
 On an offline-mode server a name proves nothing: anyone can join with the Owner's name and

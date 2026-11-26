@@ -47,6 +47,7 @@ final class Store {
 	private final Logger log;
 	private final Map<UUID, Data> players = new HashMap<>();
 	private boolean dirty;
+	private long version;
 
 	Store(File file, Logger log) {
 		this.file = file;
@@ -119,6 +120,12 @@ final class Store {
 
 	void changed() {
 		dirty = true;
+		version++;
+	}
+
+	/** Goes up on every change (the panel sync uses it to skip quiet minutes). */
+	long version() {
+		return version;
 	}
 
 	void saveIfDirty() {

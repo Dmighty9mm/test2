@@ -124,6 +124,24 @@ staff-lock:
   # names linked to a website staff group get locked automatically (until you set a password)
   protect-website-staff: true
 
+# PlebMc accounts: the real fix for players spending each other's coins. Host the panel
+# (panel/ in this repo, see panel/README.md) on your VPS, then fill these in and
+# /plebshop reload. With accounts on, a player has to sign in to the account that owns
+# their name before they can buy, equip, link the website, or open the admin menu:
+#   /account login <password>   (any client; the password never reaches a server or the log)
+#   Right Shift > Sign in       (PlebMc client; "Remember me" signs in by itself next time)
+# New players: /account register <password> <password>, or /account code for the website.
+# This doesn't use IPs or nLogin sessions, so players sharing one IP can't ride along.
+accounts:
+  enabled: false
+  # Where the proxy reaches the panel. Same machine: http://127.0.0.1:8080
+  url: 'https://panel.plebmc.top'
+  # The link players see (leave empty to use url)
+  public-url: ''
+  # PANEL_SERVER_KEY from the panel's .env (keep it secret)
+  server-key: ''
+  # A name that has an account must sign in this soon after joining or is kicked (0 = never kick)
+  sign-in-seconds: 90
 
 messages:
   website-login-title: '&bplebmc.top'

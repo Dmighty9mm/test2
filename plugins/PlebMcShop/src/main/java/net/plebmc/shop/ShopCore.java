@@ -84,6 +84,8 @@ final class ShopCore {
 
 	/** Re-reads config.yml (set by the proxy plugin; the admin menu's Reload uses it). */
 	Runnable reloader;
+	/** PlebMc account sign-in (null when the proxy plugin didn't set it up, e.g. in tests). */
+	SignIn signin;
 
 	static final String ADMIN = "plebshop.admin";
 	/** Client messages that change the account (need a logged-in player). */
@@ -348,15 +350,30 @@ final class ShopCore {
 		}
 		String type = String.valueOf(m.get("type"));
 		boolean first = clients.add(p);
+		if ("signin".equals(type) || "signout".equals(type)) {
+			// PlebMc account sign-in (SignIn); answered off-thread
+			if (signin != null) {
+				signin.fromClient(p, m);
+			} else {
+				Map<String, Object> r = new LinkedHashMap<>();
+				r.put("type", "signin");
+				r.put("enabled", false);
+				send(p, r);
+			}
+			return;
+		}
 		if (CHANGES.contains(type) && !net.authenticated(p)) {
-			// joined with this name but hasn't typed its password yet: could be anyone
-			notify(p, msg("login-first-title", "&cNot logged in"), msg("login-first-message", "Log in first (/login <password>)"));
+			// joined with this name but hasn't proved it's theirs yet: could be anyone
+			boolean accounts = signin != null && signin.enabled();
+			String why = accounts ? msg("sign-in-first-message", "Sign in to your PlebMc account first (/account login <password>)")
+					: msg("login-first-message", "Log in first (/login <password>)");
+			notify(p, accounts ? msg("sign-in-first-title", "&cNot signed in") : msg("login-first-title", "&cNot logged in"), why);
 			if ("admin".equals(type)) {
 				Map<String, Object> r = new LinkedHashMap<>();
 				r.put("type", "admin");
 				r.put("allowed", false);
 				r.put("ok", false);
-				r.put("message", "Log in first (/login <password>).");
+				r.put("message", why + ".");
 				send(p, r);
 			}
 			return;
@@ -1247,6 +1264,48 @@ final class ShopCore {
 				s.reply(color("&7/" + label + " " + line));
 			}
 		}
+	}
+
+	/** Everyone's coins and cosmetics, the item list and who's online, for the panel. */
+	synchronized Map<String, Object> snapshot() {
+		List<Map<String, Object>> players = new ArrayList<>();
+		for (UUID id : store.ids()) {
+			Store.Data d = store.peek(id);
+			if (d == null || d.name == null || d.name.isEmpty()) {
+				continue;
+			}
+			Map<String, Object> p = new LinkedHashMap<>();
+			p.put("uuid", id.toString());
+			p.put("name", d.name);
+			p.put("coins", d.coins);
+			p.put("owned", new ArrayList<>(d.owned));
+			p.put("equipped", new LinkedHashMap<>(d.equipped));
+			p.put("streak", d.streak);
+			players.add(p);
+		}
+		List<Map<String, Object>> items = new ArrayList<>();
+		for (Catalog.Item it : catalog.all()) {
+			Map<String, Object> i = new LinkedHashMap<>();
+			i.put("id", it.id);
+			i.put("name", it.name == null ? it.id : it.name.replaceAll("(?i)[&\u00a7][0-9a-fk-or]", ""));
+			i.put("category", it.category);
+			i.put("price", it.notForSale() ? null : it.price);
+			items.add(i);
+		}
+		List<String> online = new ArrayList<>();
+		for (UUID o : net.online()) {
+			String n = net.name(o);
+			if (n != null) {
+				online.add(n);
+			}
+		}
+		Map<String, Object> m = new LinkedHashMap<>();
+		m.put("full", true);
+		m.put("players", players);
+		m.put("catalog", items);
+		m.put("online", online);
+		m.put("currency", currency);
+		return m;
 	}
 
 	synchronized List<String> tabComplete(String[] a) {

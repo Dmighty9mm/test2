@@ -509,6 +509,7 @@ public class ShopTest {
         System.out.println(checks - failed + "/" + checks + " plugin checks passed");
         int q = QuestsTest.run();
         int sl = StaffLockTest.run(dir, log);
-        System.exit(failed == 0 && q == 0 && sl == 0 ? 0 : 1);
+        int ac = AccountsTest.run(dir, log);
+        System.exit(failed == 0 && q == 0 && sl == 0 && ac == 0 ? 0 : 1);
     }
 }

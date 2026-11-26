@@ -1,0 +1,32 @@
+# PlebMc Panel + Caddy (automatic HTTPS). See README.md.
+services:
+  panel:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PANEL_TRUST_PROXY: "1"
+    volumes:
+      - panel_data:/data
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PANEL_DOMAIN: ${PANEL_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - panel
+
+volumes:
+  panel_data:
+  caddy_data:
+  caddy_config:

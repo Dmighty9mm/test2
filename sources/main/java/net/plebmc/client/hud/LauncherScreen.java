@@ -38,6 +38,8 @@ public final class LauncherScreen extends PlebScreen {
 		doors.add(new Door("Shop", "shop", "Hats, trails and cloaks for " + Cosmetics.currency(), () -> new ShopScreen(this)));
 		doors.add(new Door("Quests", "quests", "Daily and weekly quests for coins", () -> new QuestsScreen(this)));
 		doors.add(new Door("HUD", "hud", "Move, resize and recolor your HUD", () -> new HudEditorScreen(this)));
+		doors.add(new Door("Sign in", "lock", "Your PlebMc account: sign in so nobody else can spend your coins",
+				() -> new SignInScreen(this)));
 		doors.add(new Door("Account", "account", "Your plebmc.top login and profile", () -> new AccountScreen(this)));
 		doors.add(new Door("Settings", "settings", "Client preferences", () -> new SettingsScreen(this)));
 		if (ClientPrefs.get().developer) {

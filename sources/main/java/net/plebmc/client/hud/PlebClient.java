@@ -105,6 +105,8 @@ public final class PlebClient {
 				public void onMessage(String channel, byte[] data) {
 				}
 			});
+			// saved PlebMc account sign-ins (tokens, never passwords) live in the browser's storage
+			net.plebmc.client.cosmetics.PlebAccount.storage(STORE);
 			net.plebmc.client.cosmetics.Cosmetics.init(new PluginChannels.Log() {
 				@Override
 				public void info(String msg) {

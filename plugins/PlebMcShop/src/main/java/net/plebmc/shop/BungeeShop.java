@@ -26,6 +26,7 @@ import net.md_5.bungee.api.event.ChatEvent;
 import net.md_5.bungee.api.event.LoginEvent;
 import net.md_5.bungee.api.event.PlayerDisconnectEvent;
 import net.md_5.bungee.api.event.PluginMessageEvent;
+import net.md_5.bungee.api.event.PostLoginEvent;
 import net.md_5.bungee.api.event.ServerSwitchEvent;
 import net.md_5.bungee.api.plugin.Command;
 import net.md_5.bungee.api.plugin.Listener;
@@ -57,6 +58,12 @@ public final class BungeeShop extends Plugin implements Listener {
 	private final java.util.Set<UUID> staffVerified = ConcurrentHashMap.newKeySet();
 	/** EaglerXBungee is installed and its auth hooks are on (staff can get the password screen). */
 	private boolean eaglerAuth;
+	/** PlebMc accounts (the panel on the VPS): who has signed in to the account that owns their name. */
+	private SignIn signin;
+	private volatile PanelLink panelLink;
+	private long syncedVersion = -1;
+	private long lastSync;
+	private final java.util.concurrent.atomic.AtomicBoolean polling = new java.util.concurrent.atomic.AtomicBoolean();
 
 	/**
 	 * The plugin used to be called PlebMcShop. On the first start as PlebioAPI,
@@ -108,6 +115,11 @@ public final class BungeeShop extends Plugin implements Listener {
 			staffLock = new StaffLock(new File(getDataFolder(), "staff-lock.yml"), getLogger());
 			adminPasswords = new StaffLock(new File(getDataFolder(), "admin-passwords.yml"), getLogger());
 			core.reloader = this::reload;
+			signin = new SignIn(bnet, getLogger());
+			signin.mayRegister = p -> !usingNLogin() || nLoginAuthenticated(p);
+			signin.changed = p -> core.authChanged(p);
+			core.signin = signin;
+			configureAccounts();
 		} catch (IOException e) {
 			getLogger().severe("Could not load config.yml: " + e);
 			return;
@@ -137,6 +149,9 @@ public final class BungeeShop extends Plugin implements Listener {
 						+ " In this console run: plebshop staff set <name> <password>");
 			}
 		}
+		getProxy().getScheduler().schedule(this, signin::tick, 5, 5, TimeUnit.SECONDS);
+		getProxy().getScheduler().schedule(this, this::pollPanel, 5, 3, TimeUnit.SECONDS);
+		getProxy().getScheduler().schedule(this, this::syncPanel, 10, 20, TimeUnit.SECONDS);
 		getProxy().getScheduler().schedule(this, core::minute, 1, 1, TimeUnit.MINUTES);
 		getProxy().getScheduler().schedule(this, core::saveIfDirty, 30, 30, TimeUnit.SECONDS);
 		getLogger().info(core.catalog.all().size() + " cosmetics, " + core.quests.allQuests().size() + " quests in "
@@ -154,6 +169,7 @@ public final class BungeeShop extends Plugin implements Listener {
 	private void reload() {
 		try {
 			core.load(Cfg.load(new File(getDataFolder(), "config.yml")));
+			configureAccounts();
 		} catch (IOException e) {
 			getLogger().severe("Could not reload config.yml: " + e);
 		}
@@ -185,8 +201,29 @@ public final class BungeeShop extends Plugin implements Listener {
 		}
 	}
 
-	/** Logged in with nLogin this session; true when there's no nLogin; false (locked) if nLogin can't be asked. */
+	/**
+	 * Proved this name is theirs this session: signed in to its PlebMc account
+	 * when accounts are on (doesn't depend on IPs or nLogin sessions), else
+	 * nLogin /login.
+	 */
 	private boolean authenticated(UUID player) {
+		if (accountsOn()) {
+			return signin.signedIn(player);
+		}
+		return nLoginAuthenticated(player);
+	}
+
+	private boolean accountsOn() {
+		return signin != null && signin.enabled();
+	}
+
+	/** "Log in first" in the words of whichever login is in charge. */
+	private String loginFirst() {
+		return accountsOn() ? "Sign in first: /account login <password>" : "Log in first (/login <password>)";
+	}
+
+	/** Logged in with nLogin this session; true when there's no nLogin; false (locked) if nLogin can't be asked. */
+	private boolean nLoginAuthenticated(UUID player) {
 		boolean hasNLogin = getProxy().getPluginManager().getPlugin("nLogin") != null;
 		if (!hasNLogin) {
 			return true;
@@ -226,7 +263,7 @@ public final class BungeeShop extends Plugin implements Listener {
 
 	/** Logged in for this session: nLogin /login, or (without nLogin) the staff lock if the name is protected. */
 	private boolean loggedIn(ProxiedPlayer p) {
-		if (usingNLogin()) {
+		if (usingNLogin() || accountsOn()) {
 			return authenticated(p.getUniqueId());
 		}
 		return !staffLockOn() || !staffLock.isProtected(p.getName()) || staffVerified.contains(p.getUniqueId());
@@ -248,7 +285,7 @@ public final class BungeeShop extends Plugin implements Listener {
 			ProxiedPlayer p = (ProxiedPlayer) sender;
 			java.util.function.Consumer<String> reply = line -> p.sendMessage(TextComponent.fromLegacyText(line));
 			if (!loggedIn(p)) {
-				reply.accept("\u00a7cLog in first (/login <password>).");
+				reply.accept("\u00a7c" + loginFirst() + ".");
 				return;
 			}
 			if (args.length != 1) {
@@ -337,7 +374,7 @@ public final class BungeeShop extends Plugin implements Listener {
 	public void onLogin(LoginEvent e) {
 		PendingConnection c = e.getConnection();
 		String name = c.getName();
-		if (!staffLockOn() || usingNLogin() || e.isCancelled() || !staffLock.isProtected(name)) {
+		if (!staffLockOn() || usingNLogin() || accountsOn() || e.isCancelled() || !staffLock.isProtected(name)) {
 			return;
 		}
 		StaffLock.Entry entry = staffLock.get(name);
@@ -359,6 +396,164 @@ public final class BungeeShop extends Plugin implements Listener {
 			return;
 		}
 		staffVerified.add(c.getUniqueId() != null ? c.getUniqueId() : StaffLock.offlineUuid(entry.name));
+	}
+
+	// ==================== PlebMc accounts (the panel) ====================
+
+	private void configureAccounts() {
+		Cfg c = core.config;
+		panelLink = new PanelLink(Website.REAL, c.str("accounts.url", ""), c.str("accounts.server-key", ""));
+		boolean was = signin.enabled();
+		signin.configure(c, panelLink);
+		if (signin.enabled() && !was) {
+			getLogger().info("PlebMc accounts ON (panel " + panelLink.url + "): coins, shop, website link and admin menu need"
+					+ " /account login (or the client's Sign in) first");
+			for (ProxiedPlayer p : getProxy().getPlayers()) {
+				signin.joined(p.getUniqueId(), p.getName());
+			}
+		}
+	}
+
+	@EventHandler
+	public void onPostLogin(PostLoginEvent e) {
+		signin.joined(e.getPlayer().getUniqueId(), e.getPlayer().getName());
+	}
+
+	/**
+	 * /account (alias /acc). Handled here, before BungeeCord would dispatch
+	 * (and maybe log) the command, so passwords typed after it never reach a
+	 * backend server or the proxy log. Runs after login plugins (they may block
+	 * commands until /login).
+	 */
+	@EventHandler(priority = net.md_5.bungee.event.EventPriority.LOW)
+	@SuppressWarnings("deprecation")
+	public void onAccountCommand(ChatEvent e) {
+		if (e.isCancelled() || !e.isCommand() || !(e.getSender() instanceof ProxiedPlayer)) {
+			return;
+		}
+		String msg = e.getMessage().trim();
+		String[] parts = msg.substring(1).split("\\s+");
+		String label = parts[0].toLowerCase(java.util.Locale.ROOT);
+		if (!label.equals("account") && !label.equals("acc")) {
+			return;
+		}
+		e.setCancelled(true);
+		ProxiedPlayer p = (ProxiedPlayer) e.getSender();
+		String[] args = java.util.Arrays.copyOfRange(parts, 1, parts.length);
+		signin.command(p.getUniqueId(), args, line -> p.sendMessage(TextComponent.fromLegacyText(line)));
+	}
+
+	/** Every 20 s: send the panel everyone's coins and cosmetics (when something changed, or each minute for who's online). */
+	private void syncPanel() {
+		PanelLink link = panelLink;
+		if (!accountsOn() || link == null) {
+			return;
+		}
+		long v = core.store.version();
+		long now = System.currentTimeMillis();
+		if (v == syncedVersion && now - lastSync < 60_000) {
+			return;
+		}
+		try {
+			link.sync(core.snapshot());
+			syncedVersion = v;
+			lastSync = now;
+		} catch (IOException e) {
+			if (now - lastSync > 5 * 60_000) {
+				getLogger().warning("PlebMc accounts: can't send coins to the panel (" + e.getMessage() + ")");
+				lastSync = now;
+			}
+		}
+	}
+
+	/** Every 3 s: apply changes admins made on the panel (coins, cosmetics, kicks, sign-outs). */
+	private void pollPanel() {
+		PanelLink link = panelLink;
+		if (!accountsOn() || link == null || !polling.compareAndSet(false, true)) {
+			return;
+		}
+		try {
+			List<Map<?, ?>> cmds = link.commands();
+			if (cmds.isEmpty()) {
+				return;
+			}
+			List<Map<String, Object>> results = new ArrayList<>();
+			for (Map<?, ?> c : cmds) {
+				Map<String, Object> r = new java.util.LinkedHashMap<>();
+				r.put("id", c.get("id") instanceof Number ? ((Number) c.get("id")).intValue() : -1);
+				String out;
+				boolean ok;
+				try {
+					out = applyPanelCommand(c);
+					ok = !out.startsWith("!");
+					if (!ok) {
+						out = out.substring(1);
+					}
+				} catch (RuntimeException ex) {
+					out = "Error: " + ex;
+					ok = false;
+				}
+				r.put("ok", ok);
+				r.put("result", out);
+				results.add(r);
+				getLogger().info("Panel: " + c.get("by") + " " + c.get("action") + " " + c.get("target") + " " + c.get("args") + " -> " + out);
+			}
+			link.ack(results);
+			syncedVersion = -1; // send the new numbers back soon
+		} catch (IOException e) {
+			// panel down: try again next time
+		} finally {
+			polling.set(false);
+		}
+	}
+
+	/** Runs one panel change; returns what happened ("!" first when it failed). */
+	@SuppressWarnings("deprecation")
+	private String applyPanelCommand(Map<?, ?> c) {
+		String target = String.valueOf(c.get("target"));
+		String action = String.valueOf(c.get("action"));
+		List<String> args = new ArrayList<>();
+		if (c.get("args") instanceof List) {
+			for (Object o : (List<?>) c.get("args")) {
+				args.add(o instanceof Number ? String.valueOf(((Number) o).longValue()) : String.valueOf(o));
+			}
+		}
+		switch (action) {
+		case "kick": {
+			ProxiedPlayer p = getProxy().getPlayer(target);
+			if (p == null) {
+				return "!" + target + " isn't online";
+			}
+			p.disconnect(TextComponent.fromLegacyText("\u00a7c" + (args.isEmpty() ? "Kicked by an admin." : args.get(0))));
+			return "kicked";
+		}
+		case "signout":
+			return signin.signOutName(target) ? "signed out in game" : "not online";
+		default:
+			break;
+		}
+		String[] a = PanelLink.plebshopArgs(target, action, args);
+		if (a == null) {
+			return "!unknown change " + action;
+		}
+		StringBuilder out = new StringBuilder();
+		boolean[] failed = { false };
+		core.command(new ShopCore.Sender() {
+			@Override
+			public void reply(String line) {
+				String plain = line.replaceAll("(?i)\u00a7[0-9a-fk-or]", "");
+				if (line.contains("\u00a7c")) {
+					failed[0] = true;
+				}
+				out.append(out.length() == 0 ? "" : " ").append(plain.trim());
+			}
+
+			@Override
+			public boolean hasPermission(String perm) {
+				return true;
+			}
+		}, "plebshop", a, this::reload);
+		return (failed[0] ? "!" : "") + out;
 	}
 
 	// ==================== events ====================
@@ -399,6 +594,7 @@ public final class BungeeShop extends Plugin implements Listener {
 		staffVerified.remove(e.getPlayer().getUniqueId());
 		adminUnlocked.remove(e.getPlayer().getUniqueId());
 		lastAuth.remove(e.getPlayer().getUniqueId());
+		signin.left(e.getPlayer().getUniqueId());
 		core.quit(e.getPlayer().getUniqueId(), server);
 	}
 
@@ -496,7 +692,7 @@ public final class BungeeShop extends Plugin implements Listener {
 				return true;
 			}
 			// with nLogin, its /login password is the proof; without it, the staff lock password
-			boolean loggedIn = usingNLogin() ? BungeeShop.this.authenticated(player) : staffVerified.contains(player);
+			boolean loggedIn = usingNLogin() || accountsOn() ? BungeeShop.this.authenticated(player) : staffVerified.contains(player);
 			// and on top of that the separate admin password (/adminlogin), which doesn't depend on
 			// nLogin's sessions or on players' IPs (Eaglercraft players can all share one IP)
 			return loggedIn && (!adminPasswordRequired() || adminUnlocked.contains(player));
@@ -510,7 +706,7 @@ public final class BungeeShop extends Plugin implements Listener {
 		@Override
 		public void protectStaff(UUID player) {
 			ProxiedPlayer p = ProxyServer.getInstance().getPlayer(player);
-			if (p != null && staffLockOn() && !usingNLogin() && staffLock.protect(p.getName())) {
+			if (p != null && staffLockOn() && !usingNLogin() && !accountsOn() && staffLock.protect(p.getName())) {
 				getLogger().warning("Staff lock: " + p.getName() + " has staff powers but no password, so the name is now locked."
 						+ " Set its password in this console: plebshop staff set " + p.getName() + " <password>");
 			}
@@ -574,7 +770,7 @@ public final class BungeeShop extends Plugin implements Listener {
 					&& !bnet.staffVerified(((ProxiedPlayer) sender).getUniqueId())) {
 				// BungeeCord permissions go by name, which a cracked player can just type
 				bnet.protectStaff(((ProxiedPlayer) sender).getUniqueId());
-				sender.sendMessage(TextComponent.fromLegacyText(usingNLogin() ? "\u00a7cLog in first: /login <password>, then /adminlogin <admin password>."
+				sender.sendMessage(TextComponent.fromLegacyText(usingNLogin() || accountsOn() ? "\u00a7c" + loginFirst() + ", then /adminlogin <admin password>."
 						: "\u00a7cYour name has no staff password yet, so /plebshop is off for it."
 								+ " Set one in the proxy console: plebshop staff set " + sender.getName() + " <password>, then rejoin."));
 				return;
