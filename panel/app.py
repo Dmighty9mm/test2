@@ -80,6 +80,10 @@ class Config:
         self.site_name = env("PANEL_SITE_NAME", "PlebMc")
         self.trust_proxy = env("PANEL_TRUST_PROXY", "0") == "1"
         self.open_registration = env("PANEL_OPEN_REGISTRATION", "0") == "1"
+        # the PlebMc client's start screen can make accounts (it signs in before it can play)
+        self.client_registration = env("PANEL_CLIENT_REGISTRATION", "1") == "1"
+        # accounts one address may make from the client per hour
+        self.client_registrations_per_hour = int(env("PANEL_CLIENT_REGISTRATIONS_PER_HOUR", "3"))
         secure = env("PANEL_SECURE_COOKIES")
         self.secure_cookies = (secure == "1") if secure is not None else self.public_url.startswith("https://")
         # scrypt cost; tests turn it down
@@ -322,6 +326,8 @@ class Panel:
         self.throttle = Throttle(clock=clock)
         # registration codes tried per address
         self.code_throttle = Throttle(max_fails=10, window=FAIL_WINDOW, clock=clock)
+        # accounts made from the client per address
+        self.signup_throttle = Throttle(max_fails=cfg.client_registrations_per_hour, window=3600, clock=clock)
 
     def now(self):
         return int(self.clock())
@@ -489,6 +495,30 @@ class Panel:
     def forget_game_token(self, token):
         if token:
             self.db.run("DELETE FROM game_tokens WHERE token_hash=?", token_hash(str(token)))
+
+    # ---------- the PlebMc client's start screen ----------
+
+    def client_login(self, name, password, address):
+        if self.throttle.blocked("cip:" + str(address)):
+            return {"ok": False, "error": "Too many wrong passwords. Try again in 10 minutes."}
+        r = self.game_login(name, password, True)
+        if not r["ok"] and r.get("exists") is not False and "Too many" not in r["error"] and not r.get("locked"):
+            self.throttle.fail("cip:" + str(address))
+        if not r["ok"] and r.get("exists") is False:
+            r["error"] = "No account with that name. Create one first."
+        return r
+
+    def client_register(self, name, password, address):
+        if not self.cfg.client_registration:
+            return {"ok": False, "error": "Make your account on the website: " + self.cfg.public_url}
+        if self.signup_throttle.blocked("ip:" + str(address)):
+            return {"ok": False, "error": "Too many new accounts from your network. Try again in an hour."}
+        try:
+            acc = self.create_account(name, password)
+        except ApiError as e:
+            return {"ok": False, "error": e.message}
+        self.signup_throttle.fail("ip:" + str(address))
+        return {"ok": True, "name": acc["name"], "role": acc["role"], "token": self.issue_game_token(acc)}
 
     def server_register(self, name, password):
         acc = self.create_account(name, password)
@@ -706,6 +736,8 @@ class Handler(BaseHTTPRequestHandler):
     def send_json(self, status, body, cookies=()):
         data = json.dumps(body).encode("utf-8")
         self.send_response(status)
+        if self.path.startswith("/api/client/"):
+            self.cors()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
@@ -714,6 +746,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Set-Cookie", c)
         self.end_headers()
         self.wfile.write(data)
+
+    def cors(self):
+        # the PlebMc client is an offline HTML file or a desktop app: any origin, never cookies
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "86400")
 
     def security_headers(self):
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -778,6 +817,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         self.dispatch("POST")
 
+    def do_OPTIONS(self):
+        self.send_response(204)
+        if self.path.startswith("/api/client/"):
+            self.cors()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def dispatch(self, method):
         url = urlparse(self.path)
         path = url.path
@@ -785,6 +831,8 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/api/server/"):
                 self.server_auth()
                 return self.server_api(method, path[len("/api/server/"):], url)
+            if path.startswith("/api/client/") and method == "POST":
+                return self.client_api(path[len("/api/client/"):])
             if path.startswith("/api/"):
                 if method == "POST":
                     self.same_origin()
@@ -881,6 +929,22 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET" and route == "admin/audit":
             self.web_user(role="admin")
             return self.send_json(200, {"ok": True, "audit": p.db.all("SELECT * FROM audit ORDER BY id DESC LIMIT 200")})
+        raise ApiError(404, "Not found.")
+
+    def client_api(self, route):
+        """The PlebMc client's start screen. Answers with a sign-in token, never a cookie."""
+        p = self.panel
+        b = self.body()
+        name = str(b.get("name") or "").strip()
+        if route == "login":
+            return self.send_json(200, p.client_login(name, b.get("password"), self.address()))
+        if route == "register":
+            return self.send_json(200, p.client_register(name, b.get("password"), self.address()))
+        if route == "check":
+            return self.send_json(200, p.game_token(name, b.get("token")))
+        if route == "logout":
+            p.forget_game_token(b.get("token"))
+            return self.send_json(200, {"ok": True})
         raise ApiError(404, "Not found.")
 
     def server_api(self, method, route, url):

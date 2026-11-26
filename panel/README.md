@@ -13,7 +13,7 @@ sign in to the account that owns their name. Names with an account must sign in 
 
 | Who | What they get |
 | --- | --- |
-| Players | Make an account in game (`/account register <password> <password>`) or on the website with a code from the game. Sign in with `/account login <password>` on any client, or Right Shift > **Sign in** on the PlebMc client ("Remember me" signs in by itself after that). On the website: coins, cosmetics, change password, sign out everywhere. |
+| Players | Make an account on the PlebMc client's start screen (the client can't be used until you sign in or create one), in game (`/account register <password> <password>`) or on the website with a code from the game. Sign in with `/account login <password>` on any client, or Right Shift > **Sign in** on the PlebMc client ("Remember me" signs in by itself after that). On the website: coins, cosmetics, change password, sign out everywhere. |
 | Admins | Search every player, give/take/set coins, give/remove/put on cosmetics, kick, lock accounts, reset passwords, sign someone out everywhere, create accounts, admin log. |
 | Owners | All of that, plus making admins and owners. |
 
@@ -90,6 +90,20 @@ You need a small Linux VPS (1 GB RAM is plenty) and a domain or subdomain, for e
    ```
 
    Sign in on the website: you now have the **Admin** tab.
+
+### The client's start screen
+
+The PlebMc client opens on a **Sign in / Create account** screen and can't be used until the
+player signs in. It talks to `https://panel.plebmc.top` (built into the client), so host the
+panel at that address, or tell us your domain and we change it in the client. Settings in `.env`:
+
+| Setting | Default | What |
+| --- | --- | --- |
+| `PANEL_CLIENT_REGISTRATION` | `1` | `0` turns off making accounts from the client (sign-in still works) |
+| `PANEL_CLIENT_REGISTRATIONS_PER_HOUR` | `3` | New accounts per IP address per hour from the client |
+
+If the panel is down, players with a saved sign-in still get in; new players can't sign up
+until it's back.
 
 ### If the proxy runs on the same VPS
 

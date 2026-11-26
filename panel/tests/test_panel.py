@@ -268,6 +268,43 @@ class PanelHttp(unittest.TestCase):
         s, me, _ = self.call("/api/me", cookie=cookie)
         self.assertIsNone(me["account"])
 
+    def test_client_start_screen(self):
+        s, j, h = self.call("/api/client/register", {"name": "Kid_1", "password": "kidpass99"})
+        self.assertTrue(j["ok"], j)
+        self.assertEqual(h["Access-Control-Allow-Origin"], "*")
+        self.assertIsNone(h["Set-Cookie"])
+        tok = j["token"]
+        s, j, _ = self.call("/api/client/check", {"name": "Kid_1", "token": tok})
+        self.assertTrue(j["ok"])
+        # the client's token also signs in on the server
+        s, j, _ = self.server("token", {"name": "Kid_1", "token": tok})
+        self.assertTrue(j["ok"])
+        s, j, _ = self.call("/api/client/register", {"name": "kid_1", "password": "kidpass99"})
+        self.assertFalse(j["ok"])
+        s, j, _ = self.call("/api/client/login", {"name": "Nobody9", "password": "kidpass99"})
+        self.assertIn("No account", j["error"])
+        s, j, _ = self.call("/api/client/login", {"name": "Kid_1", "password": "kidpass99"})
+        self.assertTrue(j["ok"] and j["token"])
+        s, j, _ = self.call("/api/client/logout", {"token": tok})
+        s, j, _ = self.call("/api/client/check", {"name": "Kid_1", "token": tok})
+        self.assertFalse(j["ok"])
+        # preflight
+        req = urllib.request.Request(self.base + "/api/client/login", method="OPTIONS")
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(req, timeout=5) as r:
+            self.assertEqual(r.status, 204)
+            self.assertEqual(r.headers["Access-Control-Allow-Origin"], "*")
+
+    def test_client_signup_limit(self):
+        p, _ = make_panel(client_registrations_per_hour=2)
+        p.signup_throttle.max = 2
+        self.assertTrue(p.client_register("Aaa1", "password1", "5.5.5.5")["ok"])
+        self.assertTrue(p.client_register("Aaa2", "password1", "5.5.5.5")["ok"])
+        self.assertFalse(p.client_register("Aaa3", "password1", "5.5.5.5")["ok"])
+        self.assertTrue(p.client_register("Aaa3", "password1", "6.6.6.6")["ok"])
+        p.cfg.client_registration = False
+        self.assertFalse(p.client_register("Aaa4", "password1", "6.6.6.6")["ok"])
+
     def test_static_and_headers(self):
         req = urllib.request.Request(self.base + "/")
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))

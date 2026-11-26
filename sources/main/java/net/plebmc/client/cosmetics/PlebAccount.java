@@ -80,7 +80,9 @@ public final class PlebAccount {
 	}
 
 	String savedToken() {
-		return name.isEmpty() || panel.isEmpty() ? null : store.get(tokenKey());
+		String t = name.isEmpty() || panel.isEmpty() ? null : store.get(tokenKey());
+		// the start screen's sign-in works on the server too
+		return t != null ? t : ClientSession.tokenFor(name);
 	}
 
 	/** A "signin" message from the server. Returns a token to sign in with, or null. */
@@ -106,7 +108,11 @@ public final class PlebAccount {
 			messageOk = !Boolean.FALSE.equals(m.get("ok"));
 		}
 		if (Boolean.TRUE.equals(m.get("forget")) && !name.isEmpty()) {
-			store.set(tokenKey(), null);
+			if (store.get(tokenKey()) != null) {
+				store.set(tokenKey(), null);
+			} else if (auto) {
+				ClientSession.tokenRefused(name);
+			}
 		}
 		if (m.get("token") instanceof String && !name.isEmpty()) {
 			store.set(tokenKey(), (String) m.get("token"));

@@ -1,7 +1,6 @@
 package net.plebmc.client.hud;
 
 import net.lax1dude.eaglercraft.v1_8.EagRuntime;
-import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
 import net.plebmc.client.cosmetics.Cosmetics;
@@ -49,28 +48,6 @@ public final class SignInScreen extends PlebScreen {
 			return State.LOCKED;
 		}
 		return a.exists ? State.SIGN_IN : State.REGISTER;
-	}
-
-	/** A text field that draws dots instead of what you type. */
-	private static final class PasswordField extends GuiTextField {
-		PasswordField(int id, FontRenderer font, int x, int y, int w, int h) {
-			super(id, font, x, y, w, h);
-		}
-
-		@Override
-		public void drawTextBox() {
-			String real = getText();
-			int cursor = getCursorPosition();
-			StringBuilder dots = new StringBuilder();
-			for (int i = 0; i < real.length(); i++) {
-				dots.append('*');
-			}
-			setText(dots.toString());
-			setCursorPosition(cursor);
-			super.drawTextBox();
-			setText(real);
-			setCursorPosition(cursor);
-		}
 	}
 
 	private GuiTextField passwordField(int x, int y, int w) {
@@ -136,8 +113,14 @@ public final class SignInScreen extends PlebScreen {
 		}
 		case OFFLINE:
 			if (this.mc == null || this.mc.getCurrentServerData() == null) {
-				Button join = button("Join PlebMc", x + w / 2 - 50, by, 100, 18, () -> PlebMenu.joinServer(this));
+				Button join = button("Join PlebMc", x + (w + 6) / 2, by, (w - 6) / 2, 18, () -> PlebMenu.joinServer(this));
 				join.style(Style.PRIMARY).icon("plebnite");
+				Button out = button("Sign out", x, by, (w - 6) / 2, 18, () -> {
+					net.plebmc.client.cosmetics.ClientSession.signOut();
+					this.mc.displayGuiScreen(new LoginGateScreen(new net.minecraft.client.gui.GuiMainMenu()));
+				});
+				out.style(Style.DANGER).icon("logout").tip = "Sign out of " + net.plebmc.client.cosmetics.ClientSession.name()
+						+ " on this client";
 			}
 			break;
 		default:
@@ -231,7 +214,8 @@ public final class SignInScreen extends PlebScreen {
 		int y = wy + 48;
 		switch (s) {
 		case OFFLINE:
-			center("account", "Not connected to PlebMc", "Join the server to sign in to your account.", y);
+			center("account", "Signed in as " + net.plebmc.client.cosmetics.ClientSession.name(),
+					"Your coins, shop and quests show up when you join PlebMc.", y);
 			break;
 		case CHECKING:
 			center("clock", "Checking your account...", "Asking the server about " + nameOr("this name") + ".", y);

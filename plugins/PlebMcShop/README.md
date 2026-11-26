@@ -84,6 +84,10 @@ config's `items:` into yours (the sample images are put in `cloaks/` on the next
 | General: 3 daily from 4, 2 weekly from 3 | 40 to 500 each |
 | PlebNite: 3 daily from 6, 2 weekly from 4 | 60 to 750 each |
 
+Only players on the PlebMc client earn any of this (`plebclient-only: true`, the default).
+Players on other clients get no login rewards, online-time coins or quest progress. Coins
+they already had are kept; set `plebclient-only: false` to let everyone earn again.
+
 ## plebmc.top login
 
 NamelessMC's API can't check an email and password, so players link once instead:
@@ -127,6 +131,10 @@ nLogin sessions, so Eaglercraft players sharing the proxy's IP can't ride on eac
 | `/account code` | A code to make the account on the panel website instead |
 | `/account logout` | Sign out |
 | Right Shift > **Sign in** | Same on the PlebMc client; "Remember me" signs in by itself next time |
+
+The PlebMc client itself can't be used without an account: it opens on a start screen
+(Sign in / Create account) that talks to the panel, and you then play under that account's
+name. The server signs you in with the same sign-in automatically when you join.
 
 Admins manage coins, cosmetics, kicks, locks and password resets on the panel's website;
 PlebioAPI applies the changes within seconds. With accounts on, the staff lock below is

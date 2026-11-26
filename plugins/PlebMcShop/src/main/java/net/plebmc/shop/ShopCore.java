@@ -210,15 +210,16 @@ final class ShopCore {
 		long now = net.now();
 		worlds.remove(p);
 		if (firstJoin) {
-			long reward = quests.login(d, now);
-			if (reward >= 0) {
-				store.changed();
-				notify(p, msg("login-title", "&6Daily login"), msg("login-message", "Day %streak%: +%coins% %currency%")
-						.replace("%streak%", Integer.toString(d.streak)).replace("%coins%", fmt(reward)));
-				completed(p, quests.add(d, null, "login", 1, now));
+			if (earns(p)) {
+				loginReward(p);
+			} else {
+				// the PlebMc client says hello a moment after joining: pay it then
+				loginPending.add(p);
 			}
 		}
-		completed(p, quests.add(d, net.server(p), "join", 1, now));
+		if (earns(p)) {
+			completed(p, quests.add(d, net.server(p), "join", 1, now));
+		}
 		if (from != null) {
 			// players on the old server stop seeing this one
 			Map<String, Object> gone = new LinkedHashMap<>();
@@ -235,7 +236,33 @@ final class ShopCore {
 		}
 	}
 
+	/** The daily login reward and the login quest. */
+	private void loginReward(UUID p) {
+		Store.Data d = data(p);
+		long now = net.now();
+		long reward = quests.login(d, now);
+		if (reward >= 0) {
+			store.changed();
+			notify(p, msg("login-title", "&6Daily login"), msg("login-message", "Day %streak%: +%coins% %currency%")
+					.replace("%streak%", Integer.toString(d.streak)).replace("%coins%", fmt(reward)));
+			completed(p, quests.add(d, null, "login", 1, now));
+		}
+	}
+
+	/** Players whose daily login waits for their PlebMc client to say hello. */
+	private final java.util.Set<UUID> loginPending = new java.util.HashSet<>();
+
+	/**
+	 * Does this player earn coins and quest progress? With plebclient-only (the
+	 * default) only players on the PlebMc client do: coins, quests and rewards
+	 * are PlebClient things.
+	 */
+	boolean earns(UUID p) {
+		return clients.contains(p) || !config.bool("plebclient-only", true);
+	}
+
 	synchronized void quit(UUID p, String server) {
+		loginPending.remove(p);
 		lastAction.remove(p);
 		worlds.remove(p);
 		clients.remove(p);
@@ -252,6 +279,9 @@ final class ShopCore {
 	synchronized void minute() {
 		long now = net.now();
 		for (UUID p : net.online()) {
+			if (!earns(p)) {
+				continue;
+			}
 			Store.Data d = data(p);
 			long paid = quests.minute(d);
 			List<Quests.Quest> done = quests.add(d, net.server(p), "play", 1, now);
@@ -271,6 +301,9 @@ final class ShopCore {
 	synchronized void progress(UUID p, String server, String type, long amount) {
 		if (server == null || !quests.counts(server)) {
 			return; // a server no quest category covers: nothing counts there
+		}
+		if (!earns(p)) {
+			return; // not on the PlebMc client
 		}
 		Store.Data d = data(p);
 		List<Quests.Quest> done = quests.add(d, server, type.toLowerCase(Locale.ROOT), amount, net.now());
@@ -377,6 +410,10 @@ final class ShopCore {
 				send(p, r);
 			}
 			return;
+		}
+		if (first && loginPending.remove(p)) {
+			loginReward(p);
+			completed(p, quests.add(data(p), net.server(p), "join", 1, net.now()));
 		}
 		switch (type) {
 		case "open":

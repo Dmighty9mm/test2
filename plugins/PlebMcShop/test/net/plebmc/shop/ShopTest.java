@@ -251,7 +251,17 @@ public class ShopTest {
         check(loginRows == 1, "exactly one login row: " + loginRows);
         check(mighty.progress("login_5") == 1, "weekly login quest counted");
         check(mighty.progress("general_join_3") == 1 && "general".equals(mighty.quest("general_join_3").get("category")), "joining the lobby counts for General");
-        check(java.got.isEmpty() && java.chat.stream().anyMatch(c -> c.contains("+50")), "other clients get chat: " + java.chat);
+        check(java.got.isEmpty() && java.chat.isEmpty() && core.store.get(java.id).coins == 0,
+                "other clients earn nothing (PlebClient only): " + java.chat);
+        // the PlebMc client's hello can come after the proxy's connect: the login reward waits for it
+        P late = new P("LateHello");
+        late.server = "lobby";
+        net.online.put(late.id, late);
+        core.connected(late.id, null, true);
+        check(core.store.get(late.id).coins == 0, "no reward before the client says hello");
+        core.fromClient(late.id, "{\"type\":\"open\"}");
+        check(late.coins() == 50, "reward once it does: " + late.coins());
+        quit(late);
         quit(mighty);
         mighty = join("Mighty", "lobby", true);
         check(mighty.coins() == 50 && mighty.progress("login_5") == 1, "no second login reward (or login count) the same day");
@@ -279,7 +289,7 @@ public class ShopTest {
         move(mighty, "lobby");
         for (int i = 0; i < 5; i++) core.minute();
         check(mighty.progress("play_30") == 15 && mighty.progress("general_play_30") == 20, "playtime in the lobby: General only");
-        check(!core.store.get(java.id).progress.containsKey("play_30") && core.store.get(java.id).progress.get("general_play_30") == 20, "lobby-only player: no PlebNite progress");
+        check(core.store.get(java.id).progress.isEmpty() && core.store.get(java.id).coins == 0, "other clients: no quest progress or playtime coins");
         core.progress(mighty.id, "survival", "kill", 5);
         check(mighty.progress("kills_8") == 6, "kills elsewhere don't count for PlebNite");
         // chat: at most one every 10 seconds

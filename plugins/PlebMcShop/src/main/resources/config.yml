@@ -90,6 +90,10 @@ equip-on-buy: true
 # Players not on the PlebMc client get quest and login rewards as chat lines instead of popups.
 chat-for-other-clients: true
 
+# Coins, quests and rewards are only for players on the PlebMc client. Players on
+# other clients earn nothing (and get no coin messages). false = everyone earns.
+plebclient-only: true
+
 # Worlds where nobody's hat or trail is shown: 'world' or 'server:world' (needs PlebMcBridge on that server).
 hidden-in-worlds: []
 

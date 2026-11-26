@@ -675,7 +675,12 @@ public final class Cosmetics {
 		pleb.pending = true;
 		pleb.version++;
 		String t = pleb.savedToken();
-		return t == null ? send(obj("type", "signout")) : send(obj("type", "signout", "token", t));
+		boolean sent = t == null ? send(obj("type", "signout")) : send(obj("type", "signout", "token", t));
+		if (t != null && t.equals(ClientSession.tokenFor(pleb.name))) {
+			// that was this client's own sign-in: back to the start screen next time
+			ClientSession.signOut();
+		}
+		return sent;
 	}
 
 	/** The admin menu's data (website Owners only). */

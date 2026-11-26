@@ -107,6 +107,14 @@ public final class PlebClient {
 			});
 			// saved PlebMc account sign-ins (tokens, never passwords) live in the browser's storage
 			net.plebmc.client.cosmetics.PlebAccount.storage(STORE);
+			// the PlebMc account this client plays as (the start screen signs in or makes one)
+			net.plebmc.client.cosmetics.ClientSession.setup((url, json, done) -> net.lax1dude.eaglercraft.v1_8.internal.PlatformPlebHttp
+					.post(url, json, (status, body) -> done.done(status, body)), STORE, name -> {
+						if (!name.equals(net.lax1dude.eaglercraft.v1_8.profile.EaglerProfile.getName())) {
+							net.lax1dude.eaglercraft.v1_8.profile.EaglerProfile.setName(name);
+							net.lax1dude.eaglercraft.v1_8.profile.EaglerProfile.save();
+						}
+					});
 			net.plebmc.client.cosmetics.Cosmetics.init(new PluginChannels.Log() {
 				@Override
 				public void info(String msg) {
