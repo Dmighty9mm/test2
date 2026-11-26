@@ -8,6 +8,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiMainMenu;
 import net.minecraft.client.gui.ScaledResolution;
+import net.minecraftforge.client.event.ClientChatReceivedEvent;
 import net.minecraftforge.client.event.GuiScreenEvent;
 import net.minecraftforge.client.event.MouseEvent;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
@@ -118,4 +119,22 @@ public final class ForgeHooks {
 		});
 	}
 
+
+	/** Crosshair mod: draw our own instead of the vanilla one. */
+	@SubscribeEvent
+	public void onCrosshair(RenderGameOverlayEvent.Pre e) {
+		if (e.type == RenderGameOverlayEvent.ElementType.CROSSHAIRS
+				&& net.plebmc.client.hud.PlebVisuals.crosshair(e.resolution.getScaledWidth(), e.resolution.getScaledHeight())) {
+			e.setCanceled(true);
+		}
+	}
+
+	/** Chat mod: timestamps and stacked repeats (game-info messages above the hotbar are left alone). */
+	@SubscribeEvent
+	public void onChat(ClientChatReceivedEvent e) {
+		if (e.type != 2 && e.message != null && mc.ingameGUI != null
+				&& net.plebmc.client.hud.PlebVisuals.chat(mc.ingameGUI.getChatGUI(), e.message)) {
+			e.setCanceled(true);
+		}
+	}
 }

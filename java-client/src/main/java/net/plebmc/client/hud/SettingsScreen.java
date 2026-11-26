@@ -121,7 +121,17 @@ public final class SettingsScreen extends PlebScreen {
 					() -> ClientPrefs.ACCENT_NAMES[pr.accent], saved(() -> pr.accent = wrap(pr.accent + 1, ClientPrefs.ACCENTS.length)),
 					saved(() -> pr.accent = wrap(pr.accent - 1, ClientPrefs.ACCENTS.length))), clip);
 			y += step;
-			add(choice("Menu background", "How much of the game shows behind menus", lx, y, lw, h,
+			add(choice("Menu background", "What menus show behind them on the title screen", lx, y, lw, h,
+					() -> ClientPrefs.MENU_BACKGROUNDS[pr.menuBackground],
+					saved(() -> pr.menuBackground = wrap(pr.menuBackground + 1, ClientPrefs.MENU_BACKGROUNDS.length)),
+					saved(() -> pr.menuBackground = wrap(pr.menuBackground - 1, ClientPrefs.MENU_BACKGROUNDS.length))), clip);
+			y += step;
+			add(choice("Window style", "How see-through PlebClient windows are", lx, y, lw, h,
+					() -> ClientPrefs.WINDOW_OPACITY[pr.windowOpacity],
+					saved(() -> pr.windowOpacity = wrap(pr.windowOpacity + 1, ClientPrefs.WINDOW_OPACITY.length)),
+					saved(() -> pr.windowOpacity = wrap(pr.windowOpacity - 1, ClientPrefs.WINDOW_OPACITY.length))), clip);
+			y += step;
+			add(choice("In-game backdrop", "How much of the game shows behind menus while you play", lx, y, lw, h,
 					() -> ClientPrefs.BACKDROPS[pr.backdrop], saved(() -> pr.backdrop = wrap(pr.backdrop + 1, ClientPrefs.BACKDROPS.length)),
 					saved(() -> pr.backdrop = wrap(pr.backdrop - 1, ClientPrefs.BACKDROPS.length))), clip);
 			y += step;

@@ -36,7 +36,7 @@ public final class SettingsTransfer {
 	}
 
 	/**
-	 * Writes an export back into the store. Returns how many parts were
+	 * Writes an export back into the store, merged over the current settings. Returns how many parts were
 	 * imported, or -1 when the text isn't a PlebClient settings export.
 	 */
 	public static int importInto(SettingsStore store, String text) {
@@ -56,7 +56,21 @@ public final class SettingsTransfer {
 		int n = 0;
 		for (String k : KEYS) {
 			if (m.get(k) instanceof Map) {
-				store.set(k, Json.write(m.get(k)));
+				// merged over what's there, so a partial export (one mod, say) keeps the rest
+				Map<Object, Object> merged = new LinkedHashMap<>();
+				String raw = store.get(k);
+				if (raw != null && !raw.isEmpty()) {
+					try {
+						Object cur = Json.parse(raw);
+						if (cur instanceof Map) {
+							merged.putAll((Map<?, ?>) cur);
+						}
+					} catch (RuntimeException e) {
+						// replace a broken value
+					}
+				}
+				merged.putAll((Map<?, ?>) m.get(k));
+				store.set(k, Json.write(merged));
 				n++;
 			}
 		}

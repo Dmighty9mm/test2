@@ -93,12 +93,15 @@ public final class Ui {
 	}
 
 	/** The main window of a screen, with a thin accent line on top. */
+	private static final int[] WINDOW_ALPHA = { 0xF4, 0xC8, 0x96 };
+
 	public static void window(int x, int y, int w, int h) {
 		int acc = accent();
 		// soft shadow, then a glassy body that darkens toward the bottom
 		round(x - 3, y - 2, w + 6, h + 6, 0x22000000);
 		round(x - 1, y - 1, w + 2, h + 3, 0x50000000);
-		PlebTheme.gradientRound(x, y, w, h, 0xF4121A23, 0xF60A0F15);
+		int wa = WINDOW_ALPHA[Math.max(0, Math.min(2, net.plebmc.client.mods.ClientPrefs.get().windowOpacity))];
+		PlebTheme.gradientRound(x, y, w, h, alpha(0xFF121A23, wa), alpha(0xFF0A0F15, Math.min(255, wa + 2)));
 		outline(x, y, w, h, BORDER);
 		// an accent line on top with a faint glow under it
 		PlebTheme.gradient(x + 1, y + 1, w - 2, 16, alpha(acc, 0x1C), alpha(acc, 0x00));

@@ -242,6 +242,7 @@ public final class PlebClient {
 				mods.load(STORE);
 				net.plebmc.client.mods.FpsLarp.INSTANCE.load(STORE);
 				ClientPrefs.get().load(STORE);
+				saveSettings();
 			}
 			return n;
 		} catch (Throwable t) {

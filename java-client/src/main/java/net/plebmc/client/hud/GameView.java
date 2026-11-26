@@ -323,4 +323,47 @@ final class GameView implements ClientView {
 		}
 		return out;
 	}
+
+	@Override
+	public long worldTime() {
+		return mc.theWorld == null ? -1 : mc.theWorld.getWorldTime();
+	}
+
+	@Override
+	public String biome() {
+		EntityPlayerSP p = player();
+		if (p == null || mc.theWorld == null) {
+			return null;
+		}
+		try {
+			return mc.theWorld.getBiomeGenForCoords(new net.minecraft.util.BlockPos(p)).biomeName;
+		} catch (Throwable t) {
+			return null;
+		}
+	}
+
+	@Override
+	public String server() {
+		if (mc.theWorld == null) {
+			return null;
+		}
+		if (mc.isSingleplayer()) {
+			return "Singleplayer";
+		}
+		net.minecraft.client.multiplayer.ServerData d = mc.getCurrentServerData();
+		return d == null ? "Multiplayer" : d.serverIP;
+	}
+
+	@Override
+	public int light() {
+		EntityPlayerSP p = player();
+		if (p == null || mc.theWorld == null) {
+			return -1;
+		}
+		try {
+			return mc.theWorld.getLight(new net.minecraft.util.BlockPos(p));
+		} catch (Throwable t) {
+			return -1;
+		}
+	}
 }

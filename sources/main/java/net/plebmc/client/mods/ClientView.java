@@ -72,4 +72,29 @@ public interface ClientView {
         default List<Mate> squad() {
                 return java.util.Collections.emptyList();
         }
+
+        /** The world's time in ticks (day = time / 24000), or -1 outside a world. */
+        default long worldTime() {
+                return -1;
+        }
+
+        /** The biome you stand in, or null. */
+        default String biome() {
+                return null;
+        }
+
+        /** The server address, "Singleplayer", or null outside a world. */
+        default String server() {
+                return null;
+        }
+
+        /** The block light level where you stand (0-15), or -1. */
+        default int light() {
+                return -1;
+        }
+
+        /** True while you're in a world. */
+        default boolean inWorld() {
+                return health() >= 0;
+        }
 }

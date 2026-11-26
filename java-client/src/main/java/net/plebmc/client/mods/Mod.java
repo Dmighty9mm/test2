@@ -99,6 +99,7 @@ public abstract class Mod {
         public static final String GAMEPLAY = "Gameplay";
         public static final String PLEBNITE = "PlebNite";
         public static final String PERFORMANCE = "Performance";
+        public static final String VISUAL = "Visual";
 
         private String category = GAMEPLAY;
         private final List<Setting> settings = new ArrayList<>();

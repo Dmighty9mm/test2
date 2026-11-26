@@ -37,6 +37,13 @@ public final class ClientPrefs {
 	/** How much of the game shows behind menus. */
 	public int backdrop;
 
+	public static final String[] MENU_BACKGROUNDS = { "Blurred wallpaper", "Wallpaper", "Dark", "Glow", "Retro grid" };
+	/** What menus show behind their windows when you're not in a world. */
+	public int menuBackground;
+	public static final String[] WINDOW_OPACITY = { "Solid", "Glass", "Clear" };
+	/** How see-through menu windows are. */
+	public int windowOpacity;
+
 	// ---- title screen ----
 	public static final String[] SIDEBAR_MODES = { "Opens on hover", "Always open", "Icons only" };
 	/** How the title screen's sidebar behaves. */
@@ -110,6 +117,8 @@ public final class ClientPrefs {
 		modernMenus = d.modernMenus;
 		uiSounds = d.uiSounds;
 		backdrop = d.backdrop;
+		menuBackground = d.menuBackground;
+		windowOpacity = d.windowOpacity;
 		titleSidebar = d.titleSidebar;
 		titlePanorama = d.titlePanorama;
 		titleBackground = d.titleBackground;
@@ -147,6 +156,8 @@ public final class ClientPrefs {
 		modernMenus = ProtoValues.asBool(m.get("modernMenus"), modernMenus);
 		uiSounds = ProtoValues.asBool(m.get("sounds"), uiSounds);
 		backdrop = idx(m.get("backdrop"), backdrop, BACKDROPS.length);
+		menuBackground = idx(m.get("menuBackground"), menuBackground, MENU_BACKGROUNDS.length);
+		windowOpacity = idx(m.get("windowOpacity"), windowOpacity, WINDOW_OPACITY.length);
 		titleSidebar = idx(m.get("titleSidebar"), titleSidebar, SIDEBAR_MODES.length);
 		titlePanorama = idx(m.get("titlePanorama"), titlePanorama, PANORAMA_DIMS.length);
 		titleBackground = idx(m.get("titleBackground"), titleBackground, BACKGROUNDS.length);
@@ -171,6 +182,8 @@ public final class ClientPrefs {
 		m.put("modernMenus", modernMenus);
 		m.put("sounds", uiSounds);
 		m.put("backdrop", (double) backdrop);
+		m.put("menuBackground", (double) menuBackground);
+		m.put("windowOpacity", (double) windowOpacity);
 		m.put("titleSidebar", (double) titleSidebar);
 		m.put("titlePanorama", (double) titlePanorama);
 		m.put("titleBackground", (double) titleBackground);

@@ -194,6 +194,32 @@ public class ClientModsTest {
                 check(net.plebmc.client.mods.SettingsTransfer.importInto(other, ex) == 1 && other.get(ModRegistry.STORE_KEY) != null,
                                 "settings export imports into another client");
                 check(net.plebmc.client.mods.SettingsTransfer.importInto(other, "hello") == -1, "random text is not an import");
+                // a PlebClient Studio code: only what it names changes
+                MapStore st3 = new MapStore();
+                st3.set(ModRegistry.STORE_KEY, reg.serialize());
+                String studio = "{\"plebclient-settings\":1,\"mods\":{\"crosshair\":{\"on\":true,\"opts\":{\"style\":3,\"color\":4}},"
+                                + "\"coordinates\":{\"on\":true,\"opts\":{\"label_x\":\"x \"}}},\"prefs\":{\"menuBackground\":2}}";
+                check(net.plebmc.client.mods.SettingsTransfer.importInto(st3, studio) == 2, "studio code imports");
+                reg.coordinates.setting("decimals").set(0);
+                reg.load(st3);
+                check(reg.crosshair.isEnabled() && reg.crosshair.style.get() == 3 && reg.crosshair.color.get() == 4
+                                && reg.coordinates.setting("label_x").text().equals("x ") && reg.coordinates.setting("decimals").get() == 0
+                                && reg.fps.isEnabled(), "studio code changes only what it names");
+                reg.crosshair.setEnabled(false);
+                reg.coordinates.resetSettings();
+                check(net.plebmc.client.mods.MoreMods.DayCounter.text(0, true).equals("Day 1  6:00")
+                                && net.plebmc.client.mods.MoreMods.DayCounter.text(24000L * 2 + 18000, true).equals("Day 3  0:00"),
+                                "day counter");
+                check(net.plebmc.client.mods.MoreMods.Server.strip("wss://eagler.plebmc.top/").equals("eagler.plebmc.top"), "server address");
+                check(net.plebmc.client.mods.MoreMods.SessionTimer.duration(3725).equals("1:02:05")
+                                && net.plebmc.client.mods.MoreMods.SessionTimer.duration(65).equals("1:05"), "session timer");
+                int[] p1 = reg.chat.place("hi"), p2 = reg.chat.place("hi"), p3 = reg.chat.place("yo");
+                check(p1[0] == p2[0] && p2[1] == 2 && p3[0] != p2[0] && p3[1] == 1, "chat stacks repeats on one line");
+                check(net.plebmc.client.mods.MoreMods.Chat.stamp(13, 5, 2).equals("1:05 PM")
+                                && net.plebmc.client.mods.MoreMods.Chat.stamp(9, 30, 1).equals("09:30"), "chat timestamps");
+                reg.speed.sample(0, 64, 0, 1000);
+                check(Math.abs(reg.speed.sample(2, 64, 0, 1500) - 4.0) < 1e-6, "speed in blocks per second");
+                check(reg.byId("crosshair") != null && reg.byId("scoreboard") != null && reg.byId("hurt-cam") != null, "visual mods registered");
                 reg.coordinates.resetSettings();
                 check(Mods.Coordinates.facing(0).startsWith("South") && Mods.Coordinates.facing(90).startsWith("West")
                                 && Mods.Coordinates.facing(-90).startsWith("East") && Mods.Coordinates.facing(44).startsWith("South"),

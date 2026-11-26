@@ -331,6 +331,9 @@ public class GuiIngame extends Gui {
 
 	public void renderGameOverlayCrosshairs(int scaledResWidth, int scaledResHeight) {
 		if (this.showCrosshair()) {
+			if (net.plebmc.client.hud.PlebVisuals.crosshair(scaledResWidth, scaledResHeight)) {
+				return;
+			}
 			GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
 			this.mc.getTextureManager().bindTexture(icons);
 			GlStateManager.enableBlend();
@@ -495,6 +498,9 @@ public class GuiIngame extends Gui {
 	}
 
 	private void renderScoreboard(ScoreObjective parScoreObjective, ScaledResolution parScaledResolution) {
+		if (net.plebmc.client.hud.PlebVisuals.scoreboard(parScoreObjective, parScaledResolution)) {
+			return;
+		}
 		Scoreboard scoreboard = parScoreObjective.getScoreboard();
 		Collection collection = scoreboard.getSortedScores(parScoreObjective);
 		ArrayList arraylist = Lists.newArrayList(Iterables.filter(collection, new Predicate<Score>() {

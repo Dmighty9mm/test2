@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.client.renderer.GlStateManager;
+import net.plebmc.forge.compat.ImageData;
 import net.minecraft.client.renderer.WorldRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.audio.PositionedSoundRecord;
@@ -290,6 +291,138 @@ public final class TitleMenu {
 		r.pos(x, y, 0).tex(0, 0).endVertex();
 		Tessellator.getInstance().draw();
 		GlStateManager.enableBlend();
+	}
+
+	/**
+	 * The wallpaper behind menus: centered and still, softened by drawing it a
+	 * few times slightly offset (a cheap blur), then darkened so text reads.
+	 */
+	static boolean menuWallpaper(int w, int h, boolean blur, int dim) {
+		Minecraft mc = Minecraft.getMinecraft();
+		ResourceLocation img = blur ? blurredWallpaper() : WALLPAPER;
+		if (img == null) {
+			img = WALLPAPER;
+		}
+		try {
+			mc.getTextureManager().bindTexture(img);
+			net.minecraft.client.renderer.texture.ITextureObject tex = mc.getTextureManager().getTexture(img);
+			if (tex != null) {
+				tex.setBlurMipmap(true, false);
+			}
+		} catch (Throwable t) {
+			return false;
+		}
+		float iw = w * 1.06f, ih = iw * 9f / 16f;
+		if (ih < h * 1.06f) {
+			ih = h * 1.06f;
+			iw = ih * 16f / 9f;
+		}
+		float x = (w - iw) / 2f, y = (h - ih) / 2f;
+		GlStateManager.enableTexture2D();
+		GlStateManager.color(1f, 1f, 1f, 1f);
+		GlStateManager.disableBlend();
+		quad(x, y, iw, ih);
+		GlStateManager.enableBlend();
+		GlStateManager.disableTexture2D();
+		Ui.rect(0, 0, w, h, Ui.alpha(0xFF05080D, dim));
+		GlStateManager.enableTexture2D();
+		return true;
+	}
+
+	private static ResourceLocation blurred;
+	private static boolean blurFailed;
+
+	/**
+	 * A small, blurred copy of the wallpaper, made once: drawn stretched with
+	 * smooth filtering it looks like a strong blur and costs one quad.
+	 */
+	private static ResourceLocation blurredWallpaper() {
+		if (blurred != null || blurFailed) {
+			return blurred;
+		}
+		blurFailed = true;
+		try {
+			java.io.InputStream in = Minecraft.getMinecraft().getResourceManager().getResource(WALLPAPER).getInputStream();
+			java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+			byte[] buf = new byte[16384];
+			int n;
+			while ((n = in.read(buf)) > 0) {
+				bo.write(buf, 0, n);
+			}
+			in.close();
+			ImageData src = ImageData.loadImageFile(bo.toByteArray());
+			if (src == null || src.width < 16 || src.height < 9) {
+				return null;
+			}
+			int bw = 256, bh = 144;
+			int[] px = new int[bw * bh];
+			// area average down to 256x144
+			for (int y = 0; y < bh; y++) {
+				int sy0 = y * src.height / bh, sy1 = Math.max(sy0 + 1, (y + 1) * src.height / bh);
+				for (int x = 0; x < bw; x++) {
+					int sx0 = x * src.width / bw, sx1 = Math.max(sx0 + 1, (x + 1) * src.width / bw);
+					long c0 = 0, c1 = 0, c2 = 0, c3 = 0, cnt = 0;
+					for (int yy = sy0; yy < sy1; yy += 2) {
+						for (int xx = sx0; xx < sx1; xx += 2) {
+							int p = src.pixels[yy * src.width + xx];
+							c0 += p >>> 24;
+							c1 += p >> 16 & 0xFF;
+							c2 += p >> 8 & 0xFF;
+							c3 += p & 0xFF;
+							cnt++;
+						}
+					}
+					px[y * bw + x] = (int) (c0 / cnt) << 24 | (int) (c1 / cnt) << 16 | (int) (c2 / cnt) << 8 | (int) (c3 / cnt);
+				}
+			}
+			for (int pass = 0; pass < 2; pass++) {
+				px = boxBlur(px, bw, bh, 2);
+			}
+			for (int i = 0; i < px.length; i++) {
+				px[i] |= 0xFF000000;
+			}
+			blurred = Minecraft.getMinecraft().getTextureManager().getDynamicTextureLocation("pleb_wallpaper_blur",
+					new net.minecraft.client.renderer.texture.DynamicTexture(new ImageData(bw, bh, px, true).toBufferedImage()));
+			blurFailed = false;
+		} catch (Throwable t) {
+			blurred = null;
+		}
+		return blurred;
+	}
+
+	/** One horizontal and one vertical box blur pass, per 8-bit channel. */
+	private static int[] boxBlur(int[] p, int w, int h, int r) {
+		int[] tmp = new int[p.length], out = new int[p.length];
+		for (int pass = 0; pass < 2; pass++) {
+			int[] in = pass == 0 ? p : tmp, dst = pass == 0 ? tmp : out;
+			for (int y = 0; y < h; y++) {
+				for (int x = 0; x < w; x++) {
+					int s0 = 0, s1 = 0, s2 = 0, s3 = 0, c = 0;
+					for (int k = -r; k <= r; k++) {
+						int xx = pass == 0 ? Math.max(0, Math.min(w - 1, x + k)) : x;
+						int yy = pass == 0 ? y : Math.max(0, Math.min(h - 1, y + k));
+						int v = in[yy * w + xx];
+						s0 += v >>> 24;
+						s1 += v >> 16 & 0xFF;
+						s2 += v >> 8 & 0xFF;
+						s3 += v & 0xFF;
+						c++;
+					}
+					dst[y * w + x] = (s0 / c) << 24 | (s1 / c) << 16 | (s2 / c) << 8 | (s3 / c);
+				}
+			}
+		}
+		return out;
+	}
+
+	private static void quad(float x, float y, float iw, float ih) {
+		WorldRenderer r = Tessellator.getInstance().getWorldRenderer();
+		r.begin(7, DefaultVertexFormats.POSITION_TEX);
+		r.pos(x, y + ih, 0).tex(0, 1).endVertex();
+		r.pos(x + iw, y + ih, 0).tex(1, 1).endVertex();
+		r.pos(x + iw, y, 0).tex(1, 0).endVertex();
+		r.pos(x, y, 0).tex(0, 0).endVertex();
+		Tessellator.getInstance().draw();
 	}
 
 	// ---- the player showcase (opens the web store) ----

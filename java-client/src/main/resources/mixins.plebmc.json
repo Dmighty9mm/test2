@@ -10,6 +10,7 @@
     "MixinEnumChatFormatting",
     "MixinFontRenderer",
     "MixinGuiButton",
+    "MixinGuiIngame",
     "MixinGuiMainMenu",
     "MixinGuiOptionSlider",
     "MixinGuiScreen",
