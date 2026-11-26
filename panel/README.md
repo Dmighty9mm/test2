@@ -31,8 +31,10 @@ The panel hosts the PlebClient builds. **Downloads** (in the sidebar, for everyo
 the published Windows, WASM, offline, Forge 1.8.9 and Forge 1.21.1 builds. Plugins and the
 panel itself are staff-only builds: only admins see and download them.
 
-Owners manage them on **Admin → Builds**: pick what the build is, give the version, choose
-the file and Upload. *Publish it now* puts it on the Downloads page in place of the one
+Owners manage them on **Admin → Builds**: pick what the build is, give the version, then
+either paste a **download link** (the file stays where it's hosted, such as a GitHub release,
+and the panel only sends people there, so no client files sit on the panel's server) or
+choose a file and Upload it to the panel. *Publish it now* puts it on the Downloads page in place of the one
 before (which stays in the list, so **Publish** on it goes back). *Also tell PlebClient
 players to update* sets the update checker's latest version and points its link at the
 Downloads page. Admins can see the list and download any build; only owners change it.
@@ -41,6 +43,7 @@ The dashboard shows what's published and how often it was downloaded.
 Builds are stored next to the database (`/data/builds` in Docker, `data/builds` otherwise;
 set `PANEL_BUILDS` to move them). The biggest upload is 500 MB (`PANEL_MAX_BUILD_MB`). You
 can also add a file on the VPS: `python3 app.py add-build windows 2.0 PlebClient-Windows.zip --publish`
+(or a https:// link in place of the file)
 (kinds: windows, wasm, offline, forge-1.8.9, forge-1.21.1, plebcolors, plebioapi, panel).
 
 ### Publishing and big uploads

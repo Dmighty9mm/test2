@@ -26,7 +26,7 @@ Commands
   python3 app.py set-role NAME owner|admin|player
   python3 app.py reset-password NAME
   python3 app.py unlock NAME
-  python3 app.py add-build KIND VERSION FILE [--publish]
+  python3 app.py add-build KIND VERSION FILE|https://LINK [--publish]
                                          put a build on the Downloads page from the
                                          command line (kinds: see BUILD_KINDS)
 """
@@ -331,7 +331,8 @@ CREATE TABLE IF NOT EXISTS builds (
   uploaded_at INTEGER NOT NULL,
   live INTEGER NOT NULL DEFAULT 0,
   published_at INTEGER,
-  downloads INTEGER NOT NULL DEFAULT 0
+  downloads INTEGER NOT NULL DEFAULT 0,
+  link TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS builds_kind ON builds(kind, id);
 CREATE TABLE IF NOT EXISTS client_seen (
@@ -358,6 +359,10 @@ class Db:
                 self.conn.execute("PRAGMA journal_mode=WAL")
             self.conn.execute("PRAGMA foreign_keys=ON")
             self.conn.executescript(SCHEMA)
+            # columns added after a table first shipped
+            cols = {r[1] for r in self.conn.execute("PRAGMA table_info(builds)")}
+            if "link" not in cols:
+                self.conn.execute("ALTER TABLE builds ADD COLUMN link TEXT NOT NULL DEFAULT ''")
 
     def all(self, sql, *args):
         with self.lock:
@@ -1055,7 +1060,7 @@ class Panel:
         return {"id": b["id"], "kind": b["kind"], "kindName": name, "audience": who, "version": b["version"],
                 "filename": b["filename"], "size": b["size"], "sha256": b["sha256"], "notes": b["notes"],
                 "by": b["by_name"], "uploadedAt": b["uploaded_at"], "live": bool(b["live"]),
-                "publishedAt": b["published_at"], "downloads": b["downloads"],
+                "publishedAt": b["published_at"], "downloads": b["downloads"], "link": b["link"] or "",
                 "url": "/download/" + b["kind"] if b["live"] else "/download/build/%d" % b["id"]}
 
     def downloads(self, staff=False):
@@ -1131,6 +1136,25 @@ class Panel:
                 os.remove(tmp)
         self.audit(actor_name, "build-upload", "%s %s (%s, %d bytes)" % (kind, version, filename, size))
         return {"ok": True, "build": self.build_out(self.db.one("SELECT * FROM builds WHERE id=?", bid))}
+
+    def add_link_build(self, actor_name, kind, version, url, notes=""):
+        """A build kept somewhere else (GitHub Releases, a CDN...): the panel only stores the link."""
+        if kind not in BUILD_KINDS:
+            raise ApiError(400, "Pick what this build is.")
+        version = str(version or "").strip()
+        if not BUILD_VERSION.match(version):
+            raise ApiError(400, "Give a version like 2.0 or 2.0.1.")
+        url = str(url or "").strip()
+        if not re.match(r"^https://[^\s/]+\.[^\s/]+/\S*$", url) or len(url) > 1000:
+            raise ApiError(400, "Give the full download link, starting with https://")
+        filename = os.path.basename(urlparse(url).path) or kind
+        filename = re.sub(r"[^A-Za-z0-9._ +()-]", "_", filename)[:120]
+        notes = str(notes or "").strip()[:300]
+        cur = self.db.run("INSERT INTO builds(kind,version,filename,stored,size,sha256,notes,by_name,uploaded_at,link) "
+                          "VALUES(?,?,?,?,?,?,?,?,?,?)", kind, version, filename, "", 0, "", notes, actor_name,
+                          self.now(), url)
+        self.audit(actor_name, "build-link", "%s %s -> %s" % (kind, version, url))
+        return {"ok": True, "build": self.build_out(self.db.one("SELECT * FROM builds WHERE id=?", cur.lastrowid))}
 
     def build(self, bid):
         b = self.db.one("SELECT * FROM builds WHERE id=?", int(bid or 0))
@@ -1600,6 +1624,16 @@ class Handler(BaseHTTPRequestHandler):
             b = p.db.one("SELECT * FROM builds WHERE kind=? AND live=1", kind)
             if not b:
                 raise ApiError(404, "Nothing is published for that yet.")
+        if b["link"]:
+            # kept somewhere else: send the browser there
+            p.db.run("UPDATE builds SET downloads=downloads+1 WHERE id=?", b["id"])
+            self.send_response(302)
+            self.send_header("Location", b["link"])
+            self.send_header("Content-Length", "0")
+            self.send_header("Cache-Control", "no-cache")
+            self.security_headers()
+            self.end_headers()
+            return
         path = p.build_file(b)
         p.db.run("UPDATE builds SET downloads=downloads+1 WHERE id=?", b["id"])
         size = os.path.getsize(path)
@@ -1753,6 +1787,14 @@ class Handler(BaseHTTPRequestHandler):
                 p.publish_build(actor, r["build"]["id"], one("notify") == "1")
                 r["build"] = p.build_out(p.build(r["build"]["id"]))
             return self.send_json(200, r)
+        if method == "POST" and route == "admin/builds/link":
+            actor = self.web_user(role="owner")
+            b = self.body()
+            r = p.add_link_build(actor["name"], str(b.get("kind") or ""), b.get("version"), b.get("url"), b.get("notes"))
+            if b.get("publish"):
+                p.publish_build(actor, r["build"]["id"], bool(b.get("notify")))
+                r["build"] = p.build_out(p.build(r["build"]["id"]))
+            return self.send_json(200, r)
         if method == "POST" and route in ("admin/builds/publish", "admin/builds/unpublish", "admin/builds/delete"):
             actor = self.web_user(role="owner")
             b = self.body()
@@ -1874,7 +1916,10 @@ def main(argv):
             panel.set_password(acc, ask_password(), "console")
             print("Password changed; %s was signed out everywhere." % acc["name"])
         elif cmd == "add-build" and len(args) >= 3:
-            r = panel.add_build("console", args[0], args[1], os.path.basename(args[2]), args[2])
+            if args[2].startswith("https://"):
+                r = panel.add_link_build("console", args[0], args[1], args[2])
+            else:
+                r = panel.add_build("console", args[0], args[1], os.path.basename(args[2]), args[2])
             if "--publish" in args[3:]:
                 panel.publish_build({"name": "console"}, r["build"]["id"])
             print("Added %s %s (%s)%s." % (args[0], args[1], r["build"]["filename"],

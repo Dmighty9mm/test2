@@ -1092,12 +1092,12 @@ async function downloadsView() {
   const c = info.client || {};
   const rows = r.builds.map((b) => h("div", { class: "card build" },
     h("div", { class: "row", style: "width:100%" }, icon(b.audience === "public" ? "download" : "shield"),
-      h("div", {}, h("h2", {}, b.kindName), h("div", { class: "muted" }, "Version " + b.version + " · " + size(b.size) + " · " + ago(b.publishedAt))),
+      h("div", {}, h("h2", {}, b.kindName), h("div", { class: "muted" }, "Version " + b.version + (b.link ? "" : " · " + size(b.size)) + " · " + ago(b.publishedAt))),
       h("span", { class: "spacer" }),
       h("a", { class: "btn primary", href: b.url, download: b.filename }, icon("download"), "Download")),
     h("p", { class: "muted" }, BUILD_HELP[b.kind] || ""),
     b.notes ? h("p", {}, b.notes) : null,
-    h("details", {}, h("summary", { class: "muted" }, "File details"), h("p", { class: "muted wrap" }, b.filename, h("br"), "SHA-256 " + b.sha256))));
+    h("details", {}, h("summary", { class: "muted" }, "File details"), h("p", { class: "muted wrap" }, b.filename, h("br"), b.link ? "From " + new URL(b.link).host : "SHA-256 " + b.sha256))));
   return h("div", {},
     card("Downloads", h("p", { class: "muted" }, "The latest PlebClient builds" + (c.latest ? " (PlebClient " + c.latest + ")" : "") + ". Sign in on the start screen with your PlebMc account.")),
     h("div", { style: "height:18px" }),
@@ -1133,6 +1133,15 @@ async function buildsView() {
     const kind = select("bkind", r.kinds.map((k) => [k.kind, k.name + (k.audience === "staff" ? " (staff only)" : "")]), "windows");
     const version = h("input", { id: "bver", placeholder: "2.0", maxlength: 32, value: (info.client || {}).latest || "" });
     const file = h("input", { id: "bfile", type: "file" });
+    const link = h("input", { id: "blink", type: "url", placeholder: "https://github.com/you/plebmc/releases/download/v2.0/PlebClient-Windows.zip", maxlength: 1000 });
+    const modeFile = h("input", { type: "radio", name: "bmode", value: "file" });
+    const modeLink = h("input", { type: "radio", name: "bmode", value: "link", checked: true });
+    const fileBox = h("div", {}, h("label", { for: "bfile" }, "File (up to " + r.maxMb + " MB, stored on the panel)"), file);
+    const linkBox = h("div", {}, h("label", { for: "blink" }, "Download link (the file stays where it is; the panel only sends people there)"), link);
+    const syncMode = () => { fileBox.hidden = !modeFile.checked; linkBox.hidden = modeFile.checked; btnLabel.textContent = modeFile.checked ? "Upload" : "Add"; };
+    const btnLabel = h("span", {}, "Add");
+    modeFile.addEventListener("change", syncMode);
+    modeLink.addEventListener("change", syncMode);
     const notes = h("input", { id: "bnotes", maxlength: 300, placeholder: "optional, e.g. New: wings and video settings" });
     const publish = h("input", { type: "checkbox", id: "bpub", checked: true });
     const notify = h("input", { type: "checkbox", id: "bnotify" });
@@ -1150,6 +1159,18 @@ async function buildsView() {
     const meter = h("div", { class: "meter" }, bar);
     meter.hidden = true;
     const btn = h("button", { class: "primary", onclick: async () => {
+      const opts = { publish: publish.checked, notify: publish.checked && notify.checked && clientKinds.includes(kind.value) };
+      if (modeLink.checked) {
+        if (!/^https:\/\/\S+$/.test(link.value.trim())) return message(out, "Paste the full download link, starting with https://");
+        btn.disabled = true;
+        try {
+          await api("admin/builds/link", { kind: kind.value, version: version.value.trim(), url: link.value.trim(), notes: notes.value.trim(), ...opts });
+          info = await api("info");
+          toast(publish.checked ? "Added and published." : "Added. Publish it when you're ready.");
+          route();
+        } catch (e) { message(out, e.message); btn.disabled = false; }
+        return;
+      }
       const f = file.files[0];
       if (!f) return message(out, "Pick the build file.");
       if (!types().some((t) => f.name.toLowerCase().endsWith(t))) return message(out, "That build must be a " + types().join(" or ") + " file.");
@@ -1169,11 +1190,13 @@ async function buildsView() {
         btn.disabled = false;
         meter.hidden = true;
       }
-    } }, icon("upload"), "Upload");
-    wrap.append(card("Upload a build",
-      h("p", { class: "muted" }, "Publishing puts the build on the Downloads page (staff-only builds show only to admins). The build it replaces is kept here, so you can publish it again to go back."),
+    } }, icon("upload"), btnLabel);
+    syncMode();
+    wrap.append(card("Add a build",
+      h("p", { class: "muted" }, "Link to where the file is hosted (GitHub Releases, Google Drive, a CDN...) so it never sits on the panel's server, or upload it here. Publishing puts the build on the Downloads page (staff-only builds show only to admins). The build it replaces is kept here, so you can publish it again to go back."),
       h("div", { class: "grid g2" }, h("div", {}, h("label", { for: "bkind" }, "What is it"), kind), h("div", {}, h("label", { for: "bver" }, "Version"), version)),
-      h("label", { for: "bfile" }, "File (up to " + r.maxMb + " MB)"), file,
+      h("div", { class: "row" }, h("label", { class: "check" }, modeLink, "Link to a file hosted somewhere else"), h("label", { class: "check" }, modeFile, "Upload the file to the panel")),
+      linkBox, fileBox,
       h("label", { for: "bnotes" }, "Notes on the Downloads page"), notes,
       h("label", { class: "check" }, publish, "Publish it now"), notifyRow,
       h("div", { style: "height:10px" }), h("div", { class: "row" }, btn), h("div", { style: "height:10px" }), meter, out));
@@ -1191,7 +1214,7 @@ async function buildsView() {
     const mine = r.builds.filter((b) => b.kind === k.kind);
     const rows = mine.map((b) => h("tr", {},
       h("td", {}, h("b", {}, b.version), " ", b.live ? h("span", { class: "pill good" }, "live") : null),
-      h("td", { class: "wrap" }, b.filename, h("br"), h("small", { class: "muted" }, size(b.size) + (b.notes ? " · " + b.notes : ""))),
+      h("td", { class: "wrap" }, b.filename, h("br"), h("small", { class: "muted" }, (b.link ? "link to " + new URL(b.link).host : size(b.size)) + (b.notes ? " · " + b.notes : ""))),
       h("td", { title: when(b.uploadedAt) }, ago(b.uploadedAt), h("br"), h("small", { class: "muted" }, "by " + b.by)),
       h("td", { class: "num" }, fmt(b.downloads)),
       h("td", { class: "num" }, h("div", { class: "row", style: "justify-content:flex-end" },

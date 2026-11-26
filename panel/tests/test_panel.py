@@ -428,6 +428,19 @@ class Builds(unittest.TestCase):
         self.p.unpublish_build(self.owner, a["id"])
         self.assertEqual(self.p.downloads(), [])
 
+    def test_link_builds(self):
+        for bad in ("", "http://x.com/a.zip", "javascript:alert(1)", "https://nohost/a.zip"):
+            with self.assertRaises(app.ApiError, msg=bad):
+                self.p.add_link_build("Owner", "windows", "2.0", bad)
+        url = "https://github.com/me/plebmc/releases/download/v2.0/PlebClient-Windows.zip"
+        b = self.p.add_link_build("Owner", "windows", "2.0", url)["build"]
+        self.assertEqual((b["filename"], b["link"], b["size"]), ("PlebClient-Windows.zip", url, 0))
+        self.p.publish_build(self.owner, b["id"])
+        self.assertEqual(self.p.downloads()[0]["link"], url)
+        self.assertEqual(os.listdir(self.dir), [])  # nothing stored on the panel
+        self.p.unpublish_build(self.owner, b["id"])
+        self.p.delete_build(self.owner, b["id"])
+
     def test_staff_builds_hidden_from_players(self):
         c = self.add(kind="plebcolors", name="PlebColors.zip")
         w = self.add(kind="forge-1.21.1", name="PlebMc-Forge-1.21.1.zip")
@@ -628,6 +641,22 @@ class PanelHttp(unittest.TestCase):
         self.assertEqual(j["client"]["latest"], "2.0")
         s, j, _ = self.call("/api/admin/builds", cookie=boss)
         self.assertEqual(sorted(b["downloads"] for b in j["builds"]), [1, 1])
+        # a link build: the panel sends people to where the file is
+        url = "https://github.com/me/plebmc/releases/download/v2.0/PlebMc-Forge-1.21.1.zip"
+        s, j, _ = self.call("/api/admin/builds/link", {"kind": "forge-1.21.1", "version": "2.0", "url": url, "publish": True}, cookie=joe)
+        self.assertEqual(s, 403)
+        s, j, _ = self.call("/api/admin/builds/link", {"kind": "forge-1.21.1", "version": "2.0", "url": url, "publish": True}, cookie=boss)
+        self.assertEqual(s, 200, j)
+
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *a):
+                return None
+        o = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect)
+        try:
+            o.open(self.base + "/download/forge-1.21.1", timeout=5)
+            self.fail("no redirect")
+        except urllib.error.HTTPError as e:
+            self.assertEqual((e.code, e.headers["Location"]), (302, url))
 
     def test_static_tools(self):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
