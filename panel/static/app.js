@@ -1828,6 +1828,33 @@ function downloadsCard(list, ro) {
 }
 
 // how to get each build going, by its kind
+/** Real captures of the client, shown on the downloads page. */
+const CLIENT_SHOTS = [
+  ["/static/home/client-menu.jpg", "Main menu", "Everything one click away: play, servers, shop, mods and settings."],
+  ["/static/home/mods.jpg", "Mods", "34 mods you switch on and off, with settings on right-click."],
+  ["/static/home/client-hud.jpg", "HUD in game", "Keystrokes, CPS, coordinates and a compass. Move them where you like."],
+  ["/static/home/shop.jpg", "Shop", "Try hats, cloaks and wings on your skin before you buy."],
+  ["/static/home/client-settings.jpg", "Video settings", "Every option says what it does and what it costs in FPS."],
+  ["/static/home/client-signin.jpg", "Your account", "Sign in once on the start screen. Coins and cosmetics follow you."],
+];
+/** A picture viewer over the page: arrows or the arrow keys to move, Escape or a click outside to close. */
+function lightbox(i) {
+  const img = h("img", { alt: "" });
+  const cap = h("p");
+  const show = (n) => { i = (n + CLIENT_SHOTS.length) % CLIENT_SHOTS.length; img.src = CLIENT_SHOTS[i][0]; img.alt = CLIENT_SHOTS[i][1]; cap.replaceChildren(h("b", {}, CLIENT_SHOTS[i][1]), " ", CLIENT_SHOTS[i][2]); };
+  const close = () => { box.remove(); document.removeEventListener("keydown", keys); };
+  const keys = (e) => { if (e.key === "Escape") close(); else if (e.key === "ArrowRight") show(i + 1); else if (e.key === "ArrowLeft") show(i - 1); };
+  const box = h("div", { class: "lightbox", role: "dialog", "aria-label": "Pictures of PlebClient", onclick: (e) => { if (e.target === box) close(); } },
+    h("button", { class: "lb-x", "aria-label": "Close", onclick: close }, "×"),
+    h("button", { class: "lb-nav", "aria-label": "Previous picture", onclick: () => show(i - 1) }, "‹"),
+    h("figure", {}, img, cap),
+    h("button", { class: "lb-nav", "aria-label": "Next picture", onclick: () => show(i + 1) }, "›"));
+  show(i);
+  document.addEventListener("keydown", keys);
+  document.body.append(box);
+  box.querySelector(".lb-x").focus();
+}
+
 const DL_INFO = {
   offline: { icon: "globe", tag: "Easiest", needs: "Any modern browser", steps: ["Download the HTML file.", "Open it (double-click, or drag it into your browser).", "Make your account on the start screen and play."] },
   wasm: { icon: "sparkle", tag: "Fastest", needs: "A recent Chrome or Edge", steps: ["Download and unzip it.", "Open index.html in Chrome or Edge.", "Make your account on the start screen and play."] },
@@ -1844,7 +1871,7 @@ async function downloadsView() {
   const btn = (d, big) => h("a", { class: "btn primary" + (big ? " big" : ""), href: "/api/dl/" + encodeURIComponent(d.kind), download: "" }, icon("download"), "Download");
   const steps = (d) => (meta(d).steps.length ? h("ol", { class: "dl-steps" }, ...meta(d).steps.map((s) => h("li", {}, s))) : null);
   const [top, ...rest] = list;
-  const shot = (c.features || []).map((f) => f.image).find(Boolean);
+  const shot = "/static/home/client-menu.jpg";
   return h("div", { class: "dl" },
     h("section", { class: "dl-top" },
       h("div", { class: "dl-top-txt" },
@@ -1853,7 +1880,10 @@ async function downloadsView() {
         h("h2", {}, top.name), h("p", { class: "muted" }, top.help),
         h("div", { class: "row" }, btn(top, true), meta(top).needs ? h("span", { class: "needs" }, icon("check"), meta(top).needs) : null),
         steps(top)),
-      shot ? h("div", { class: "dl-top-pic" }, h("img", { src: shot, alt: "", loading: "lazy" })) : null),
+      h("button", { class: "dl-top-pic", "aria-label": "See it bigger", onclick: () => lightbox(0) }, h("img", { src: shot, alt: "PlebClient's main menu", loading: "lazy" }))),
+    h("h2", { class: "dl-h" }, "A look inside"),
+    h("div", { class: "gallery" }, ...CLIENT_SHOTS.map(([src, title, text], i) => h("button", { class: "gshot", onclick: () => lightbox(i) },
+      h("img", { src, alt: title, loading: "lazy" }), h("span", {}, h("b", {}, title), h("small", {}, text))))),
     rest.length ? h("h2", { class: "dl-h" }, "Other ways to play") : null,
     rest.length ? h("div", { class: "dl-grid" }, ...rest.map((d) => h("section", { class: "dl-card" },
       h("div", { class: "dl-ic" }, icon(meta(d).icon)),

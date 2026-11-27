@@ -823,7 +823,8 @@ class PanelHttp(unittest.TestCase):
     def test_static_tools(self):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         for path in ("/static/tools/hat.html", "/static/tools/cloak.html", "/static/tools/hat.js", "/static/vendor/three.min.js",
-                     "/static/logo.png", "/static/home/wallpaper.jpg", "/static/fonts/jersey-25.woff2", "/static/plebio/idle.gif", "/static/plebio/still.png"):
+                     "/static/logo.png", "/static/home/wallpaper.jpg", "/static/fonts/jersey-25.woff2", "/static/plebio/idle.gif", "/static/plebio/still.png", "/static/home/client-menu.jpg",
+                     "/static/home/client-hud.jpg"):
             with opener.open(urllib.request.Request(self.base + path), timeout=5) as r:
                 self.assertEqual(r.status, 200, path)
                 self.assertIn("script-src 'self'", r.headers["Content-Security-Policy"])

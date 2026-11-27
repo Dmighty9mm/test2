@@ -664,3 +664,21 @@ button.linkish { color: var(--accent2); box-shadow: none; }
 .news-card b { font: 400 26px/1.1 var(--display); letter-spacing: .4px; overflow-wrap: anywhere; } .news-card small { color: var(--faint); }
 @media (max-width: 640px) { .post { padding: 16px 16px 18px; } }
 @media (prefers-reduced-motion: no-preference) { .post { animation: rise .35s ease-out backwards; } }
+
+/* ---- pictures of the client ---- */
+button.dl-top-pic { padding: 0; border: 0; background: none; box-shadow: none; cursor: zoom-in; display: block; }
+.gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 34px; }
+.gshot { padding: 0; display: grid; text-align: left; white-space: normal; align-content: start; background: var(--card); border: 2px solid var(--line); box-shadow: none; overflow: hidden; cursor: zoom-in; transition: transform .15s, border-color .15s; }
+.gshot:hover { transform: translateY(-4px); border-color: var(--accent-line); }
+.gshot img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; border-bottom: 2px solid var(--line); }
+.gshot span { display: grid; gap: 4px; padding: 12px 14px 14px; }
+.gshot b { font: 400 24px/1 var(--display); letter-spacing: .4px; color: var(--fg); } .gshot small { color: var(--muted); font-size: 13px; font-weight: 400; line-height: 1.4; }
+.lightbox { position: fixed; inset: 0; z-index: 100; background: rgba(4, 8, 14, .92); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 20px; animation: fadein .2s; }
+.lightbox figure { margin: 0; display: grid; justify-items: center; gap: 12px; min-width: 0; }
+.lightbox img { max-width: 100%; max-height: calc(100vh - 130px); border: 3px solid #000; box-shadow: 0 0 0 2px var(--line2), var(--shadow); }
+.lightbox p { margin: 0; color: var(--muted); text-align: center; } .lightbox p b { color: var(--fg); margin-right: 6px; }
+.lightbox .lb-nav { font: 400 40px/1 var(--display); width: 52px; height: 64px; padding: 0; }
+.lightbox .lb-x { position: absolute; top: 14px; right: 18px; font-size: 26px; width: 44px; height: 44px; padding: 0; }
+@media (max-width: 860px) { .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .gallery { grid-template-columns: minmax(0, 1fr); } .lightbox { padding: 8px; gap: 4px; } .lightbox .lb-nav { width: 36px; } }
+@media (prefers-reduced-motion: no-preference) { .gshot { animation: rise .35s ease-out backwards; } }
