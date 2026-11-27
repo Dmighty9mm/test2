@@ -411,6 +411,20 @@ class PanelLogic(unittest.TestCase):
         self.assertEqual(len(c["features"]), 1)
         self.assertEqual(c["faq"], [{"q": "Q?", "a": "A."}])
         self.assertEqual(c["subtitle"], app.SITE_DEFAULTS["subtitle"])  # left out = the default
+        # voting: defaults, then the owner's own list
+        d = app.SITE_DEFAULTS
+        self.assertEqual(c["voteLinks"], d["voteLinks"])  # left out = the default
+        self.assertEqual(d["voteLinks"][0]["url"], "https://vote.plebmc.top/")
+        for bad in ({"voteLinks": [{"name": "X", "url": "http://plain.example"}]}, {"voteLinks": [{"name": "", "url": "https://a.example"}]},
+                    {"voteReward": "lots"}):
+            with self.assertRaises(app.ApiError):
+                self.p.set_site_content(owner, bad)
+        self.p.set_site_content(owner, {"voteLinks": [{"name": "A", "url": "https://a.example/v"}, {"name": "", "url": ""}], "voteReward": 250})
+        c = self.p.public_info()["content"]
+        self.assertEqual((c["voteLinks"], c["voteReward"]), ([{"name": "A", "url": "https://a.example/v"}], 250))
+        self.p.set_site_content(owner, {"voteLinks": [], "voteReward": 0})
+        c = self.p.public_info()["content"]
+        self.assertEqual((c["voteLinks"], c["voteReward"]), ([], 0))  # none = voting hidden
         self.p.reset_site_content(owner)
         self.assertEqual(self.p.public_info()["content"]["logo"], "/static/logo.png")
 

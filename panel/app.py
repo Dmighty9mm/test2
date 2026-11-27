@@ -156,10 +156,10 @@ SITE_DEFAULTS = {
     "badge": "PlebClient is out now",
     "title1": "Minecraft, but",
     "title2": "way more pleb.",
-    "subtitle": "One network, three games and our own client. Play PlebNite, PlebRPG and PlebMc PvP in your browser or on "
+    "subtitle": "One network, three games and our own client. Play PlebMc PvP, PlebNite and PlebRPG in your browser or on "
                 "Windows, earn PlebMc Coins and show off your cosmetics.",
     "serverIp": "play.plebmc.top",
-    "discordUrl": "",
+    "discordUrl": "https://discord.gg/bR89zXFH9h",
     "featuresTitle": "Three games, one account",
     "featuresText": "Everything you earn follows you: your coins, cosmetics and stats work on every PlebMc game and every PlebClient.",
     "features": [
@@ -176,14 +176,18 @@ SITE_DEFAULTS = {
         {"q": "Is it free?", "a": "Yes. PlebMc and PlebClient are free. Coins come from playing; the shop is cosmetics only."},
         {"q": "Why do I need a PlebMc account?", "a": "Anyone can join a cracked server with your name. Your account's password "
          "makes sure only you can spend your coins and wear your cosmetics."},
-        {"q": "Where do I see my stats?", "a": "On the Stats page: type your name and pick PlebNite, PlebRPG or PlebMc. The "
+        {"q": "Where do I see my stats?", "a": "On the Stats page: type your name and pick PlebMc, PlebNite or PlebRPG. The "
          "Leaderboards page has the top players for every stat."},
     ],
+    # voting: the server lists players vote on (PlebioAPI pays the reward when a vote comes in over Votifier)
+    "voteLinks": [{"name": "Eaglercraft Servers", "url": "https://vote.plebmc.top/"}],
+    "voteReward": 100,
+    "voteText": "Votes push PlebMc up the server lists so more players find us. You can vote once a day on each site.",
     "ctaTitle": "Ready to play?",
     "ctaText": "Grab PlebClient, make your account on the start screen and see you on play.plebmc.top.",
     "footer": "Not affiliated with Mojang or Microsoft.",
 }
-SITE_TEXT_LIMITS = {"badge": 60, "title1": 40, "title2": 40, "subtitle": 300, "serverIp": 60,                     "featuresTitle": 60, "featuresText": 300, "ctaTitle": 60, "ctaText": 300, "footer": 200}
+SITE_TEXT_LIMITS = {"badge": 60, "title1": 40, "title2": 40, "subtitle": 300, "serverIp": 60,                     "featuresTitle": 60, "featuresText": 300, "ctaTitle": 60, "ctaText": 300, "footer": 200, "voteText": 300}
 
 
 def sniff_image(data):
@@ -1368,6 +1372,21 @@ class Panel:
             q, a = str(f.get("q") or "").strip()[:150], str(f.get("a") or "").strip()[:600]
             if q and a:
                 out["faq"].append({"q": q, "a": a})
+        votes = body.get("voteLinks") if isinstance(body.get("voteLinks"), list) else SITE_DEFAULTS["voteLinks"]
+        out["voteLinks"] = []
+        for v in votes[:8]:
+            if not isinstance(v, dict):
+                continue
+            n, u = str(v.get("name") or "").strip()[:40], str(v.get("url") or "").strip()[:300]
+            if not n and not u:
+                continue
+            if not n or not re.match(r"^https://\S+$", u):
+                raise ApiError(400, "Every vote site needs a name and a link that starts with https://")
+            out["voteLinks"].append({"name": n, "url": u})
+        try:
+            out["voteReward"] = max(0, min(10 ** 9, int(body.get("voteReward", SITE_DEFAULTS["voteReward"]) or 0)))
+        except (TypeError, ValueError):
+            raise ApiError(400, "The vote reward must be a number.")
         self.db.set_kv("site_content", out)
         # forget uploads nothing uses any more (a day later, so a page being edited keeps its new pictures)
         used = {v.rsplit("/", 1)[-1] for v in [out[k] for k in SITE_IMAGES] + [f["image"] for f in out["features"]]

@@ -32,6 +32,16 @@ accent color, tagline, text, server address, Discord link, feature rows (with pi
 FAQ, the TNT banner and footer. Pictures (PNG, JPEG, GIF or WebP, up to 5 MB) are uploaded
 to the panel and kept in its database. **Reset to defaults** puts everything back.
 
+### Voting
+
+The **Vote** page lists the server lists players vote on (by default `https://vote.plebmc.top/`),
+with the steps and the reward. The browser remembers which sites a visitor voted on today:
+until they're done, the Vote link shows a red dot and a small reminder pops up in the corner
+(one **Later** hides it for the day). Owners change the vote sites, the reward shown and the
+note on **Admin > Site content > Voting**; with no vote sites, all of it is hidden. The site
+only links out: PlebioAPI still pays the coins when the vote comes in over Votifier
+(`voting.reward` in its config), so keep the number on the site the same as that one.
+
 ### Client updates
 
 Each PlebClient tells the panel its version when it starts (`/api/client/version`). On
@@ -198,8 +208,8 @@ never reaches a backend server or the proxy's command log.
 
 ## Stats and leaderboards
 
-**Stats**: type a player's name to see their stats, one game at a time: PlebNite
-(first), PlebRPG and PlebMc (coins, cosmetics, daily streak). **Leaderboards**: pick a
+**Stats**: type a player's name to see their stats, one game at a time: PlebMc
+(first: coins, cosmetics, daily streak), PlebNite and PlebRPG. **Leaderboards**: pick a
 game and "All stats" shows the top 10 of every stat side by side (Kills, Wins, Deaths,
 Play time and so on, like the Discord bot); pick one stat for its top 100. PlebNite and
 PlebRPG show their boards (empty) before their servers send anything. Click a name to

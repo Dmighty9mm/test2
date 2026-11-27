@@ -214,16 +214,17 @@ function pager(container, load, render, opts = {}) {
 // ==================== shell ====================
 
 // [id, label, icon, needs: "me" (signed in), "admin" or "owner"]
-const NAV = [["home", "Home", "home"], ["downloads", "Download", "download"], ["stats", "Stats", "chart"], ["leaderboard", "Leaderboards", "trophy"], ["shop", "Shop", "bag"]];
+const NAV = [["home", "Home", "home"], ["downloads", "Download", "download"], ["stats", "Stats", "chart"], ["leaderboard", "Leaderboards", "trophy"], ["shop", "Shop", "bag"], ["vote", "Vote", "heart"]];
 const ADMIN_NAV = [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["announce", "Announcements", "megaphone"],
   ["site", "Site content", "edit", "owner"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Client updates", "refresh"], ["audit", "Admin log", "list"]];
 const ADMIN_VIEWS = new Set(["admin", "players", "player", "ranks", "rank", "announce", "site", "makers", "publish", "client", "audit"]);
 // page headings: [first word, second word (in color), a line under it]
 const HEADS = {
   downloads: ["Get", "PlebClient", "Pick how you want to play. The first time you start it, make your PlebMc account on the start screen."],
-  stats: ["Player", "stats", "Type a name and pick PlebNite, PlebRPG or PlebMc."],
+  stats: ["Player", "stats", "Type a name and pick PlebMc, PlebNite or PlebRPG."],
   leaderboard: ["The", "leaderboards", "The best players on every game, with a top 10 for every stat."],
   shop: ["The", "shop", "Hats, cloaks, wings and trails everyone on PlebMc can see."],
+  vote: ["Vote for", "PlebMc", "Vote every day on each site. It takes a few seconds."],
   me: ["My", "account", ""],
 };
 
@@ -250,6 +251,9 @@ function setAccent(hex) {
 function setNav(view) {
   nav.replaceChildren();
   for (const [id, label, ic] of NAV) {
+    if (id === "vote" && !voteLinks().length) continue;
+    const dot = id === "vote" && votesLeft() ? h("i", { class: "navdot", title: "You can vote today" }) : null;
+    if (dot) { nav.append(h("a", { href: "#" + id, class: view === id ? "on" : null }, icon(ic), label, dot)); continue; }
     nav.append(h("a", { href: "#" + id, class: view === id ? "on" : null }, icon(ic), label));
   }
   if (isAdmin()) nav.append(h("a", { href: "#admin", class: "admin-link" + (ADMIN_VIEWS.has(view) ? " on" : "") }, icon("shield"), "Admin"));
@@ -307,9 +311,87 @@ function drawFooter() {
       h("div", {}, h("a", { class: "brand", href: "#home" }, h("img", { src: siteLogo(), alt: "" }), info.site),
         h("p", {}, c.subtitle || "")),
       col("Play", [["Download PlebClient", "#downloads"], c.serverIp ? [c.serverIp, "#home"] : null, ["Shop", "#shop"]]),
-      col("Community", [c.discordUrl ? ["Discord", c.discordUrl, true] : null, ["Stats", "#stats"], ["Leaderboards", "#leaderboard"]]),
+      col("Community", [c.discordUrl ? ["Discord", c.discordUrl, true] : null, voteLinks().length ? ["Vote", "#vote"] : null, ["Stats", "#stats"], ["Leaderboards", "#leaderboard"]]),
       col("Account", me ? [["My account", "#me"], isAdmin() ? ["Admin", "#admin"] : null] : [["Sign in", "#login"], ["Create account", "#register"]])),
     h("div", { class: "foot-bottom" }, h("span", {}, "© " + new Date().getFullYear() + " " + info.site), h("span", {}, c.footer || ""))));
+}
+
+// ==================== voting ====================
+
+const voteLinks = () => content().voteLinks || [];
+const today = () => new Date().toISOString().slice(0, 10);
+/** What this browser remembers about today's votes: {day, sites: [links voted on], later: true once "Later" was pressed}. */
+function voteState() {
+  try {
+    const v = JSON.parse(localStorage.getItem("pleb-vote") || "{}");
+    if (v && v.day === today() && Array.isArray(v.sites)) return v;
+  } catch (e) { /* no storage: fall through */ }
+  return { day: today(), sites: [], later: false };
+}
+function saveVoteState(v) {
+  try { localStorage.setItem("pleb-vote", JSON.stringify(v)); } catch (e) { /* private window */ }
+}
+const votesLeft = () => { const v = voteState(); return voteLinks().filter((l) => !v.sites.includes(l.url)).length; };
+function markVoted(url) {
+  const v = voteState();
+  if (!v.sites.includes(url)) v.sites.push(url);
+  saveVoteState(v);
+  drawVoteNudge();
+}
+const rewardText = () => (content().voteReward > 0 ? fmt(content().voteReward) + " " + coinName() : "");
+
+/** The reminder in the corner: shows until today's votes are done or "Later" is pressed. */
+function drawVoteNudge(view) {
+  document.querySelectorAll(".vote-nudge").forEach((n) => n.remove());
+  const v = voteState();
+  if (view === undefined) view = location.hash.slice(1).split("?")[0] || "home";
+  if (!voteLinks().length || !votesLeft() || v.later || view === "vote" || view === "login" || view === "register" || ADMIN_VIEWS.has(view)) return;
+  const r = rewardText();
+  const box = h("div", { class: "vote-nudge", role: "status" },
+    h("button", { class: "x", "aria-label": "Remind me later", onclick: () => { saveVoteState({ ...voteState(), later: true }); box.remove(); } }, "×"),
+    h("div", { class: "vn-icon" }, icon("heart")),
+    h("div", {}, h("b", {}, "Voted for " + info.site + " today?"), h("p", {}, r ? "Every vote pays " + r + " and helps new players find us." : "Every vote helps new players find us."),
+      h("div", { class: "row" }, h("a", { class: "btn primary small", href: "#vote" }, "Vote now"),
+        h("button", { class: "ghost small", onclick: () => { saveVoteState({ ...voteState(), later: true }); box.remove(); } }, "Later"))));
+  document.body.append(box);
+}
+
+async function voteView() {
+  const c = content();
+  const links = voteLinks();
+  if (!links.length) return card(null, empty("heart", "There's nowhere to vote yet. Check back soon."));
+  const r = rewardText();
+  const list = h("div", { class: "vote-list" });
+  const progress = h("div", { class: "vote-progress" });
+  const nameBox = h("input", { id: "vote-name", maxlength: 16, spellcheck: "false", placeholder: "Your Minecraft name", value: me ? me.name : "" });
+  const draw = () => {
+    const v = voteState();
+    const done = links.filter((l) => v.sites.includes(l.url)).length;
+    const bar = h("i");
+    bar.style.width = Math.round(done / links.length * 100) + "%";
+    progress.replaceChildren(h("div", { class: "row" }, h("b", {}, done === links.length ? "All done for today. Thank you!" : done + " of " + links.length + " voted today"),
+      h("span", { class: "spacer" }), h("span", { class: "muted" }, "Resets every day")), h("div", { class: "meter" }, bar));
+    list.replaceChildren(...links.map((l, i) => {
+      const voted = v.sites.includes(l.url);
+      let host = "";
+      try { host = new URL(l.url).hostname.replace(/^www\./, ""); } catch (e) { /* shown without it */ }
+      return h("div", { class: "vote-site" + (voted ? " done" : "") }, h("span", { class: "vn" }, voted ? icon("check") : i + 1),
+        h("div", {}, h("b", {}, l.name), h("small", {}, host)),
+        r ? h("span", { class: "reward" }, icon("coin"), "+" + fmt(c.voteReward)) : null,
+        h("a", { class: "btn " + (voted ? "" : "primary"), href: l.url, target: "_blank", rel: "noopener", onclick: () => { setTimeout(() => { markVoted(l.url); draw(); }, 400); } },
+          voted ? "Vote again" : "Vote", icon("arrow")));
+    }));
+  };
+  draw();
+  return h("div", { class: "vote" },
+    h("div", { class: "vote-main" }, progress, list),
+    h("aside", { class: "card" }, h("h2", {}, "How voting works"),
+      h("ol", { class: "vote-steps" },
+        h("li", {}, h("b", {}, "Copy your name"), h("div", { class: "row", style: "margin-top:6px" }, nameBox,
+          h("button", { onclick: () => { const n = nameBox.value.trim(); if (!n) return; if (navigator.clipboard) navigator.clipboard.writeText(n).then(() => toast("Copied " + n + ".")); } }, icon("copy"), "Copy"))),
+        h("li", {}, h("b", {}, "Press Vote"), h("p", { class: "muted" }, "The site opens in a new tab. Paste your Minecraft name there, exactly as you play.")),
+        h("li", {}, h("b", {}, r ? "Get " + r : "That's it"), h("p", { class: "muted" }, r ? "Your coins arrive in game right away, or the next time you join." : "Thanks for helping the server grow."))),
+      c.voteText ? h("p", { class: "faint", style: "font-size:13px;margin:12px 0 0" }, c.voteText) : null));
 }
 
 // ==================== home ====================
@@ -381,7 +463,7 @@ async function homeView() {
     }).catch(() => stage.replaceChildren(empty("trophy", "Couldn't load this board.")));
   };
   api("stats/games").then((r) => {
-    const order = ["plebnite", "plebrpg", "plebmc"];
+    const order = ["plebmc", "plebnite", "plebrpg"];
     const games = order.map((id) => r.games.find((g) => g.id === id)).filter(Boolean).concat(r.games.filter((g) => !order.includes(g.id)));
     if (games.length) showBoard(games, games[0]);
     else stage.replaceChildren(empty("trophy", "No stats yet."));
@@ -397,6 +479,16 @@ async function homeView() {
         me ? h("a", { class: "btn", href: "#me" }, icon("user"), "My account") : h("a", { class: "btn", href: "#register" }, icon("plus"), "Create account")),
       h("div", { class: "step3" }, h("h3", {}, "Join the server"), h("p", {}, c.serverIp ? "Add " + c.serverIp + " to your server list and hop in." : "Pick PlebMc in your server list and hop in."),
         c.serverIp ? h("button", { onclick: () => copyIp(c.serverIp) }, icon("copy"), "Copy address") : null)))));
+
+  // vote
+  if (voteLinks().length) {
+    const r = rewardText();
+    wrap.append(h("section", { class: "sec", style: "padding-top:0" }, h("div", { class: "wrap" }, h("div", { class: "vote-strip" },
+      h("div", { class: "vs-coin" }, icon("heart")),
+      h("div", {}, h("h2", {}, r ? "Vote every day, get " + r : "Vote for " + info.site + " every day"),
+        h("p", {}, "It takes a few seconds and helps new players find the server.")),
+      h("a", { class: "btn big", href: "#vote" }, "Vote now", icon("arrow"))))));
+  }
 
   // FAQ
   const faq = c.faq || [];
@@ -492,7 +584,7 @@ async function leaderboardView() {
     gameChips, h("div", { style: "height:8px" }), statChips, h("div", { style: "height:16px" }), out);
 }
 
-/** Stats: type a player and see their stats, one game at a time (PlebNite first). */
+/** Stats: type a player and see their stats, one game at a time (PlebMc, PlebNite, PlebRPG). */
 async function statsView() {
   const p = params();
   const q = h("input", { type: "search", placeholder: "Type a player's name", "aria-label": "Player name", maxlength: 16, spellcheck: "false", value: p.name || "" });
@@ -500,11 +592,11 @@ async function statsView() {
   const out = h("div", {});
   const result = h("div", {});
   let data = null;
-  let game = p.game || "plebnite";
+  let game = p.game || "plebmc";
   const keep = () => history.replaceState(null, "", "#stats?" + new URLSearchParams({ name: data ? data.name : q.value.trim(), game }).toString());
   const draw = () => {
     if (!data) return;
-    const order = ["plebnite", "plebrpg", "plebmc"];
+    const order = ["plebmc", "plebnite", "plebrpg"];
     const titles = { plebnite: "PlebNite", plebrpg: "PlebRPG", plebmc: "PlebMc" };
     const all = order.map((id) => data.games.find((g) => g.id === id) || { id, title: titles[id], stats: [] })
       .concat(data.games.filter((g) => !order.includes(g.id)));
@@ -533,7 +625,7 @@ async function statsView() {
   else if (me) { q.value = me.name; look(me.name); }
   return card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "Player stats"), h("span", { class: "spacer" }),
     h("label", { class: "searchbox" }, icon("search"), q), h("button", { onclick: () => look(q.value.trim()) }, "Look up")),
-  h("p", { class: "muted" }, "Type a name and press Enter. Pick PlebNite, PlebRPG or PlebMc to switch."), result);
+  h("p", { class: "muted" }, "Type a name and press Enter. Pick PlebMc, PlebNite or PlebRPG to switch."), result);
 }
 
 const scriptLoads = {};
@@ -557,54 +649,85 @@ async function previews() {
 const forSale = (i) => i.price != null && i.price >= 0;
 const catName = { hat: "Hats", wings: "Wings", cloak: "Cloaks", trail: "Trails" };
 
+// rarity comes from the price, like the colors of item names in game
+function rarity(i) {
+  if (!forSale(i)) return ["exclusive", "Exclusive"];
+  if (i.price >= 10000) return ["legendary", "Legendary"];
+  if (i.price >= 4000) return ["epic", "Epic"];
+  if (i.price >= 1500) return ["rare", "Rare"];
+  return ["common", "Common"];
+}
+const catIcon = (c) => (c === "hat" ? "hat" : c === "cloak" ? "cloak" : c === "wings" ? "wings" : c === "trail" ? "sparkle" : "bag");
+
 async function shopView() {
   const [items, account] = await Promise.all([catalog(), me ? api("me").catch(() => null) : null]);
   let player = account && account.player;
   const P = await previews();
-  const q = h("input", { type: "search", placeholder: "Search the shop", "aria-label": "Search the shop" });
+  if (!items.length) return card(null, empty("bag", "The shop shows up once the server connects."));
+  const q = h("input", { type: "search", placeholder: "Search cosmetics", "aria-label": "Search cosmetics" });
+  const sort = select("shop-sort", [["featured", "Featured"], ["low", "Price: low to high"], ["high", "Price: high to low"], ["name", "Name"]], "featured");
+  sort.setAttribute("aria-label", "Sort");
   let cat = "all";
+  let only = "all"; // all | owned | missing
   const cats = ["all", ...new Set(items.map((i) => i.category))];
-  const chips = h("div", { class: "chips" });
-  const grid = h("div", { class: "items shop" });
+  const tabs = h("div", { class: "shop-tabs", role: "tablist" });
+  const filters = h("div", { class: "chips" });
+  const grid = h("div", { class: "shop-grid" });
+  const count = h("span", { class: "muted" });
   const owned = (i) => !!(player && player.owned.includes(i.id));
 
-  // the big live preview with the item's details and Buy
+  // the display case: a live 3D preview with the item's details and Buy
   const canvas = h("canvas", { class: "stage", "aria-label": "3D preview, drag to turn" });
   const stage = P ? P.stage(canvas) : null;
-  const info = h("div", { class: "stage-info" });
-  const balance = h("div", { class: "muted" });
-  const showBalance = () => balance.replaceChildren(player ? h("span", {}, "You have ", h("b", { class: "gold" }, fmt(player.coins) + " " + coinName())) : "");
+  const flat = h("div", { class: "stage flat hidden" });
+  const info = h("div", { class: "case-info" });
+  const wallet = h("div", { class: "wallet" });
+  const showWallet = () => wallet.replaceChildren(...(player
+    ? [icon("coin"), h("div", {}, h("b", {}, fmt(player.coins)), h("small", {}, coinName())), h("span", { class: "spacer" }), h("span", { class: "muted" }, fmt(player.owned.length) + " owned")]
+    : me ? [icon("coin"), h("span", { class: "muted" }, "Join the server once to see your coins here.")]
+      : [icon("coin"), h("span", { class: "muted" }, "Sign in to buy with your coins."), h("span", { class: "spacer" }), h("a", { class: "btn small primary", href: "#login?next=%23shop" }, "Sign in")]));
   let selected = null;
   let buying = false;
 
   function buyArea(i) {
-    if (!forSale(i)) return h("span", { class: "pill" }, "Not for sale");
-    if (owned(i)) return h("span", { class: "pill good" }, icon("check"), "You own this");
-    if (!me) return h("a", { class: "btn primary", href: "#login" }, "Sign in to buy");
-    if (!player) return h("span", { class: "muted" }, "Join the server once, then you can buy here.");
-    if (i.permission) return h("span", { class: "muted" }, "Needs a rank. Buy it in game.");
-    if (player.coins < i.price) return h("span", { class: "muted" }, "You need " + fmt(i.price - player.coins) + " more " + coinName() + ".");
-    return h("button", { class: "primary", disabled: buying, onclick: () => buy(i) }, buying ? "Buying..." : "Buy for " + fmt(i.price));
+    if (!forSale(i)) return h("p", { class: "muted" }, "Not for sale. This one is earned or given out.");
+    if (owned(i)) return h("span", { class: "pill good big-pill" }, icon("check"), "You own this");
+    if (!me) return h("a", { class: "btn primary big full", href: "#login?next=%23shop" }, "Sign in to buy");
+    if (!player) return h("p", { class: "muted" }, "Join the server once, then you can buy here.");
+    if (i.permission) return h("p", { class: "muted" }, "Needs a rank. Buy it in game.");
+    if (player.coins < i.price) {
+      const pct = Math.max(2, Math.min(100, Math.round(player.coins / i.price * 100)));
+      const bar = h("i");
+      bar.style.width = pct + "%";
+      return h("div", { style: "display:grid;gap:8px" }, h("div", { class: "meter" }, bar),
+        h("p", { class: "muted", style: "margin:0" }, "You need " + fmt(i.price - player.coins) + " more " + coinName() + "."),
+        (content().voteLinks || []).length ? h("a", { class: "btn", href: "#vote" }, icon("heart"), "Vote for free coins") : null);
+    }
+    return h("button", { class: "primary big full", disabled: buying, onclick: () => buy(i) }, icon("bag"), buying ? "Buying..." : "Buy for " + fmt(i.price));
   }
   function showInfo() {
     const i = selected;
-    if (!i) { info.replaceChildren(h("p", { class: "muted" }, "Pick something below to see it.")); return; }
+    if (!i) { info.replaceChildren(h("p", { class: "muted" }, "Pick something to see it.")); return; }
+    const [rk, rl] = rarity(i);
     info.replaceChildren(...[
-      h("div", { class: "row", style: "gap:8px" }, h("span", { class: "pill" }, i.category), i.collection ? h("span", { class: "pill" }, i.collection) : null),
-      h("h2", { class: "stage-name" }, i.name),
+      h("div", { class: "row", style: "gap:6px" }, h("span", { class: "rar " + rk }, rl), h("span", { class: "pill" }, i.category), i.collection ? h("span", { class: "pill" }, i.collection) : null),
+      h("h2", { class: "case-name" }, i.name),
       i.description ? h("p", { class: "muted" }, i.description) : null,
-      i.creator ? h("p", { class: "muted", style: "font-size:12.5px" }, "Made by " + i.creator) : null,
-      h("div", { class: "price big" }, forSale(i) ? fmt(i.price) + " " + coinName() : "Not for sale"),
-      h("div", { class: "row" }, buyArea(i)),
-      balance].filter(Boolean));
-    showBalance();
+      i.creator ? h("p", { class: "faint", style: "font-size:12.5px" }, "Made by " + i.creator) : null,
+      forSale(i) ? h("div", { class: "case-price" }, icon("coin"), fmt(i.price), h("small", {}, coinName())) : null,
+      buyArea(i)].filter(Boolean));
+    showWallet();
   }
-  function select(i, scroll) {
+  function pick(i, scroll) {
     selected = i;
     showInfo();
-    if (stage) stage.show(i);
-    if (scroll) canvas.scrollIntoView({ behavior: "smooth", block: "center" });
-    grid.querySelectorAll(".item").forEach((el) => el.classList.toggle("on", el.dataset.id === i.id));
+    const can = stage && P.canShow(i);
+    canvas.classList.toggle("hidden", !can);
+    flat.classList.toggle("hidden", !!can);
+    if (can) stage.show(i);
+    else flat.replaceChildren(icon(catIcon(i.category)), h("span", {}, stage ? "No 3D preview for this one. See it in game." : "3D previews need WebGL."));
+    if (scroll && window.matchMedia("(max-width: 900px)").matches) canvas.parentNode.scrollIntoView({ behavior: "smooth", block: "start" });
+    grid.querySelectorAll(".citem").forEach((el) => el.classList.toggle("on", el.dataset.id === i.id));
   }
 
   async function buy(i) {
@@ -632,31 +755,43 @@ async function shopView() {
     draw();
   }
 
+  const tile = (i) => {
+    const [rk, rl] = rarity(i);
+    const pic = h("div", { class: "pic" }, icon(catIcon(i.category)));
+    if (P && P.canShow(i)) P.thumb(i).then((url) => { if (url) pic.replaceChildren(h("img", { src: url, alt: "" })); });
+    return h("button", { class: "citem " + rk + (selected && selected.id === i.id ? " on" : ""), "data-id": i.id, onclick: () => pick(i, true), title: i.description || i.name },
+      owned(i) ? h("span", { class: "own" }, icon("check"), "Owned") : null, pic,
+      h("span", { class: "rar " + rk }, rl), h("b", {}, i.name),
+      h("span", { class: "cprice" }, ...(forSale(i) ? [icon("coin"), fmt(i.price)] : ["Not for sale"])));
+  };
   const draw = () => {
-    chips.replaceChildren(...cats.map((c) => h("button", { class: "chip", "aria-pressed": String(c === cat), onclick: () => { cat = c; draw(); } }, c === "all" ? "Everything" : catName[c] || c)));
+    const n = (c) => items.filter((i) => c === "all" || i.category === c).length;
+    tabs.replaceChildren(...cats.map((c) => h("button", { role: "tab", "aria-selected": String(c === cat), onclick: () => { cat = c; draw(); } },
+      icon(c === "all" ? "grid" : catIcon(c)), c === "all" ? "Everything" : catName[c] || c, h("small", {}, n(c)))));
+    filters.replaceChildren(...(player ? [["all", "All"], ["missing", "Not owned"], ["owned", "Owned"]] : []).map(([id, label]) =>
+      h("button", { class: "chip", "aria-pressed": String(only === id), onclick: () => { only = id; draw(); } }, label)));
     const t = q.value.trim().toLowerCase();
-    const list = items.filter((i) => (cat === "all" || i.category === cat) && (!t || i.name.toLowerCase().includes(t) || i.id.includes(t)));
-    grid.replaceChildren(...list.map((i) => {
-      const pic = h("div", { class: "thumb" }, icon(i.category === "hat" ? "hat" : i.category === "cloak" ? "cloak" : i.category === "wings" ? "wings" : "bag"));
-      if (P && P.canShow(i)) P.thumb(i).then((url) => { if (url) pic.replaceChildren(h("img", { src: url, alt: "" })); });
-      return h("button", { class: "item" + (selected && selected.id === i.id ? " on" : ""), "data-id": i.id, onclick: () => select(i, true) },
-        pic, h("b", {}, i.name), h("small", {}, i.category),
-        h("span", { class: "row", style: "gap:6px;justify-content:space-between" },
-          h("span", { class: "price" }, forSale(i) ? fmt(i.price) : "Not for sale"),
-          owned(i) ? h("span", { class: "pill good" }, "Owned") : null));
-    }));
-    if (!list.length) grid.append(empty("bag", items.length ? "Nothing matches." : "The shop shows up once the server connects."));
+    let list = items.filter((i) => (cat === "all" || i.category === cat) && (!t || i.name.toLowerCase().includes(t) || i.id.includes(t)) &&
+      (only === "all" || owned(i) === (only === "owned")));
+    const price = (i) => (forSale(i) ? i.price : Infinity);
+    if (sort.value === "low") list = [...list].sort((a, b) => price(a) - price(b));
+    if (sort.value === "high") list = [...list].sort((a, b) => (forSale(b) ? b.price : -1) - (forSale(a) ? a.price : -1));
+    if (sort.value === "name") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    count.textContent = list.length + (list.length === 1 ? " cosmetic" : " cosmetics");
+    grid.replaceChildren(...list.map(tile));
+    if (!list.length) grid.append(empty("bag", "Nothing matches."));
   };
   q.addEventListener("input", draw);
+  sort.addEventListener("change", draw);
   draw();
   const first = items.find((i) => forSale(i) && (!P || P.canShow(i))) || items[0];
-  if (first) select(first, false); else showInfo();
-  return h("div", {},
-    items.length ? card(null, h("div", { class: "stage-wrap" }, stage ? canvas : h("div", { class: "stage" }, empty("bag", "3D previews need WebGL.")), info)) : null,
-    items.length ? h("div", { style: "height:18px" }) : null,
-    card("Shop", h("p", { class: "muted" }, me ? "Buy with your coins here or in game (Right Shift > Shop). What you buy shows up in game right away." :
-      "Sign in to buy with your coins, or buy in game (Right Shift > Shop)."),
-      h("div", { class: "row" }, q), h("div", { style: "height:10px" }), chips, h("div", { style: "height:14px" }), grid));
+  pick(first, false);
+  return h("div", { class: "shop" },
+    h("aside", { class: "case" }, wallet, h("div", { class: "case-stage" }, canvas, flat, stage ? h("span", { class: "hint" }, "Drag to spin") : null), info),
+    h("div", { class: "shop-main" }, tabs,
+      h("div", { class: "shop-bar" }, h("label", { class: "searchbox" }, icon("search"), q), sort, filters, h("span", { class: "spacer" }), count),
+      grid,
+      h("p", { class: "faint", style: "margin-top:16px;font-size:13px" }, "You can also buy in game: press Right Shift and open the Shop. What you buy here shows up in game right away.")));
 }
 
 // ==================== designs ====================
@@ -1446,21 +1581,43 @@ function downloadsCard(list, ro) {
     } }, "Save"), out);
 }
 
+// how to get each build going, by its kind
+const DL_INFO = {
+  offline: { icon: "globe", tag: "Easiest", needs: "Any modern browser", steps: ["Download the HTML file.", "Open it (double-click, or drag it into your browser).", "Make your account on the start screen and play."] },
+  wasm: { icon: "sparkle", tag: "Fastest", needs: "A recent Chrome or Edge", steps: ["Download and unzip it.", "Open index.html in Chrome or Edge.", "Make your account on the start screen and play."] },
+  "forge-1.8.9": { icon: "hammer", tag: "Java Edition", needs: "Minecraft Java with Forge 1.8.9", steps: ["Install Forge 1.8.9.", "Put the jar in your .minecraft/mods folder.", "Start Minecraft with the Forge profile."] },
+};
+
 async function downloadsView() {
   const list = info.downloads || [];
-  const ic = { offline: "globe", wasm: "sparkle", "forge-1.8.9": "hammer" };
-  const rows = list.map((d, i) => h("div", { class: "card build" },
-    h("div", { class: "row", style: "width:100%" }, icon(ic[d.kind] || "download"),
-      h("div", {}, h("span", { class: "tag" }, i === 0 ? "Easiest" : d.kind === "wasm" ? "Fastest" : "Java"), h("h2", { style: "margin-top:6px" }, d.name)),
-      h("span", { class: "spacer" }),
-      h("a", { class: "btn primary", href: "/api/dl/" + encodeURIComponent(d.kind), download: "" }, icon("download"), "Download")),
-    h("p", { class: "muted" }, d.help)));
-  const ip = content().serverIp;
-  return h("div", {},
-    rows.length ? h("div", { class: "grid g2" }, rows) : card(null, empty("download", "Nothing to download yet. Check back soon.")),
-    ip ? h("div", { class: "card build", style: "margin-top:18px" }, h("div", { class: "row", style: "width:100%" }, icon("online"),
-      h("div", {}, h("h2", { style: "margin:0" }, "Then join " + ip), h("p", { class: "muted", style: "margin:0" }, "Add it as a server in PlebClient (or any Eaglercraft 1.8 client).")),
-      h("span", { class: "spacer" }), h("button", { onclick: () => copyIp(ip) }, icon("copy"), "Copy address"))) : null);
+  if (!list.length) return card(null, empty("download", "Nothing to download yet. Check back soon."));
+  const c = content();
+  const cl = info.client || {};
+  const ip = c.serverIp;
+  const meta = (d) => DL_INFO[d.kind] || { icon: "download", tag: "", needs: "", steps: [] };
+  const btn = (d, big) => h("a", { class: "btn primary" + (big ? " big" : ""), href: "/api/dl/" + encodeURIComponent(d.kind), download: "" }, icon("download"), "Download");
+  const steps = (d) => (meta(d).steps.length ? h("ol", { class: "dl-steps" }, ...meta(d).steps.map((s) => h("li", {}, s))) : null);
+  const [top, ...rest] = list;
+  const shot = (c.features || []).map((f) => f.image).find(Boolean);
+  return h("div", { class: "dl" },
+    h("section", { class: "dl-top" },
+      h("div", { class: "dl-top-txt" },
+        h("div", { class: "row", style: "gap:6px" }, h("span", { class: "tag hot" }, "Recommended"), meta(top).tag ? h("span", { class: "tag" }, meta(top).tag) : null,
+          cl.latest ? h("span", { class: "tag" }, "v" + cl.latest) : null),
+        h("h2", {}, top.name), h("p", { class: "muted" }, top.help),
+        h("div", { class: "row" }, btn(top, true), meta(top).needs ? h("span", { class: "needs" }, icon("check"), meta(top).needs) : null),
+        steps(top)),
+      shot ? h("div", { class: "dl-top-pic" }, h("img", { src: shot, alt: "", loading: "lazy" })) : null),
+    rest.length ? h("h2", { class: "dl-h" }, "Other ways to play") : null,
+    rest.length ? h("div", { class: "dl-grid" }, ...rest.map((d) => h("section", { class: "dl-card" },
+      h("div", { class: "dl-ic" }, icon(meta(d).icon)),
+      h("div", { class: "dl-body" }, meta(d).tag ? h("span", { class: "tag" }, meta(d).tag) : null, h("h3", {}, d.name), h("p", { class: "muted" }, d.help),
+        meta(d).needs ? h("span", { class: "needs" }, icon("check"), meta(d).needs) : null, steps(d)),
+      btn(d)))) : null,
+    ip ? h("section", { class: "dl-join" }, h("img", { src: siteLogo(), alt: "" }),
+      h("div", {}, h("b", {}, "Then join " + ip), h("small", {}, "Add it as a server in PlebClient, or in any Eaglercraft 1.8 client.")),
+      h("button", { onclick: () => copyIp(ip) }, icon("copy"), "Copy address")) : null,
+    h("p", { class: "faint", style: "font-size:13px;margin:18px 0 0" }, "Got PlebClient already? It tells you on its start screen when a newer version is out."));
 }
 
 // ==================== admin: log ====================
@@ -1531,7 +1688,7 @@ async function siteView() {
     text("subtitle", "Text under the tagline", { rows: 3 }), text("serverIp", "Server address", { placeholder: "play.plebmc.top" }),
     text("discordUrl", "Discord invite link (empty hides Discord)", { type: "url", max: 200, placeholder: "https://discord.gg/…" }),
     text("featuresTitle", "Features heading"), text("featuresText", "Features text", { rows: 2 }),
-    text("ctaTitle", "Bottom banner heading"), text("ctaText", "Bottom banner text", { rows: 2 }), text("footer", "Footer note", { max: 200 }),
+    text("voteText", "Note on the Vote page", { rows: 2 }), text("ctaTitle", "Bottom banner heading"), text("ctaText", "Bottom banner text", { rows: 2 }), text("footer", "Footer note", { max: 200 }),
   ];
   const F = Object.fromEntries(fields.map((f) => [f.key, f]));
   const accent = h("input", { type: "color", id: "s-accent", value: c.accent || "#2ea8ff" });
@@ -1570,15 +1727,28 @@ async function siteView() {
       h("label", {}, "Question"), q, h("label", {}, "Answer"), a);
     }), faqs.length < 12 ? h("button", { type: "button", onclick: () => { faqs.push({ q: "", a: "" }); drawFaq(); } }, icon("plus"), "Add a question") : "");
   };
+  const votes = (c.voteLinks || []).map((v) => ({ ...v }));
+  const voteBox = h("div", { class: "repeat" });
+  const reward = h("input", { id: "s-voteReward", type: "number", min: 0, step: 1, value: c.voteReward == null ? 100 : c.voteReward });
+  const drawVotes = () => {
+    voteBox.replaceChildren(...votes.map((v, i) => h("div", { class: "item-edit" }, h("div", { class: "row" }, h("b", {}, "Vote site " + (i + 1)), h("span", { class: "spacer" }),
+      h("button", { type: "button", class: "ghost small", onclick: () => { votes.splice(i, 1); drawVotes(); } }, icon("trash"), "Remove")),
+    h("label", {}, "Name"), h("input", { value: v.name || "", maxlength: 40, "aria-label": "Site name", placeholder: "Eaglercraft Servers", oninput: (e) => { v.name = e.target.value; } }),
+    h("label", {}, "Vote link"), h("input", { value: v.url || "", type: "url", maxlength: 300, "aria-label": "Vote link", placeholder: "https://…", oninput: (e) => { v.url = e.target.value; } }))),
+    votes.length < 8 ? h("button", { type: "button", onclick: () => { votes.push({ name: "", url: "" }); drawVotes(); } }, icon("plus"), "Add a vote site") : "");
+  };
   drawFeats();
   drawFaq();
+  drawVotes();
 
   const saveBtn = h("button", { class: "primary", onclick: async () => {
     featPickers.forEach(([f, pk]) => { f.image = pk.get(); });
     const body = Object.fromEntries(fields.map((f) => [f.key, f.get()]));
     Object.assign(body, { accent: accent.value, logo: logo.get(), heroImage: hero.get(), wordmark: show.get(),
       features: feats.map((f) => ({ title: (f.title || "").trim(), text: (f.text || "").trim(), image: f.image || "" })),
-      faq: faqs.map((f) => ({ q: (f.q || "").trim(), a: (f.a || "").trim() })).filter((f) => f.q && f.a) });
+      faq: faqs.map((f) => ({ q: (f.q || "").trim(), a: (f.a || "").trim() })).filter((f) => f.q && f.a),
+      voteLinks: votes.map((v) => ({ name: (v.name || "").trim(), url: (v.url || "").trim() })).filter((v) => v.name || v.url),
+      voteReward: Math.max(0, parseInt(reward.value, 10) || 0) });
     saveBtn.disabled = true;
     try {
       const r = await api("admin/site", body);
@@ -1601,6 +1771,8 @@ async function siteView() {
     h("div", { class: "grid g2" }, card("Pictures", hero.el, show.el), card("TNT banner at the bottom", ...F.ctaTitle.el, ...F.ctaText.el)),
     card("Feature cards", ...F.featuresTitle.el, ...F.featuresText.el, h("div", { style: "height:14px" }), featBox),
     card("FAQ", faqBox),
+    card("Voting", h("p", { class: "muted" }, "The server lists players vote on. With none, the Vote page and the reminder are hidden. The reward is only what the site says: PlebioAPI pays it (voting.reward in its config)."),
+      h("label", { for: "s-voteReward" }, "Coins per vote shown on the site (0 hides it)"), reward, ...F.voteText.el, h("div", { style: "height:14px" }), voteBox),
     out,
     h("div", { class: "savebar" }, saveBtn, h("a", { class: "btn", href: "#home" }, "View homepage"), h("span", { class: "spacer" }),
       h("button", { class: "ghost danger small", onclick: async () => {
@@ -1617,6 +1789,7 @@ const VIEWS = {
   stats: ["Stats", statsView],
   leaderboard: ["Leaderboards", leaderboardView],
   shop: ["Shop", shopView],
+  vote: ["Vote", voteView],
   makers: ["Cosmetic makers", makersView, "admin"],
   login: ["Sign in", loginView],
   register: ["Create account", registerView],
@@ -1669,6 +1842,7 @@ async function route() {
   app.replaceChildren(view === "home" ? el : framed(view, title, el));
   setNav(view);
   drawFooter();
+  drawVoteNudge(view);
   window.scrollTo(0, 0);
 }
 
