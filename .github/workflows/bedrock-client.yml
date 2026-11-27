@@ -1,0 +1,54 @@
+name: PlebClient for Bedrock
+
+# Builds PlebClient.dll: Flarial's open-source client (AGPL-3.0) at the commit in
+# bedrock-client/flarial.commit, renamed and cut off from Flarial's servers by rebrand.py.
+on:
+  push:
+    paths:
+      - 'bedrock-client/**'
+      - '.github/workflows/bedrock-client.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get Flarial's source
+        shell: bash
+        run: |
+          sha=$(tr -d ' \r\n' < bedrock-client/flarial.commit)
+          git init -q flarial
+          cd flarial
+          git remote add origin https://github.com/flarialmc/dll-oss
+          git fetch -q --depth 1 origin "$sha"
+          git checkout -q FETCH_HEAD
+
+      - name: Make it PlebClient
+        shell: bash
+        run: python bedrock-client/rebrand.py flarial
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build
+        shell: cmd
+        run: |
+          cd flarial
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl || exit /b 1
+          cmake --build build --parallel || exit /b 1
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p out
+          cp flarial/build/PlebClient.dll out/
+          cp flarial/LICENSE out/LICENSE-Flarial-AGPL-3.0.txt
+          cp bedrock-client/README.txt out/README.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PlebClient-Bedrock
+          path: out/
