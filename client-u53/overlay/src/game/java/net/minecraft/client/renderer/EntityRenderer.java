@@ -1020,6 +1020,12 @@ public class EntityRenderer implements IResourceManagerReloadListener {
 					}
 					ff[0] = f;
 					this.mc.currentScreen.drawScreen(mx, my, parFloat1);
+					try {
+						net.plebmc.client.hud.SecretMods.gui(this.mc.currentScreen.width, this.mc.currentScreen.height,
+								this.mc.currentScreen instanceof net.minecraft.client.gui.GuiChat);
+					} catch (Throwable t) {
+						// a secret mod must never take the screen down
+					}
 					if (f != 1.0f) {
 						GlStateManager.popMatrix();
 					}

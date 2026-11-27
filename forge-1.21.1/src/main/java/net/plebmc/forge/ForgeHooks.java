@@ -123,6 +123,22 @@ public final class ForgeHooks {
 		}
 	}
 
+	/** Let It Snow and Best Friend over every menu. */
+	@SubscribeEvent
+	public void onScreenDrawn(ScreenEvent.Render.Post e) {
+		GuiGraphics prev = R.gg;
+		R.gg = e.getGuiGraphics();
+		try {
+			net.plebmc.client.hud.SecretMods.gui(e.getScreen().width, e.getScreen().height,
+					e.getScreen() instanceof net.minecraft.client.gui.screens.ChatScreen);
+			e.getGuiGraphics().flush();
+		} catch (Throwable t) {
+			// a secret mod must never take the screen down
+		} finally {
+			R.gg = prev;
+		}
+	}
+
 	/** Video Settings opens the PlebClient one. */
 	@SubscribeEvent
 	public void onOpen(ScreenEvent.Opening e) {

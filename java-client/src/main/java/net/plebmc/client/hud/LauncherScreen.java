@@ -45,7 +45,8 @@ public final class LauncherScreen extends PlebScreen {
 	private void fillDoors() {
 		doors.clear();
 		doors.add(new Door("Mods", "nav_mods", "Turn mods on and off and change their settings", () -> new ModsScreen(this)));
-		doors.add(new Door("Wardrobe", "nav_wardrobe", "Hats, cloaks and wings for " + Cosmetics.currency(), () -> new ShopScreen(this)));
+		doors.add(new Door("Shop", "nav_shop", "Buy hats, cloaks and wings with " + Cosmetics.currency(), () -> new ShopScreen(this)));
+		doors.add(new Door("Locker", "nav_locker", "Everything you own: pick what you wear", () -> new ShopScreen(this, true)));
 		doors.add(new Door("Quests", "nav_quests", "Daily and weekly quests for coins", () -> new QuestsScreen(this)));
 		doors.add(new Door("HUD", "nav_hud", "Move, resize and recolor your HUD", () -> new HudEditorScreen(this)));
 		doors.add(new Door("Video", "nav_video", "Render distance, graphics and performance", () -> new VideoOptionsScreen(this)));

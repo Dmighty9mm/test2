@@ -16,7 +16,8 @@ import net.plebmc.client.cosmetics.Cosmetics;
  * The cosmetics shop. Your player on the left (drag to spin it), the items
  * of one category as cards on the right. Selecting a card tries it on (only
  * you see that, and only until you leave the shop); buying and equipping go
- * to the server, which owns the coins.
+ * to the server, which owns the coins. The Locker is the same screen showing only
+ * what you own, for picking what you wear.
  */
 public final class ShopScreen extends PlebScreen {
 
@@ -39,8 +40,16 @@ public final class ShopScreen extends PlebScreen {
 	private int gx, gy, gw, gh;
 	private int cols, rows;
 
+	/** The Locker: only what you own, to equip; no buying and no collections. */
+	private final boolean locker;
+
 	public ShopScreen(GuiScreen parent) {
+		this(parent, false);
+	}
+
+	public ShopScreen(GuiScreen parent, boolean locker) {
 		super(parent);
+		this.locker = locker;
 		Cosmetics.requestState();
 	}
 
@@ -48,11 +57,9 @@ public final class ShopScreen extends PlebScreen {
 		return items(category);
 	}
 
-	/** The "Owned" tab: everything you own in a category, from every collection. */
-	private static final String OWNED = "_owned";
-
 	private List<Cosmetics.Item> items(String cat) {
-		if (OWNED.equals(collection)) {
+		if (locker) {
+			// everything you own in a category, from every collection
 			List<Cosmetics.Item> out = new java.util.ArrayList<>();
 			for (Cosmetics.Item it : Cosmetics.catalog(cat)) {
 				if (Cosmetics.owns(it.id)) {
@@ -64,11 +71,9 @@ public final class ShopScreen extends PlebScreen {
 		return Cosmetics.catalog(cat, collection);
 	}
 
-	/** The shop's collections plus an "Owned" tab, so anything you own can be worn from here. */
+	/** The shop's collections (what you own lives in the Locker). */
 	private static List<Cosmetics.Collection> tabs() {
-		List<Cosmetics.Collection> out = new java.util.ArrayList<>(Cosmetics.collections());
-		out.add(new Cosmetics.Collection(OWNED, "Owned", "check", 0xFF5BD98A, "Everything you own, from every collection"));
-		return out;
+		return Cosmetics.collections();
 	}
 
 	private static boolean hasTab(String id) {
@@ -103,19 +108,20 @@ public final class ShopScreen extends PlebScreen {
 		gy = wy + 66;
 		gh = wy + wh - 8 - 44 - gy;
 
-		// collections (PlebMc, Partners, ...) as a switch in the header
-		if (!hasTab(collection)) {
-			collection = tabs().get(0).id;
+		// collections (PlebMc, Partners, ...) as a switch in the header; not in the Locker
+		List<Cosmetics.Collection> colTabs = locker ? new ArrayList<>() : tabs();
+		if (!colTabs.isEmpty() && !hasTab(collection)) {
+			collection = colTabs.get(0).id;
 		}
 		int segW = 0;
-		for (Cosmetics.Collection col : tabs()) {
+		for (Cosmetics.Collection col : colTabs) {
 			segW += Ui.width(col.name) + 13 + 14 + 2;
 		}
 		// left of the coin balance and the close button, so they never overlap
 		int coinW = coinChipWidth();
 		int sx = wx + ww - 30 - (coinW > 0 ? coinW + 6 : 0) - segW;
-		tabsLeft = sx;
-		for (Cosmetics.Collection col : tabs()) {
+		tabsLeft = colTabs.isEmpty() ? Integer.MAX_VALUE / 2 : sx;
+		for (Cosmetics.Collection col : colTabs) {
 			int w = Ui.width(col.name) + 13 + 14;
 			Tab t = tab(col.name, Ui.hasIcon(col.icon) ? col.icon : "shop", col.color, sx, wy + 11, w, 16,
 					() -> collection.equals(col.id), () -> {
@@ -159,8 +165,8 @@ public final class ShopScreen extends PlebScreen {
 					rebuild();
 				}
 			});
-			t.badge = compact ? null : owned + "/" + all.size();
-			t.tip = "You own " + owned + " of " + all.size();
+			t.badge = compact ? null : locker ? String.valueOf(owned) : owned + "/" + all.size();
+			t.tip = locker ? "You own " + owned : "You own " + owned + " of " + all.size();
 			tx += w + 4;
 		}
 
@@ -206,7 +212,8 @@ public final class ShopScreen extends PlebScreen {
 			boolean owns = Cosmetics.owns(sel.id);
 			boolean equipped = sel.id.equals(Cosmetics.equippedId(sel.category));
 			boolean trying = sel.id.equals(Cosmetics.previewId(sel.category));
-			int bx = gx + gw;
+			// keep the buttons off the panel's right edge
+			int bx = gx + gw - 6;
 			Button main;
 			if (owns) {
 				main = button(equipped ? "Unequip" : "Equip", bx - 84, ay + 9, 84, 18, () -> {
@@ -233,7 +240,7 @@ public final class ShopScreen extends PlebScreen {
 			Button tryOn = button(trying ? "Take off" : "Try on", bx - 84 - 6 - 70, ay + 9, 70, 18,
 					() -> Cosmetics.setPreview(sel.category, trying ? null : sel.id));
 			tryOn.icon("eye").tip = "Only you see this, until you leave the shop";
-			tryOn.visible = !equipped;
+			tryOn.visible = !equipped && !locker;
 		}
 		Button reset = button("", pvx + pvw - 18, pvy + 4, 14, 14, () -> yawTarget = FRONT);
 		reset.icon("reset").style(Style.GHOST).tip("Face forward");
@@ -252,7 +259,7 @@ public final class ShopScreen extends PlebScreen {
 
 		ItemCard(Cosmetics.Item it) {
 			this.it = it;
-			this.tip = (it.description.isEmpty() ? it.name : it.description) + ". Click to try it on.";
+			this.tip = (it.description.isEmpty() ? it.name : it.description) + (locker ? "" : ". Click to try it on.");
 		}
 
 		@Override
@@ -336,7 +343,11 @@ public final class ShopScreen extends PlebScreen {
 	@Override
 	protected void drawContent(int mx, int my, float pt) {
 		Ui.window(wx, wy, ww, wh);
-		header(wx, wy, ww, "shop", "Shop", Ui.fit("Cosmetics everyone on PlebMc can see", Math.max(0, tabsLeft - wx - 40)), true);
+		if (locker) {
+			header(wx, wy, ww, "nav_locker", "Locker", Ui.fit("Everything you own. Pick what everyone sees.", Math.max(0, ww - 40 - coinChipWidth() - 40)), true);
+		} else {
+			header(wx, wy, ww, "nav_shop", "Shop", Ui.fit("Cosmetics everyone on PlebMc can see", Math.max(0, tabsLeft - wx - 40)), true);
+		}
 
 		// preview
 		Ui.card(pvx, pvy, pvw, pvh, 0xFF0B0F13, Ui.BORDER_SOFT);
@@ -365,7 +376,12 @@ public final class ShopScreen extends PlebScreen {
 			Ui.centered(p, wx + ww - 10 - 16 - 25 + 8, wy + 49, Ui.MUTED);
 		}
 
-		if (its.isEmpty()) {
+		if (its.isEmpty() && locker) {
+			float bob = (float) Math.sin(System.currentTimeMillis() / 420.0) * 1.2f;
+			Ui.mascot(gx + gw / 2f - 14, gy + 16 + bob, 28, 0.95f);
+			Ui.centered("You don't own any " + categoryName(category).toLowerCase() + " yet", gx + gw / 2, gy + 52, Ui.MUTED);
+			Ui.centered("Get some in the Shop", gx + gw / 2, gy + 64, Ui.FAINT);
+		} else if (its.isEmpty()) {
 			Cosmetics.Collection col = Cosmetics.collection(collection);
 			boolean partner = col != null && Cosmetics.collections().indexOf(col) > 0;
 			// the mascot, bobbing a little, keeps the empty page company
@@ -393,6 +409,9 @@ public final class ShopScreen extends PlebScreen {
 				d = "by " + sel.creator + "  \u00b7  " + d;
 			}
 			Ui.text(Ui.fit(d, gw - 180), gx + 6, ay + 19, Ui.MUTED);
+		} else if (locker) {
+			Ui.text("Pick something to wear", gx + 6, ay + 7, Ui.TEXT);
+			Ui.text(Ui.fit("Everyone on PlebMc sees what you equip", gw - 12), gx + 6, ay + 19, Ui.MUTED);
 		} else {
 			Ui.text("Pick something to try it on", gx + 6, ay + 7, Ui.TEXT);
 			Ui.text(Ui.fit(Cosmetics.serverSupported() ? "Earn " + Cosmetics.currency() + " from quests and playing"

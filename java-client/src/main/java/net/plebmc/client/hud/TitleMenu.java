@@ -1099,7 +1099,7 @@ public final class TitleMenu {
 			return true;
 		}
 		if (mx >= coinX && mx < coinX + coinW && my >= coinY && my < coinY + coinH) {
-			start("wardrobe", mx, my);
+			start("shop", mx, my);
 			return true;
 		}
 		if (storeW > 0 && mx >= storeX && mx < storeX + storeW && my >= storeY && my < storeY + storeH) {

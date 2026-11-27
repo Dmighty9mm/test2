@@ -20,7 +20,7 @@ import net.plebmc.client.mods.Secrets;
  * <li>holiday: open the game on a holiday; nightowl: between 2 and 5 AM</li>
  * <li>sleepy: leave Plebio alone on the title screen for two minutes</li>
  * <li>coinflip: click your coins in the Right Shift menu</li>
- * <li>dizzy: spin yourself five times in the Wardrobe</li>
+ * <li>dizzy: spin yourself five times in the Shop or Locker</li>
  * <li>secret mods, typed in the Mods search: fpslarp, letitsnow (snow),
  * bestfriend (Plebio on your HUD), bighead (big heads)</li>
  * </ul>
@@ -121,7 +121,7 @@ public final class EasterEggs {
 		found("coinflip", heads ? "Heads!" : "Tails!", heads ? "Plebio says you win" : "Plebio says you owe him a coin");
 	}
 
-	/** The Wardrobe model was spun this many degrees in one drag. */
+	/** The Shop or Locker model was spun this many degrees in one drag. */
 	static void spun(float degrees) {
 		if (Math.abs(degrees) >= 360f * 5) {
 			found("dizzy", "Dizzy!", "Five spins. Plebio needs to sit down.");
@@ -145,7 +145,7 @@ public final class EasterEggs {
 			found(id, "Let it snow!", p.snowMod ? "Snow on your screen (type it again to stop)" : "The snow stopped");
 		} else if ("buddy".equals(id)) {
 			p.buddyMod = !p.buddyMod;
-			found(id, "Best friends!", p.buddyMod ? "Plebio rides along on your HUD" : "Plebio went home");
+			found(id, "Best friends!", p.buddyMod ? "Plebio rides along on your HUD and menus" : "Plebio went home");
 		} else if ("bighead".equals(id)) {
 			p.bigHeadMod = !p.bigHeadMod;
 			found(id, "Big heads!", p.bigHeadMod ? "Everyone's head got bigger (only you see it)" : "Heads are normal again");

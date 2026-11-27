@@ -16,7 +16,7 @@ public final class Secrets {
 			"Secret mod: FPS is just a number. Try it in the Mods search.",
 			"Say hello to Plebio on the title screen", "Every movie ends with them. Type them on the title screen.",
 			"Leave Plebio alone on the title screen for a while", "Play when you should be asleep",
-			"Click your coins in the Right Shift menu", "Spin yourself around in the Wardrobe. A lot.",
+			"Click your coins in the Right Shift menu", "Spin yourself around in the Shop or Locker. A lot.",
 			"Secret mod: it's cold outside. Let it... (Mods search)",
 			"Secret mod: Plebio wants to be your best friend (Mods search)",
 			"Secret mod: some heads are bigger than others (Mods search)" };

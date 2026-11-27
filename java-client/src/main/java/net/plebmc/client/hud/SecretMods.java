@@ -11,9 +11,9 @@ import net.plebmc.client.mods.ClientPrefs;
 /**
  * The secret mods found by typing in the Mods search (see EasterEggs):
  * <ul>
- * <li>Let It Snow: snow falls over the game and piles up on the hotbar.</li>
- * <li>Best Friend: Plebio sits next to your hotbar and talks about what
- * happens to you.</li>
+ * <li>Let It Snow: snow falls over the game and menus, and piles up on the hotbar.</li>
+ * <li>Best Friend: Plebio sits next to your hotbar (in a corner on menus) and
+ * talks about what happens to you.</li>
  * <li>Big Heads: every head is bigger (ModelBiped draws heads through
  * {@link #renderHead}). Only you see it.</li>
  * </ul>
@@ -36,11 +36,43 @@ public final class SecretMods {
 		long now = System.currentTimeMillis();
 		GlStateManager.enableBlend();
 		if (p.snowMod) {
-			snow(w, h, now);
+			snow(w, h, now, true);
 		}
 		if (p.buddyMod) {
-			buddy(w, h, now, mc.thePlayer);
+			buddy(w, h, now, mc.thePlayer, w / 2 + 91 + 6);
 		}
+		GlStateManager.color(1f, 1f, 1f, 1f);
+	}
+
+	/**
+	 * Drawn over every menu (title screen, inventory, chat, PlebClient screens...).
+	 * {@code chat}: the chat screen is open, so the hotbar is still showing.
+	 */
+	public static void gui(int w, int h, boolean chat) {
+		ClientPrefs p = ClientPrefs.get();
+		if (!p.snowMod && !p.buddyMod) {
+			return;
+		}
+		Minecraft mc = Minecraft.getMinecraft();
+		if (w <= 0 || h <= 0) {
+			return;
+		}
+		long now = System.currentTimeMillis();
+		GlStateManager.disableDepth();
+		GlStateManager.enableBlend();
+		GlStateManager.pushMatrix();
+		GlStateManager.translate(0f, 0f, 400f);
+		// in chat the hotbar is still there, so everything stays where the HUD has it
+		chat = chat && mc.thePlayer != null;
+		if (p.snowMod) {
+			snow(w, h, now, chat);
+		}
+		// the title screen has its own Plebio when Title buddy is on
+		boolean titleBuddy = mc.currentScreen instanceof net.minecraft.client.gui.GuiMainMenu && p.titleBuddy;
+		if (p.buddyMod && !titleBuddy) {
+			buddy(w, h, now, mc.thePlayer, chat ? w / 2 + 91 + 6 : w - 18 - 6);
+		}
+		GlStateManager.popMatrix();
 		GlStateManager.color(1f, 1f, 1f, 1f);
 	}
 
@@ -48,7 +80,7 @@ public final class SecretMods {
 
 	private static long snowSince;
 
-	private static void snow(int w, int h, long now) {
+	private static void snow(int w, int h, long now, boolean pileOnHotbar) {
 		if (snowSince == 0) {
 			snowSince = now;
 		}
@@ -61,6 +93,9 @@ public final class SecretMods {
 			int x = (int) (r1 * w + Math.sin(sec * (0.5 + r2) + i) * 9);
 			int s = r2 > 0.75 ? 2 : 1;
 			Ui.rect(x, y, s, s, Ui.alpha(0xFFFFFFFF, 0x70 + (int) (r3 * 0x70)));
+		}
+		if (!pileOnHotbar) {
+			return;
 		}
 		// it piles up on top of the hotbar over a minute
 		float pile = Math.min(1f, (now - snowSince) / 60000f);
@@ -91,8 +126,20 @@ public final class SecretMods {
 		nextIdle = now + 90_000 + (long) (Math.random() * 60_000);
 	}
 
-	private static void buddy(int w, int h, long now, EntityPlayerSP pl) {
-		// what Plebio reacts to
+	private static void buddy(int w, int h, long now, EntityPlayerSP pl, int x) {
+		// what Plebio reacts to (just small talk without a player)
+		if (pl != null) {
+			react(now, pl);
+		}
+		if (nextIdle == 0) {
+			say("Let's go!", now);
+		} else if (now > nextIdle) {
+			say(IDLE[(int) (now / 1000 % IDLE.length)], now);
+		}
+		drawBuddy(w, h, now, x);
+	}
+
+	private static void react(long now, EntityPlayerSP pl) {
 		float hp = pl.getHealth();
 		if (lastHealth >= 0 && hp < lastHealth - 0.5f) {
 			say(hp <= 6 ? "That one hurt. Eat something!" : pickOuch(now), now);
@@ -125,15 +172,12 @@ public final class SecretMods {
 		} catch (Throwable e) {
 			// no world time
 		}
-		if (nextIdle == 0) {
-			say("Let's go!", now);
-		} else if (now > nextIdle) {
-			say(IDLE[(int) (now / 1000 % IDLE.length)], now);
-		}
+	}
 
-		// Plebio, sitting right of the hotbar
+	/** Plebio at {@code x}, sitting on the bottom of the screen, with his speech bubble. */
+	private static void drawBuddy(int w, int h, long now, int x) {
 		int size = 18;
-		int x = w / 2 + 91 + 6, y = h - size - 2;
+		int y = h - size - 2;
 		float bob = (float) Math.abs(Math.sin(now / 420.0)) * -1.5f;
 		boolean talking = line != null && now - lineAt < 4500;
 		if (talking && now - lineAt < 300) {

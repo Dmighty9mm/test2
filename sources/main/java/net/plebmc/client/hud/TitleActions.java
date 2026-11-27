@@ -29,7 +29,8 @@ final class TitleActions {
 			{ "play", "Play PlebMc", "nav_play", "Join play.plebmc.top" },
 			{ "single", "Singleplayer", "nav_single", "Your worlds" },
 			{ "multi", "Multiplayer", "nav_multi", "Servers and LAN worlds" },
-			{ "wardrobe", "Wardrobe", "nav_wardrobe", "Hats and cloaks everyone on PlebMc sees" },
+			{ "shop", "Shop", "nav_shop", "Buy hats, cloaks and wings" },
+			{ "locker", "Locker", "nav_locker", "Everything you own: pick what you wear" },
 			{ "mods", "Mods", "nav_mods", "Turn mods on and off" },
 			{ "quests", "Quests", "nav_quests", "Daily and weekly quests" },
 			{ "customize", "Customize", "nav_customize", "Colors and the title screen" },
@@ -61,8 +62,11 @@ final class TitleActions {
 		case "multi":
 			mc.displayGuiScreen(new GuiMultiplayer(menu));
 			break;
-		case "wardrobe":
+		case "shop":
 			mc.displayGuiScreen(new ShopScreen(menu));
+			break;
+		case "locker":
+			mc.displayGuiScreen(new ShopScreen(menu, true));
 			break;
 		case "options":
 			mc.displayGuiScreen(new GuiOptions(menu, mc.gameSettings));

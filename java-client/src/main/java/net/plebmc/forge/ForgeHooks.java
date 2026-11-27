@@ -70,6 +70,16 @@ public final class ForgeHooks {
 		PlebClient.renderHud(new ScaledResolution(mc), e.partialTicks);
 	}
 
+	/** Let It Snow and Best Friend over every menu. */
+	@SubscribeEvent
+	public void onScreenDrawn(GuiScreenEvent.DrawScreenEvent.Post e) {
+		try {
+			net.plebmc.client.hud.SecretMods.gui(e.gui.width, e.gui.height, e.gui instanceof net.minecraft.client.gui.GuiChat);
+		} catch (Throwable t) {
+			// a secret mod must never take the screen down
+		}
+	}
+
 	@SubscribeEvent
 	public void onDebugText(RenderGameOverlayEvent.Text e) {
 		List<String> left = e.left;

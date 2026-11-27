@@ -211,8 +211,9 @@ public final class ModsScreen extends PlebScreen {
 			PlebClient.saveSettings();
 			if ("fpslarp".equals(secret)) {
 				this.mc.displayGuiScreen(new FpsLarpScreen(this));
+				return;
 			}
-			return;
+			// fall through so the list shows every mod again
 		}
 		scroll.reset();
 		rebuild();
