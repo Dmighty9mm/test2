@@ -60,6 +60,12 @@ const ICONS = {
   edit: "M4 20h4L20 8l-4-4L4 16v4z",
   crown: "M3 18h18M4 18L3 7l5 4 4-6 4 6 5-4-1 11",
   key: "M15 7a4 4 0 11-3.5 6L5 19.5V22H2v-3h2v-2h2l3.5-3.5A4 4 0 0115 7zM16 9h.01",
+  copy: "M9 9h11v11H9zM5 15H4V4h11v1",
+  globe: "M12 21a9 9 0 100-18 9 9 0 000 18zM3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18",
+  sparkle: "M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6zM19 3v4M17 5h4",
+  gamepad: "M6 8h12a4 4 0 014 4v2a3 3 0 01-5.4 1.8L15 14H9l-1.6 1.8A3 3 0 012 14v-2a4 4 0 014-4zM7 11v3M5.5 12.5h3M15.5 12h.01M18 11h.01",
+  discord: "M8 7.5a14 14 0 018 0M7.5 17c3 1.3 6 1.3 9 0M9 5.5L8 4C6 4.4 4.5 5 3.5 6 2 9 1.5 12 2 16c1.5 1.4 3.2 2.3 5 2.8l1-2M15 5.5L16 4c2 .4 3.5 1 4.5 2 1.5 3 2 6 1.5 10-1.5 1.4-3.2 2.3-5 2.8l-1-2M9 13.5h.01M15 13.5h.01",
+  arrow: "M5 12h14M13 6l6 6-6 6",
 };
 function icon(name) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -207,38 +213,62 @@ function pager(container, load, render, opts = {}) {
 
 // ==================== shell ====================
 
-const NAV = [
-  ["General", [["home", "Home", "home"], ["downloads", "Downloads", "download"], ["stats", "Stats", "chart"], ["leaderboard", "Leaderboards", "trophy"], ["shop", "Shop", "bag"]]],
-  ["You", [["me", "My account", "user", true]]],
-  ["Admin", [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["announce", "Announcements", "megaphone"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Client updates", "refresh"], ["audit", "Admin log", "list"]], "admin"],
-];
+// [id, label, icon, needs: "me" (signed in), "admin" or "owner"]
+const NAV = [["home", "Home", "home"], ["downloads", "Download", "download"], ["stats", "Stats", "chart"], ["leaderboard", "Leaderboards", "trophy"], ["shop", "Shop", "bag"]];
+const ADMIN_NAV = [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["announce", "Announcements", "megaphone"],
+  ["site", "Site content", "edit", "owner"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Client updates", "refresh"], ["audit", "Admin log", "list"]];
+const ADMIN_VIEWS = new Set(["admin", "players", "player", "ranks", "rank", "announce", "site", "makers", "publish", "client", "audit"]);
+// eyebrow numbers and headings for the pages (Astra-style "02 — STATS")
+const HEADS = {
+  downloads: ["01", "Get", "PlebClient", "Pick how you want to play. The first time you start it, make your PlebMc account on the start screen."],
+  stats: ["02", "Player", "stats", "Type a name and pick PlebNite, PlebRPG or PlebMc."],
+  leaderboard: ["03", "Leader", "boards", "The best players on every game, one board per stat."],
+  shop: ["04", "The", "shop", "Hats, cloaks, wings and trails everyone on PlebMc can see."],
+  me: ["", "My", "account", ""],
+};
+
+const content = () => info.content || {};
+const siteLogo = () => content().logo || "/static/logo.png";
+const topnav = document.getElementById("topnav");
+const subnav = document.getElementById("subnav");
+const footer = document.getElementById("footer");
+
+function applyTheme() {
+  const c = content();
+  if (/^#[0-9a-f]{6}$/i.test(c.accent || "")) document.documentElement.style.setProperty("--accent", c.accent);
+  document.getElementById("site").textContent = info.site;
+  document.getElementById("brand-logo").src = siteLogo();
+}
 
 function setNav(view) {
   nav.replaceChildren();
-  for (const [group, links, need] of NAV) {
-    if (need === "admin" && !isAdmin()) continue;
-    const g = h("div", { class: "navgroup" }, h("span", {}, group));
-    for (const [id, label, ic, signedIn] of links) {
-      if (signedIn && !me) continue;
-      g.append(h("a", { href: "#" + id, class: view === id || (view === "player" && id === "players") || (view === "rank" && id === "ranks") ? "on" : null }, icon(ic), label));
-    }
-    if (g.children.length > 1) nav.append(g); // no empty group (like "You" when signed out)
+  for (const [id, label, ic] of NAV) {
+    nav.append(h("a", { href: "#" + id, class: view === id ? "on" : null }, icon(ic), label));
   }
-  if (!me) nav.append(h("div", { class: "navgroup" }, h("span", {}, "Account"), h("a", { href: "#login", class: view === "login" ? "on" : null }, icon("user"), "Sign in"),
-    h("a", { href: "#register", class: view === "register" ? "on" : null }, icon("plus"), "Create account")));
+  if (isAdmin()) nav.append(h("a", { href: "#admin", class: "admin-link" + (ADMIN_VIEWS.has(view) ? " on" : "") }, icon("shield"), "Admin"));
+  if (content().discordUrl) nav.append(h("a", { href: content().discordUrl, target: "_blank", rel: "noopener" }, icon("discord"), "Discord"));
+  if (ADMIN_VIEWS.has(view) && isAdmin()) {
+    const row = h("div", { class: "wrap" });
+    for (const [id, label, ic, need] of ADMIN_NAV) {
+      if (need === "owner" && !isOwner()) continue;
+      const on = view === id || (view === "player" && id === "players") || (view === "rank" && id === "ranks");
+      row.append(h("a", { href: "#" + id, class: on ? "on" : null }, icon(ic), label));
+    }
+    subnav.replaceChildren(row);
+    subnav.classList.remove("hidden");
+  } else subnav.classList.add("hidden");
   who.replaceChildren();
   if (me) {
     who.append(h("a", { href: "#me", class: "who" }, initial(me.name), h("span", { class: "name" }, me.name, " "), rolePill(me.role)),
-      h("button", { class: "ghost small", onclick: logout, title: "Sign out" }, icon("logout")));
+      h("button", { class: "ghost small", onclick: logout, title: "Sign out", "aria-label": "Sign out" }, icon("logout")));
   } else {
-    who.append(h("a", { class: "btn small", href: "#login" }, "Sign in"), h("a", { class: "btn primary small", href: "#register" }, "Create account"));
+    who.append(h("a", { class: "btn small ghost", href: "#login" }, "Sign in"), h("a", { class: "btn primary small", href: "#register" }, "Create account"));
   }
 }
 
 const menuBtn = document.getElementById("menu");
-const side = document.getElementById("side");
 menuBtn.addEventListener("click", () => {
-  const open = side.classList.toggle("open");
+  const open = topnav.classList.toggle("open");
   menuBtn.setAttribute("aria-expanded", String(open));
 });
 
@@ -255,31 +285,133 @@ function announcementBanner() {
   return h("div", { class: "banner" }, icon("megaphone"), h("span", {}, a.text), h("small", {}, ago(a.at)));
 }
 
+function copyIp(ip) {
+  const done = () => toast("Copied " + ip + ". Add it as a server in PlebClient.");
+  if (navigator.clipboard) navigator.clipboard.writeText(ip).then(done, () => toast(ip));
+  else toast(ip);
+}
+
+function drawFooter() {
+  const c = content();
+  const col = (title, links) => h("div", {}, h("h4", {}, title), h("ul", {}, ...links.filter(Boolean).map(([label, href, ext]) =>
+    h("li", {}, h("a", ext ? { href, target: "_blank", rel: "noopener" } : { href }, label)))));
+  footer.replaceChildren(h("div", { class: "wrap" },
+    h("div", { class: "foot-in" },
+      h("div", {}, h("a", { class: "brand", href: "#home" }, h("img", { src: siteLogo(), alt: "" }), info.site),
+        h("p", {}, c.subtitle || "")),
+      col("Play", [["Download PlebClient", "#downloads"], c.serverIp ? [c.serverIp, "#home"] : null, ["Shop", "#shop"]]),
+      col("Community", [c.discordUrl ? ["Discord", c.discordUrl, true] : null, ["Stats", "#stats"], ["Leaderboards", "#leaderboard"]]),
+      col("Account", me ? [["My account", "#me"], isAdmin() ? ["Admin", "#admin"] : null] : [["Sign in", "#login"], ["Create account", "#register"]])),
+    h("div", { class: "foot-bottom" }, h("span", {}, "© " + new Date().getFullYear() + " " + info.site), h("span", {}, c.footer || ""))));
+}
+
 // ==================== home ====================
 
 async function homeView() {
   const s = info.server || {};
-  const c = info.client || {};
-  const wrap = h("div");
-  wrap.append(announcementBanner() || "");
-  wrap.append(h("div", { class: "card hero" }, h("img", { src: "/static/logo.png", alt: "" }),
-    h("div", {}, h("h1", {}, info.site), h("p", { class: "muted" }, me ? "Welcome back, " + me.name + "." : "Your account, your coins and cosmetics, the shop and the leaderboard."),
-      h("div", { class: "row" },
-        me ? h("a", { class: "btn primary", href: "#me" }, icon("user"), "My account") : h("a", { class: "btn primary", href: "#register" }, icon("plus"), "Create account"),
-        me ? null : h("a", { class: "btn", href: "#login" }, "Sign in"),
-        isAdmin() ? h("a", { class: "btn", href: "#makers" }, icon("hammer"), "Cosmetic makers") : null,
-        h("a", { class: "btn", href: "#downloads" }, icon("download"), "Get PlebClient")))));
-  wrap.append(h("div", { class: "tiles" },
-    tile("online", "Server", h("span", {}, h("span", { class: "dot" + (s.connected ? " on" : "") }), s.connected ? "Online" : "Offline"), s.connected ? fmt(s.online) + " playing now" : "The panel can't see the server right now"),
-    tile("refresh", "Latest PlebClient", c.latest || "–", c.minimum ? "Oldest allowed: " + c.minimum : "Your client tells you when it's out of date"),
-    tile("coin", "Currency", coinName(), "Earn it by playing, spend it in the shop")));
-  const board = h("tbody");
-  wrap.append(card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "Richest players"), h("span", { class: "spacer" }), h("a", { href: "#leaderboard" }, "Top 10 and search")),
-    h("div", { class: "scroll" }, h("table", {}, h("tbody", {}, board)))));
-  api("leaderboard?limit=5").then((r) => {
-    if (!r.rows.length) board.append(h("tr", {}, h("td", { class: "muted" }, "Nobody yet.")));
-    for (const p of r.rows) board.append(leaderRow(p));
-  }).catch((e) => board.append(h("tr", {}, h("td", { class: "muted" }, e.message))));
+  const cl = info.client || {};
+  const c = content();
+  const wrap = h("div", { class: "home" });
+  const dl = (info.downloads || []).length ? "#downloads" : "#register";
+
+  // hero
+  const bg = h("div", { class: "bg" });
+  if (c.heroImage) bg.style.backgroundImage = "url(\"" + c.heroImage + "\")";
+  const ann = announcementBanner();
+  wrap.append(h("section", { class: "home-hero" }, bg, h("div", { class: "wrap" },
+    ann ? h("div", { style: "max-width:760px;margin:0 auto 24px" }, ann) : null,
+    h("div", { class: "hero-in" },
+      c.badge ? h("a", { class: "badge", href: "#downloads" }, h("b", {}, "New"), c.badge, " →") : null,
+      h("img", { class: "hero-logo", src: siteLogo(), alt: info.site + " logo" }),
+      h("h1", { class: "display" }, h("span", {}, c.title1 || ""), h("span", { class: "grad" }, c.title2 || "")),
+      h("p", { class: "lead" }, c.subtitle || ""),
+      h("div", { class: "hero-cta" },
+        h("a", { class: "btn primary big", href: dl }, icon("download"), "Download PlebClient"),
+        c.serverIp ? h("button", { class: "btn glass big", onclick: () => copyIp(c.serverIp), title: "Copy the server address" }, icon("copy"), h("span", { class: "ip" }, c.serverIp)) : null),
+      h("div", { class: "hero-meta" },
+        h("span", {}, h("span", { class: "dot" + (s.connected ? " on" : "") }), s.connected ? fmt(s.online) + " playing now" : "Server status unavailable"),
+        h("span", {}, icon("globe"), "Plays in your browser"),
+        h("span", {}, icon("refresh"), cl.latest ? "PlebClient v" + cl.latest : "Free to play"))),
+    h("div", { class: "showcase" },
+      h("div", { class: "bar" }, h("i"), h("i"), h("i"), h("span", {}, "PlebClient")),
+      h("img", { src: c.showcase || c.heroImage || "/static/home/hero.jpg", alt: "PlebClient", loading: "lazy" }),
+      h("div", { class: "float f1" }, icon("sparkle"), h("div", {}, h("b", {}, "30+ mods"), h("small", {}, "HUD, zoom, keystrokes"))),
+      h("div", { class: "float f2" }, icon("coin"), h("div", {}, h("b", {}, coinName()), h("small", {}, "Earn them by playing")))),
+    h("div", { class: "hero-foot" }, h("span", {}, icon("gamepad"), "Minecraft 1.8.8"), h("span", {}, icon("users"), fmt(info.accounts) + " accounts"),
+      h("span", {}, icon("globe"), "Browser, Windows and Forge")))));
+
+  // marquee
+  const words = String(c.marquee || "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (words.length) {
+    const track = h("div", { class: "track", "aria-hidden": "true" });
+    for (let i = 0; i < 2; i++) for (let j = 0; j < Math.max(1, Math.ceil(8 / words.length)); j++) words.forEach((w) => track.append(h("span", {}, w)));
+    wrap.append(h("div", { class: "marquee" }, track, h("span", { class: "hidden" }, words.join(", "))));
+  }
+
+  // live numbers
+  wrap.append(h("section", { class: "section" }, h("div", { class: "wrap" },
+    h("div", { class: "sec-head" }, h("div", {}, h("span", { class: "eyebrow" }, h("b", {}, "01"), "— Live"), h("h2", { class: "display" }, "The ", h("span", { class: "grad" }, info.site), " network")),
+      h("p", {}, "Live from the server. Every player, every game, every coin.")),
+    h("div", { class: "numbers" },
+      h("div", {}, h("b", { class: "acc" }, s.connected ? fmt(s.online) : "–"), h("span", {}, "Playing now"), h("small", {}, s.connected ? "On " + (c.serverIp || info.site) : "Server status unavailable")),
+      h("div", {}, h("b", {}, fmt(info.accounts)), h("span", {}, "Accounts"), h("small", {}, "Players with a " + info.site + " account")),
+      h("div", {}, h("b", {}, "3"), h("span", {}, "Games"), h("small", {}, "PlebNite, PlebRPG and PlebMc")),
+      h("div", {}, h("b", {}, cl.latest ? "v" + cl.latest : "–"), h("span", {}, "PlebClient"), h("small", {}, "The latest release"))))));
+
+  // features
+  const feats = c.features || [];
+  if (feats.length) {
+    wrap.append(h("section", { class: "section", id: "features" }, h("div", { class: "wrap" },
+      h("div", { class: "sec-head" }, h("div", {}, h("span", { class: "eyebrow" }, h("b", {}, "02"), "— Features"), h("h2", { class: "display" }, c.featuresTitle || "")),
+        h("p", {}, c.featuresText || "")),
+      h("div", { class: "features" }, ...feats.map((f, i) => h("article", { class: "feature" },
+        f.image ? h("div", { class: "shot" }, h("img", { src: f.image, alt: "", loading: "lazy" }), h("span", { class: "num" }, String(i + 1).padStart(2, "0"))) : null,
+        h("div", { class: "txt" }, h("span", { class: "tag" }, info.site), h("h3", {}, f.title), h("p", {}, f.text))))))));
+  }
+
+  // leaderboards
+  const boards = h("div", { class: "boards" });
+  wrap.append(h("section", { class: "section" }, h("div", { class: "wrap" },
+    h("div", { class: "sec-head" }, h("div", {}, h("span", { class: "eyebrow" }, h("b", {}, "03"), "— Leaderboards"), h("h2", { class: "display" }, "Who's on ", h("span", { class: "grad" }, "top"), "?")),
+      h("p", {}, "The best players on PlebNite, PlebRPG and PlebMc. Look up anyone's stats on the Stats page.")),
+    boards)));
+  api("stats/games").then(async (r) => {
+    const order = ["plebnite", "plebrpg", "plebmc"];
+    const games = order.map((id) => r.games.find((g) => g.id === id)).filter(Boolean).concat(r.games.filter((g) => !order.includes(g.id))).slice(0, 3);
+    for (const g of games) {
+      const st = g.stats[0];
+      const list = h("ol");
+      boards.append(h("div", { class: "board" }, h("header", {}, h("h3", {}, g.title), h("small", {}, st ? st.label : "")), list,
+        h("a", { class: "more-link", href: "#leaderboard?game=" + g.id }, "Full leaderboard →")));
+      if (!st) { list.append(h("li", { class: "muted" }, "No stats yet.")); continue; }
+      api("stats/top?game=" + encodeURIComponent(g.id) + "&stat=" + encodeURIComponent(st.id) + "&limit=5").then((t) => {
+        if (!t.rows.length) list.append(h("li", { class: "muted" }, "Nobody yet. Be the first."));
+        for (const x of t.rows) list.append(h("li", {}, h("span", { class: "rank" + (x.place <= 3 ? " r" + x.place : "") }, x.place),
+          h("a", { href: "#stats?game=" + g.id + "&name=" + encodeURIComponent(x.name) }, x.name), h("b", {}, statValue(t.stat, x.value))));
+      }).catch(() => list.append(h("li", { class: "muted" }, "Couldn't load this board.")));
+    }
+  }).catch(() => boards.append(h("p", { class: "muted" }, "Leaderboards are unavailable right now.")));
+
+  // FAQ
+  const faq = c.faq || [];
+  if (faq.length) {
+    wrap.append(h("section", { class: "section", id: "faq" }, h("div", { class: "wrap faq" },
+      h("aside", {}, h("span", { class: "eyebrow" }, h("b", {}, "04"), "— FAQ"), h("h2", { class: "display" }, "Common ", h("span", { class: "grad" }, "questions")),
+        h("p", {}, "Still stuck? ", c.discordUrl ? h("a", { href: c.discordUrl, target: "_blank", rel: "noopener" }, "Ask on our Discord.") : "Ask a staff member in game.")),
+      h("div", { class: "qa" }, ...faq.map((f, i) => h("details", { open: i === 0 }, h("summary", {}, f.q), h("p", {}, f.a)))))));
+  }
+
+  // call to action
+  const go = (href, ic, title, sub, ext) => h("a", { class: "go", href, ...(ext ? { target: "_blank", rel: "noopener" } : {}) },
+    h("div", {}, h("b", {}, title), h("small", {}, sub)), icon(ic));
+  wrap.append(h("section", { class: "section" }, h("div", { class: "wrap" }, h("div", { class: "cta" },
+    h("div", { class: "left" }, h("span", { class: "eyebrow", style: "color:rgba(255,255,255,.7)" }, "05 — Get it"), h("h2", { class: "display" }, c.ctaTitle || ""),
+      h("p", {}, c.ctaText || ""), h("a", { class: "btn big", href: dl }, icon("download"), "Download now"), h("img", { src: siteLogo(), alt: "" })),
+    h("div", { class: "right" },
+      go("#downloads", "download", "Download PlebClient", "Browser · WASM · Forge 1.8.9"),
+      c.discordUrl ? go(c.discordUrl, "discord", "Join the Discord", "Community · Support · Updates", true) : null,
+      me ? go("#me", "user", "My account", "Coins · Cosmetics · Password") : go("#register", "plus", "Create an account", "Protect your name and coins"),
+      go("#shop", "bag", "Browse the shop", "Hats · Cloaks · Wings · Trails"))))));
   return wrap;
 }
 
@@ -562,7 +694,7 @@ function loginView() {
     }
     btn.disabled = false;
   } },
-  h("div", { class: "center" }, h("img", { src: "/static/logo.png", alt: "", style: "width:64px;height:64px;image-rendering:pixelated" })),
+  h("div", { class: "center" }, h("img", { src: siteLogo(), alt: "", style: "width:72px;height:72px;image-rendering:pixelated;object-fit:contain" })),
   h("h1", { class: "center" }, "Sign in"),
   h("p", { class: "muted center" }, "Your Minecraft name and your " + info.site + " password."),
   field("Minecraft name", { id: "name", name: "name", autocomplete: "username", required: true, maxlength: 16 }),
@@ -589,7 +721,7 @@ function registerView() {
     }
     btn.disabled = false;
   } },
-  h("div", { class: "center" }, h("img", { src: "/static/logo.png", alt: "", style: "width:64px;height:64px;image-rendering:pixelated" })),
+  h("div", { class: "center" }, h("img", { src: siteLogo(), alt: "", style: "width:72px;height:72px;image-rendering:pixelated;object-fit:contain" })),
   h("h1", { class: "center" }, "Create your account"),
   info.openRegistration ? h("p", { class: "muted center" }, "Pick the name you play as, then sign in with it on the PlebClient start screen.") :
     h("div", {}, h("p", { class: "muted" }, "Sign-ups need a code on this site right now:"),
@@ -1288,16 +1420,19 @@ function downloadsCard(list, ro) {
 
 async function downloadsView() {
   const list = info.downloads || [];
-  const rows = list.map((d) => h("div", { class: "card build" },
-    h("div", { class: "row", style: "width:100%" }, icon("download"),
-      h("div", {}, h("h2", {}, d.name)),
+  const ic = { offline: "globe", wasm: "sparkle", "forge-1.8.9": "hammer" };
+  const rows = list.map((d, i) => h("div", { class: "card build" },
+    h("div", { class: "row", style: "width:100%" }, icon(ic[d.kind] || "download"),
+      h("div", {}, h("span", { class: "tag" }, i === 0 ? "Easiest" : d.kind === "wasm" ? "Fastest" : "Java"), h("h2", { style: "margin-top:6px" }, d.name)),
       h("span", { class: "spacer" }),
       h("a", { class: "btn primary", href: "/api/dl/" + encodeURIComponent(d.kind), download: "" }, icon("download"), "Download")),
     h("p", { class: "muted" }, d.help)));
+  const ip = content().serverIp;
   return h("div", {},
-    card("Get PlebClient", h("p", { class: "muted" }, "Pick how you want to play. The first time you start it, make your PlebMc account on the start screen.")),
-    h("div", { style: "height:18px" }),
-    rows.length ? h("div", { class: "grid g2" }, rows) : card(null, empty("download", "Nothing to download yet. Check back soon.")));
+    rows.length ? h("div", { class: "grid g2" }, rows) : card(null, empty("download", "Nothing to download yet. Check back soon.")),
+    ip ? h("div", { class: "card build", style: "margin-top:18px" }, h("div", { class: "row", style: "width:100%" }, icon("online"),
+      h("div", {}, h("h2", { style: "margin:0" }, "Then join " + ip), h("p", { class: "muted", style: "margin:0" }, "Add it as a server in PlebClient (or any Eaglercraft 1.8 client).")),
+      h("span", { class: "spacer" }), h("button", { onclick: () => copyIp(ip) }, icon("copy"), "Copy address"))) : null);
 }
 
 // ==================== admin: log ====================
@@ -1320,11 +1455,138 @@ async function auditView() {
     h("div", { class: "scroll" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "When"), h("th", {}, "Who"), h("th", {}, "What"), h("th", {}, "Detail"))), body)), pg.more);
 }
 
+// ==================== owner: site content ====================
+
+/** A picture field: preview, Upload (sent to the panel right away) and Use default. */
+function imagePicker(label, value, fallback, hint) {
+  let val = value || "";
+  const img = h("img", { alt: "" });
+  const file = h("input", { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp" });
+  const status = h("small", { class: "faint" }, hint || "");
+  const show = () => { img.src = val || fallback || ""; img.style.visibility = val || fallback ? "visible" : "hidden"; };
+  file.addEventListener("change", () => {
+    const f = file.files[0];
+    if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { toast("Pictures can be up to 5 MB.", false); return; }
+    const rd = new FileReader();
+    rd.onload = async () => {
+      status.textContent = "Uploading…";
+      try {
+        const r = await api("admin/site/image", { data: rd.result });
+        val = r.url;
+        show();
+        status.textContent = "Uploaded. Press Save to put it on the site.";
+      } catch (e) { status.textContent = ""; toast(e.message, false); }
+      file.value = "";
+    };
+    rd.readAsDataURL(f);
+  });
+  show();
+  const el = h("div", {}, h("label", {}, label), h("div", { class: "picker" }, h("div", { class: "thumb" }, img),
+    h("div", { style: "display:grid;gap:8px" }, h("div", { class: "row" },
+      h("button", { type: "button", onclick: () => file.click() }, icon("upload"), "Upload"),
+      h("button", { type: "button", class: "ghost", onclick: () => { val = ""; show(); status.textContent = fallback ? "Back to the default. Press Save." : "Removed. Press Save."; } }, fallback ? "Use default" : "Remove"),
+      file), status)));
+  return { el, get: () => val };
+}
+
+async function siteView() {
+  const c = JSON.parse(JSON.stringify(content()));
+  const out = h("div");
+  const text = (key, label, opts = {}) => {
+    const input = opts.rows ? h("textarea", { id: "s-" + key, rows: opts.rows, maxlength: opts.max || 300 }) : h("input", { id: "s-" + key, maxlength: opts.max || 60, type: opts.type || "text", placeholder: opts.placeholder || "" });
+    input.value = c[key] || "";
+    return { key, el: [h("label", { for: "s-" + key }, label), input], get: () => input.value.trim() };
+  };
+  const fields = [
+    text("badge", "Badge above the headline (empty hides it)"), text("title1", "Headline, first line", { max: 40 }), text("title2", "Headline, second line (in color)", { max: 40 }),
+    text("subtitle", "Text under the headline", { rows: 3 }), text("serverIp", "Server address", { placeholder: "play.plebmc.top" }),
+    text("discordUrl", "Discord invite link (empty hides Discord)", { type: "url", max: 200, placeholder: "https://discord.gg/…" }),
+    text("marquee", "Scrolling strip (separate with commas, empty hides it)", { rows: 2, max: 400 }),
+    text("featuresTitle", "Features heading"), text("featuresText", "Features text", { rows: 2 }),
+    text("ctaTitle", "Bottom banner heading"), text("ctaText", "Bottom banner text", { rows: 2 }), text("footer", "Footer note", { max: 200 }),
+  ];
+  const F = Object.fromEntries(fields.map((f) => [f.key, f]));
+  const accent = h("input", { type: "color", id: "s-accent", value: c.accent || "#8b5cf6" });
+  accent.addEventListener("input", () => document.documentElement.style.setProperty("--accent", accent.value));
+  const logo = imagePicker("Logo", c.logo === "/static/logo.png" ? "" : c.logo, "/static/logo.png", "Square PNG with a see-through background looks best.");
+  const hero = imagePicker("Hero background", c.heroImage === "/static/home/hero.jpg" ? "" : c.heroImage, "/static/home/hero.jpg", "A wide picture, at least 1600 px across. It's dimmed behind the headline.");
+  const show = imagePicker("Big screenshot under the headline", c.showcase === "/static/home/hero.jpg" ? "" : c.showcase, "/static/home/hero.jpg", "16:9 works best.");
+
+  // features and FAQ: lists with add and remove
+  const feats = (c.features || []).map((f) => ({ ...f }));
+  const faqs = (c.faq || []).map((f) => ({ ...f }));
+  const featBox = h("div", { class: "repeat" });
+  const faqBox = h("div", { class: "repeat" });
+  const featPickers = [];
+  const drawFeats = () => {
+    featPickers.length = 0;
+    featBox.replaceChildren(...feats.map((f, i) => {
+      const t = h("input", { value: f.title, maxlength: 60, "aria-label": "Title", oninput: (e) => { f.title = e.target.value; } });
+      const x = h("textarea", { rows: 2, maxlength: 300, "aria-label": "Text", oninput: (e) => { f.text = e.target.value; } });
+      x.value = f.text;
+      const pk = imagePicker("Picture", f.image, "", "");
+      featPickers.push([f, pk]);
+      return h("div", { class: "item-edit" }, h("div", { class: "row" }, h("b", {}, "Card " + (i + 1)), h("span", { class: "spacer" }),
+        h("button", { type: "button", class: "ghost small", onclick: () => { save(); feats.splice(i, 1); drawFeats(); } }, icon("trash"), "Remove")),
+      h("label", {}, "Title"), t, h("label", {}, "Text"), x, pk.el);
+    }), feats.length < 6 ? h("button", { type: "button", onclick: () => { save(); feats.push({ title: "", text: "", image: "" }); drawFeats(); } }, icon("plus"), "Add a card") : "");
+    function save() { featPickers.forEach(([ff, pk]) => { ff.image = pk.get(); }); }
+  };
+  const drawFaq = () => {
+    faqBox.replaceChildren(...faqs.map((f, i) => {
+      const q = h("input", { value: f.q, maxlength: 150, "aria-label": "Question", oninput: (e) => { f.q = e.target.value; } });
+      const a = h("textarea", { rows: 2, maxlength: 600, "aria-label": "Answer", oninput: (e) => { f.a = e.target.value; } });
+      a.value = f.a;
+      return h("div", { class: "item-edit" }, h("div", { class: "row" }, h("b", {}, "Question " + (i + 1)), h("span", { class: "spacer" }),
+        h("button", { type: "button", class: "ghost small", onclick: () => { faqs.splice(i, 1); drawFaq(); } }, icon("trash"), "Remove")),
+      h("label", {}, "Question"), q, h("label", {}, "Answer"), a);
+    }), faqs.length < 12 ? h("button", { type: "button", onclick: () => { faqs.push({ q: "", a: "" }); drawFaq(); } }, icon("plus"), "Add a question") : "");
+  };
+  drawFeats();
+  drawFaq();
+
+  const saveBtn = h("button", { class: "primary", onclick: async () => {
+    featPickers.forEach(([f, pk]) => { f.image = pk.get(); });
+    const body = Object.fromEntries(fields.map((f) => [f.key, f.get()]));
+    Object.assign(body, { accent: accent.value, logo: logo.get(), heroImage: hero.get(), showcase: show.get(),
+      features: feats.map((f) => ({ title: (f.title || "").trim(), text: (f.text || "").trim(), image: f.image || "" })),
+      faq: faqs.map((f) => ({ q: (f.q || "").trim(), a: (f.a || "").trim() })).filter((f) => f.q && f.a) });
+    saveBtn.disabled = true;
+    try {
+      const r = await api("admin/site", body);
+      info.content = r.content;
+      applyTheme();
+      toast("Saved. The homepage is updated.");
+      message(out, "");
+    } catch (e) { message(out, e.message); }
+    saveBtn.disabled = false;
+  } }, icon("check"), "Save");
+
+  return h("div", { class: "stack" },
+    h("p", { class: "muted", style: "margin:0" }, "Change the homepage's words, pictures and color. Everyone sees the changes as soon as you press Save."),
+    h("div", { class: "grid g2" },
+      card("Brand", logo.el, h("label", { for: "s-accent" }, "Accent color"), h("div", { class: "row" }, accent,
+        h("button", { type: "button", class: "ghost small", onclick: () => { accent.value = "#8b5cf6"; accent.dispatchEvent(new Event("input")); } }, "Default purple"),
+        h("button", { type: "button", class: "ghost small", onclick: () => { accent.value = "#22b8e6"; accent.dispatchEvent(new Event("input")); } }, "PlebMc blue")),
+      ...F.serverIp.el, ...F.discordUrl.el, ...F.footer.el),
+      card("Top of the page", ...F.badge.el, ...F.title1.el, ...F.title2.el, ...F.subtitle.el)),
+    h("div", { class: "grid g2" }, card("Pictures", hero.el, show.el), card("Strip and bottom banner", ...F.marquee.el, ...F.ctaTitle.el, ...F.ctaText.el)),
+    card("Feature cards", ...F.featuresTitle.el, ...F.featuresText.el, h("div", { style: "height:14px" }), featBox),
+    card("FAQ", faqBox),
+    out,
+    h("div", { class: "savebar" }, saveBtn, h("a", { class: "btn", href: "#home" }, "View homepage"), h("span", { class: "spacer" }),
+      h("button", { class: "ghost danger small", onclick: async () => {
+        if (!window.confirm || !confirm("Put every word and picture back to the defaults?")) return;
+        try { const r = await api("admin/site", { reset: true }); info.content = r.content; applyTheme(); toast("Back to the defaults."); route(); } catch (e) { toast(e.message, false); }
+      } }, "Reset to defaults")));
+}
+
 // ==================== router ====================
 
 const VIEWS = {
   home: ["Home", homeView],
-  downloads: ["Downloads", downloadsView],
+  downloads: ["Download", downloadsView],
   stats: ["Stats", statsView],
   leaderboard: ["Leaderboards", leaderboardView],
   shop: ["Shop", shopView],
@@ -1338,40 +1600,57 @@ const VIEWS = {
   ranks: ["Ranks", ranksView, "admin"],
   rank: ["Rank", rankView, "admin"],
   announce: ["Announcements", announceView, "admin"],
+  site: ["Site content", siteView, "owner"],
   publish: ["Publish to shop", publishView, "admin"],
   client: ["Client updates", clientView, "admin"],
   audit: ["Admin log", auditView, "admin"],
 };
+
+/** Every page but the homepage sits in the page frame: a big heading, then the view. */
+function framed(view, title, el) {
+  const head = HEADS[view];
+  const admin = ADMIN_VIEWS.has(view);
+  const narrow = view === "login" || view === "register";
+  const top = head
+    ? h("div", { class: "page-head" }, head[0] ? h("span", { class: "eyebrow" }, h("b", {}, head[0]), "— " + title) : null,
+      h("h1", {}, head[1] + " ", h("span", {}, head[2])), head[3] ? h("p", {}, head[3]) : null)
+    : narrow ? null
+      : h("div", { class: "page-head" }, h("span", { class: "eyebrow" }, h("b", {}, admin ? "Admin" : info.site), "— " + title), h("h1", {}, title));
+  return h("div", { class: "wrap page" + (narrow ? " narrow-page" : "") }, top, el);
+}
 
 async function route() {
   let view = location.hash.slice(1).split("?")[0] || "home";
   if (!VIEWS[view]) view = "home";
   if ((view === "login" || view === "register") && me) view = "me";
   const [title, fn, need] = VIEWS[view];
-  side.classList.remove("open");
+  topnav.classList.remove("open");
+  menuBtn.setAttribute("aria-expanded", "false");
   setNav(view);
   titleEl.textContent = title;
-  document.title = title + " · " + info.site + " Panel";
+  document.title = view === "home" ? info.site : title + " · " + info.site;
   let el;
   try {
-    if (need === "admin" && !isAdmin()) {
-      el = me ? h("div", { class: "card narrow" }, h("h2", {}, "Admins only"), h("p", { class: "muted" }, "This page is for admins.")) : loginView();
+    if ((need === "admin" && !isAdmin()) || (need === "owner" && !isOwner())) {
+      el = me ? h("div", { class: "card narrow" }, h("h2", {}, need === "owner" ? "Owners only" : "Admins only"),
+        h("p", { class: "muted" }, need === "owner" ? "Only owners can change this." : "This page is for admins.")) : loginView();
     } else {
-      app.replaceChildren(h("div", { class: "skeleton" }));
+      if (view !== "home") app.replaceChildren(framed(view, title, h("div", { class: "skeleton" })));
       el = await fn();
     }
   } catch (err) {
     el = h("div", { class: "card narrow" }, h("p", {}, err.message), h("a", { href: "#home" }, "Back home"));
   }
-  app.replaceChildren(el);
+  app.replaceChildren(view === "home" ? el : framed(view, title, el));
   setNav(view);
+  drawFooter();
   window.scrollTo(0, 0);
 }
 
 (async function start() {
   try {
     info = await api("info");
-    document.getElementById("site").textContent = info.site;
+    applyTheme();
     const r = await api("me");
     me = r.account;
   } catch (e) { /* the view shows it */ }

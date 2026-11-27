@@ -18,6 +18,19 @@ sign in to the account that owns their name. Names with an account must sign in 
 | Admins | Dashboard (online, sign-ups chart, active players, coins in circulation, most owned cosmetics, client versions in use), players list (search, filters, sorting, 50 at a time with **Show more**), give/take/set coins, give/remove/put on cosmetics, kick, lock accounts, reset passwords, staff notes on players, announcements (website banner and/or in-game chat), **Publish to shop** (a cloak PNG or hat .bbmodel goes straight into PlebioAPI's shop), admin log with search. Players with the admin or owner role also get the client's Admin menu (after `/adminlogin`). |
 | Owners | All of that, plus making admins and owners and setting the **client update checker** (latest version, oldest allowed version, download link, message). |
 
+### The homepage and Site content
+
+The panel is also the PlebMc homepage: a hero with the logo and headline, a big PlebClient
+screenshot, live numbers (playing now, accounts, games, latest PlebClient), feature cards,
+the top 5 of each game's leaderboard, an FAQ, a download banner and a footer. The other pages
+(Download, Stats, Leaderboards, Shop, My account, Admin) share the same look.
+
+Owners change it on **Admin > Site content** without touching code: the logo, hero
+background, big screenshot, accent color, headline, text, server address, Discord link,
+scrolling strip, feature cards (with pictures), FAQ, bottom banner and footer. Pictures
+(PNG, JPEG, GIF or WebP, up to 5 MB) are uploaded to the panel and kept in its database.
+**Reset to defaults** puts everything back.
+
 ### Client updates
 
 Each PlebClient tells the panel its version when it starts (`/api/client/version`). On

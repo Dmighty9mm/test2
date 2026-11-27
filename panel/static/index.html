@@ -3,26 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PlebMc Panel</title>
+<title>PlebMc</title>
+<meta name="description" content="PlebMc: PlebNite, PlebRPG and PlebMc PvP, our own PlebClient, stats, leaderboards and the cosmetics shop.">
+<meta name="theme-color" content="#09070f">
 <link rel="icon" type="image/png" href="/static/favicon.png">
+<link rel="preload" href="/static/fonts/bebas-neue.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/style.css">
 <script src="/static/app.js" defer></script>
 </head>
 <body>
-<div class="shell">
-  <aside class="side" id="side">
-    <a class="brand" href="#home"><img src="/static/logo.png" alt=""><span><span id="site">PlebMc</span><small>Panel</small></span></a>
-    <nav id="nav"></nav>
-    <div class="foot">Coins and cosmetics update from the server about once a minute.</div>
-  </aside>
-  <div class="main">
-    <header class="topbar">
-      <button class="menu-btn ghost small" id="menu" aria-label="Menu" aria-expanded="false">Menu</button>
-      <div class="title" id="title"></div>
-      <div class="who" id="who"></div>
-    </header>
-    <main id="app"><div class="skeleton"></div></main>
+<header class="nav" id="topnav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#home"><img id="brand-logo" src="/static/logo.png" alt=""><span id="site">PlebMc</span></a>
+    <nav class="links" id="nav" aria-label="Main"></nav>
+    <div class="who" id="who"></div>
+    <button class="menu-btn ghost small" id="menu" aria-label="Menu" aria-expanded="false" aria-controls="nav">Menu</button>
   </div>
-</div>
+</header>
+<div class="subnav hidden" id="subnav"></div>
+<main id="app"><div class="wrap page"><div class="skeleton"></div></div></main>
+<footer class="foot" id="footer"></footer>
+<span id="title" hidden></span>
 </body>
 </html>
