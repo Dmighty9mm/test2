@@ -326,7 +326,7 @@
           // already a cape texture (front, back and edges laid out): use it as it is instead of squeezing it onto the back
           S.source = 'sheet'; S.sheet = [ready]; S.art = []; S.artMs = [];
           markEffects(); syncMotion(); rebuild();
-          toast('That image is already a cape texture, so it is used as it is. To put a picture on the back instead, use one that is not 2:1.', 'ok');
+          toast('That image is already a cape texture, so it is used as it is. To put a picture on the back instead, use one that isn\u2019t shaped like a cape texture (2:1, 46:22 or 22:17).', 'ok');
           return;
         }
         S.source = 'still'; S.art = [im]; S.artMs = [];
@@ -339,17 +339,21 @@
   }
   /**
    * A canvas in the 64x32 cape layout when the image already is a cape texture: a full 2:1 sheet
-   * (64x32, 128x64 ...) or just the cape part (22x17, or any size that shape). Otherwise null.
+   * (64x32, 128x64, or any size close to 2:1 such as 1000x500), an OptiFine-style sheet with the
+   * elytra part (46x22 and its multiples), or just the cape part (22x17, or any size that shape).
+   * Otherwise null.
    */
   function asCapeTexture(im) {
-    const w = im.width, h = im.height;
-    if (w >= 64 && w % 64 === 0 && h * 2 === w) {
-      const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(im, 0, 0); return c;
-    }
-    if (w >= 22 && Math.abs(w / h - 22 / 17) < 0.02) {
-      const u = Math.max(1, Math.round(w / 22)), c = document.createElement('canvas'); c.width = 64 * u; c.height = 32 * u;
-      const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(im, 0, 0, 22 * u, 17 * u); return c;
-    }
+    const w = im.width, h = im.height, near = (r) => Math.abs(w / h - r) / r < 0.03;
+    // the sheet is copied onto a 64 * u by 32 * u canvas, scaled when its size isn't already that
+    const sheet = (cols, rows, u) => {
+      const c = document.createElement('canvas'); c.width = 64 * u; c.height = 32 * u;
+      const g = c.getContext('2d'); g.imageSmoothingEnabled = w > cols * u;  // only when shrinking a big sheet
+      g.drawImage(im, 0, 0, cols * u, rows * u); return c;
+    };
+    if (w >= 64 && near(2)) return sheet(64, 32, Math.max(1, Math.round(w / 64)));
+    if (w >= 46 && near(46 / 22)) return sheet(46, 22, Math.max(1, Math.round(w / 46)));
+    if (w >= 22 && near(22 / 17)) return sheet(22, 17, Math.max(1, Math.round(w / 22)));
     return null;
   }
   const drop = $('drop');
