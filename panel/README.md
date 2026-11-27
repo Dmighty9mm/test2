@@ -184,9 +184,9 @@ never reaches a backend server or the proxy's command log.
 
 ## Stats and leaderboards
 
-The **Stats & leaderboards** page shows every player's PlebMc stats (coins, cosmetics,
-daily streak) plus whatever the game servers send, with a leaderboard for each stat.
-Search a name to see all of that player's stats and where they place.
+**Stats**: type a player's name to see their stats, one game at a time: PlebNite
+(first), PlebRPG and PlebMc (coins, cosmetics, daily streak). **Leaderboards**: a board
+for every stat of every game; click a name to open their stats.
 
 The game servers send stats with **PlebMcBridge** (2.1+):
 

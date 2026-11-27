@@ -30,6 +30,7 @@ function h(tag, attrs, ...kids) {
 
 const ICONS = {
   home: "M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10",
+  chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
   trophy: "M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4zM17 5h3v2a3 3 0 01-3 3M7 5H4v2a3 3 0 003 3",
   bag: "M6 7h12l1 14H5L6 7zM9 7V5a3 3 0 016 0v2",
   check: "M5 12.5l4.5 4.5L19 7.5",
@@ -207,7 +208,7 @@ function pager(container, load, render, opts = {}) {
 // ==================== shell ====================
 
 const NAV = [
-  ["General", [["home", "Home", "home"], ["downloads", "Downloads", "download"], ["leaderboard", "Stats & leaderboards", "trophy"], ["shop", "Shop", "bag"]]],
+  ["General", [["home", "Home", "home"], ["downloads", "Downloads", "download"], ["stats", "Stats", "chart"], ["leaderboard", "Leaderboards", "trophy"], ["shop", "Shop", "bag"]]],
   ["You", [["me", "My account", "user", true]]],
   ["Admin", [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["announce", "Announcements", "megaphone"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Client updates", "refresh"], ["audit", "Admin log", "list"]], "admin"],
 ];
@@ -311,7 +312,7 @@ async function leaderboardView() {
     const r = await api("stats/top?game=" + encodeURIComponent(game.id) + "&stat=" + encodeURIComponent(stat || "") + "&offset=" + offset + "&limit=25");
     return { items: r.rows.map((x) => ({ ...x, st: r.stat })), total: r.total, more: offset + r.rows.length < r.total };
   }, (x) => h("tr", {}, h("td", { style: "width:40px" }, h("span", { class: "rank" + (x.place <= 3 ? " r" + x.place : "") }, x.place)),
-    h("td", {}, h("a", { href: "#leaderboard?game=" + game.id + "&stat=" + (stat || "") + "&name=" + encodeURIComponent(x.name), onclick: (e) => { e.preventDefault(); show(x.name); } }, initial(x.name), x.name)),
+    h("td", {}, h("a", { href: "#stats?game=" + game.id + "&name=" + encodeURIComponent(x.name) }, initial(x.name), x.name)),
     h("td", { class: "num" }, h("b", {}, statValue(x.st, x.value)))),
   { empty: () => h("tr", {}, h("td", { class: "muted" }, "Nobody is on this board yet. Stats show up after people play.")) });
   const draw = () => {
@@ -324,30 +325,55 @@ async function leaderboardView() {
     const st = game.stats.find((s) => s.id === stat);
     head.textContent = game.title + (st ? " · " + st.label : "");
   };
-  // one player's stats in every game
-  const q = h("input", { type: "search", placeholder: "Find a player", "aria-label": "Find a player", maxlength: 16, spellcheck: "false" });
-  const mine = h("div", {});
-  const show = (name) => {
-    q.value = name;
-    mine.replaceChildren(card("Stats", h("p", { class: "muted" }, "Loading…")));
-    api("stats/player?name=" + encodeURIComponent(name)).then((r) => {
-      mine.replaceChildren(card(h("div", { class: "row", style: "width:100%" }, initial(r.name), h("h2", {}, r.name), r.rank ? h("span", { class: "pill" }, r.rank) : null),
-        ...r.games.map((g) => h("div", {}, h("h3", {}, g.title),
-          h("div", { class: "tiles" }, ...g.stats.map((s) => tile("trophy", s.label, statValue(s, s.value), s.place ? "#" + fmt(s.place) : null)))))));
-      mine.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }).catch((e) => mine.replaceChildren(card("Stats", h("p", { class: "muted" }, e.message))));
-  };
-  q.addEventListener("keydown", (e) => { if (e.key === "Enter" && q.value.trim()) show(q.value.trim()); });
   draw();
   pg.reset();
-  if (p.name) show(p.name);
-  else if (me) show(me.name);
-  return h("div", {},
-    card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "Leaderboards"), h("span", { class: "spacer" }), h("label", { class: "searchbox" }, icon("search"), q)),
-      h("p", { class: "muted" }, "Pick a game and a stat. Search a name and press Enter to see all of their stats."),
-      gameChips, h("div", { style: "height:8px" }), statChips, h("div", { style: "height:14px" }), head,
-      h("div", { class: "scroll" }, h("table", {}, body)), pg.more),
-    h("div", { style: "height:18px" }), mine);
+  return card(h("h2", {}, "Leaderboards"), h("p", { class: "muted" }, "Pick a game and a stat. Click a name to see their stats."),
+    gameChips, h("div", { style: "height:8px" }), statChips, h("div", { style: "height:14px" }), head,
+    h("div", { class: "scroll" }, h("table", {}, body)), pg.more);
+}
+
+/** Stats: type a player and see their stats, one game at a time (PlebNite first). */
+async function statsView() {
+  const p = params();
+  const q = h("input", { type: "search", placeholder: "Type a player's name", "aria-label": "Player name", maxlength: 16, spellcheck: "false", value: p.name || "" });
+  const tabs = h("div", { class: "chips" });
+  const out = h("div", {});
+  const result = h("div", {});
+  let data = null;
+  let game = p.game || "plebnite";
+  const keep = () => history.replaceState(null, "", "#stats?" + new URLSearchParams({ name: data ? data.name : q.value.trim(), game }).toString());
+  const draw = () => {
+    if (!data) return;
+    const order = ["plebnite", "plebrpg", "plebmc"];
+    const titles = { plebnite: "PlebNite", plebrpg: "PlebRPG", plebmc: "PlebMc" };
+    const all = order.map((id) => data.games.find((g) => g.id === id) || { id, title: titles[id], stats: [] })
+      .concat(data.games.filter((g) => !order.includes(g.id)));
+    if (!all.some((g) => g.id === game)) game = all[0].id;
+    tabs.replaceChildren(...all.map((g) => h("button", { class: "chip", "aria-pressed": String(g.id === game), onclick: () => { game = g.id; keep(); draw(); } }, g.title)));
+    const g = all.find((x) => x.id === game);
+    out.replaceChildren(g.stats.length
+      ? h("div", { class: "tiles" }, ...g.stats.map((s) => tile("trophy", s.label, statValue(s, s.value),
+        s.place ? h("a", { href: "#leaderboard?game=" + g.id + "&stat=" + s.id }, "#" + fmt(s.place) + " on the leaderboard") : null)))
+      : empty("trophy", data.name + " hasn't played " + g.title + " yet."));
+  };
+  const look = (name) => {
+    if (!name) return;
+    data = null;
+    result.replaceChildren(h("p", { class: "muted" }, "Loading…"));
+    api("stats/player?name=" + encodeURIComponent(name)).then((r) => {
+      data = r;
+      keep();
+      result.replaceChildren(h("div", { class: "row" }, initial(r.name), h("h2", {}, r.name), r.rank ? h("span", { class: "pill" }, r.rank) : null),
+        h("div", { style: "height:12px" }), tabs, h("div", { style: "height:14px" }), out);
+      draw();
+    }).catch((e) => result.replaceChildren(h("p", { class: "muted" }, e.message)));
+  };
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter") look(q.value.trim()); });
+  if (p.name) look(p.name);
+  else if (me) { q.value = me.name; look(me.name); }
+  return card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "Player stats"), h("span", { class: "spacer" }),
+    h("label", { class: "searchbox" }, icon("search"), q), h("button", { onclick: () => look(q.value.trim()) }, "Look up")),
+  h("p", { class: "muted" }, "Type a name and press Enter. Pick PlebNite, PlebRPG or PlebMc to switch."), result);
 }
 
 const scriptLoads = {};
@@ -1299,7 +1325,8 @@ async function auditView() {
 const VIEWS = {
   home: ["Home", homeView],
   downloads: ["Downloads", downloadsView],
-  leaderboard: ["Stats & leaderboards", leaderboardView],
+  stats: ["Stats", statsView],
+  leaderboard: ["Leaderboards", leaderboardView],
   shop: ["Shop", shopView],
   makers: ["Cosmetic makers", makersView, "admin"],
   login: ["Sign in", loginView],

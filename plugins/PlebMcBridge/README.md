@@ -19,8 +19,8 @@ Which quests an event counts for depends on the server it came from; see
 ## Stats for the panel
 
 With `stats.enabled: true` in `config.yml`, it also sends this server's game stats (from
-PlaceholderAPI placeholders or vanilla statistics) to the PlebMc Panel's Stats &
-leaderboards page: online players every few minutes and when they leave. `/plebstats
+PlaceholderAPI placeholders or vanilla statistics) to the PlebMc Panel's Stats and
+Leaderboards pages: online players every few minutes and when they leave. `/plebstats
 <player>` shows what is read for a player and sends it now. See `config.yml` for PlebNite
 and PlebRPG examples. Tests: `sh build.sh && javac -cp build/classes:build/stubs -d build/test
 test/net/plebmc/bridge/StatsTest.java && java -cp build/classes:build/stubs:build/test
