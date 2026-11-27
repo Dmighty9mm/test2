@@ -29,6 +29,7 @@ Commands
 """
 
 import base64
+import calendar
 import getpass
 import hashlib
 import hmac
@@ -37,7 +38,9 @@ import mimetypes
 import os
 import re
 import secrets
+import shutil
 import sqlite3
+import subprocess
 import sys
 import threading
 import time
@@ -45,6 +48,7 @@ from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
+import urllib.parse
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -156,10 +160,10 @@ SITE_DEFAULTS = {
     "badge": "PlebClient is out now",
     "title1": "Minecraft, but",
     "title2": "way more pleb.",
-    "subtitle": "One network, three games and our own client. Play PlebNite, PlebRPG and PlebMc PvP in your browser or on "
+    "subtitle": "One network, three games and our own client. Play PlebMc PvP, PlebNite and PlebRPG in your browser or on "
                 "Windows, earn PlebMc Coins and show off your cosmetics.",
     "serverIp": "play.plebmc.top",
-    "discordUrl": "",
+    "discordUrl": "https://discord.gg/bR89zXFH9h",
     "featuresTitle": "Three games, one account",
     "featuresText": "Everything you earn follows you: your coins, cosmetics and stats work on every PlebMc game and every PlebClient.",
     "features": [
@@ -176,14 +180,19 @@ SITE_DEFAULTS = {
         {"q": "Is it free?", "a": "Yes. PlebMc and PlebClient are free. Coins come from playing; the shop is cosmetics only."},
         {"q": "Why do I need a PlebMc account?", "a": "Anyone can join a cracked server with your name. Your account's password "
          "makes sure only you can spend your coins and wear your cosmetics."},
-        {"q": "Where do I see my stats?", "a": "On the Stats page: type your name and pick PlebNite, PlebRPG or PlebMc. The "
+        {"q": "Where do I see my stats?", "a": "On the Stats page: type your name and pick PlebMc, PlebNite or PlebRPG. The "
          "Leaderboards page has the top players for every stat."},
     ],
+    # voting: the server lists players vote on (PlebioAPI pays the reward when a vote comes in over Votifier)
+    "voteLinks": [{"name": "Eaglercraft Servers", "url": "https://vote.plebmc.top/"}],
+    "voteReward": 100,
+    "mascot": True,
+    "voteText": "Votes push PlebMc up the server lists so more players find us. You can vote once a day on each site.",
     "ctaTitle": "Ready to play?",
     "ctaText": "Grab PlebClient, make your account on the start screen and see you on play.plebmc.top.",
     "footer": "Not affiliated with Mojang or Microsoft.",
 }
-SITE_TEXT_LIMITS = {"badge": 60, "title1": 40, "title2": 40, "subtitle": 300, "serverIp": 60,                     "featuresTitle": 60, "featuresText": 300, "ctaTitle": 60, "ctaText": 300, "footer": 200}
+SITE_TEXT_LIMITS = {"badge": 60, "title1": 40, "title2": 40, "subtitle": 300, "serverIp": 60,                     "featuresTitle": 60, "featuresText": 300, "ctaTitle": 60, "ctaText": 300, "footer": 200, "voteText": 300}
 
 
 def sniff_image(data):
@@ -1368,6 +1377,22 @@ class Panel:
             q, a = str(f.get("q") or "").strip()[:150], str(f.get("a") or "").strip()[:600]
             if q and a:
                 out["faq"].append({"q": q, "a": a})
+        votes = body.get("voteLinks") if isinstance(body.get("voteLinks"), list) else SITE_DEFAULTS["voteLinks"]
+        out["voteLinks"] = []
+        for v in votes[:8]:
+            if not isinstance(v, dict):
+                continue
+            n, u = str(v.get("name") or "").strip()[:40], str(v.get("url") or "").strip()[:300]
+            if not n and not u:
+                continue
+            if not n or not re.match(r"^https://\S+$", u):
+                raise ApiError(400, "Every vote site needs a name and a link that starts with https://")
+            out["voteLinks"].append({"name": n, "url": u})
+        try:
+            out["voteReward"] = max(0, min(10 ** 9, int(body.get("voteReward", SITE_DEFAULTS["voteReward"]) or 0)))
+        except (TypeError, ValueError):
+            raise ApiError(400, "The vote reward must be a number.")
+        out["mascot"] = bool(body.get("mascot", SITE_DEFAULTS["mascot"]))
         self.db.set_kv("site_content", out)
         # forget uploads nothing uses any more (a day later, so a page being edited keeps its new pictures)
         used = {v.rsplit("/", 1)[-1] for v in [out[k] for k in SITE_IMAGES] + [f["image"] for f in out["features"]]
@@ -1449,6 +1474,34 @@ class Panel:
     def clear_announcement(self, actor):
         self.db.set_kv("announcement", None)
         self.audit(actor["name"], "announce", "cleared the website banner")
+
+    # ---------- the panel updating itself ----------
+
+    def update_settings(self):
+        s = self.db.get_kv("panel_update", None) or {}
+        return {"auto": s.get("auto", True) is not False}
+
+    def update_status(self):
+        st = UPDATER.state()
+        return {"ok": True, "enabled": UPDATER.enabled, "auto": self.update_settings()["auto"], "repo": UPDATER.repo, "branch": UPDATER.branch,
+                "running": UPDATER.running(), "runningAt": UPDATER.build_of(HERE)[1], "downloaded": bool(os.environ.get("PANEL_UPDATE_ACTIVE")), "installedAt": st["installedAt"],
+                "bad": st["bad"], "minutes": UPDATER.every // 60, **UPDATER.status}
+
+    def update_action(self, actor, body):
+        if not UPDATER.enabled:
+            raise ApiError(400, "Updates are turned off on this server (PANEL_AUTO_UPDATE=0).")
+        action = body.get("action")
+        if action == "auto":
+            self.db.set_kv("panel_update", {"auto": bool(body.get("auto"))})
+            self.audit(actor["name"], "update", "automatic updates " + ("on" if body.get("auto") else "off"))
+        elif action == "check":
+            UPDATER.check()
+        elif action == "install":
+            if UPDATER.install(force=True) == "installed":
+                self.audit(actor["name"], "update", "installed build %s" % UPDATER.status["latest"][:10])
+        else:
+            raise ApiError(400, "Unknown action.")
+        return self.update_status()
 
     # ---------- client releases and the update checker ----------
 
@@ -2076,6 +2129,12 @@ class Handler(BaseHTTPRequestHandler):
             self.web_user(role="admin")
             return self.send_json(200, {"ok": True, "client": p.client_release(), "versions": p.client_versions(),
                                         "downloads": p.downloads()})
+        if method == "GET" and route == "admin/update":
+            self.web_user(role="admin")
+            return self.send_json(200, p.update_status())
+        if method == "POST" and route == "admin/update":
+            actor = self.web_user(role="owner")
+            return self.send_json(200, p.update_action(actor, self.body()))
         if method == "POST" and route == "admin/downloads":
             actor = self.web_user(role="owner")
             return self.send_json(200, p.set_downloads(actor, self.body()))
@@ -2186,9 +2245,277 @@ def serve(panel):
     Handler.panel = panel
     httpd = ThreadingHTTPServer((panel.cfg.host, panel.cfg.port), Handler)
     httpd.daemon_threads = True
-    print("PlebMc Panel on http://%s:%d (public URL %s)" % (panel.cfg.host, panel.cfg.port, panel.cfg.public_url),
-          flush=True)
+    build = UPDATER.running()
+    print("PlebMc Panel%s on http://%s:%d (public URL %s)" % (" build " + build[:10] if build else "", panel.cfg.host, panel.cfg.port,
+                                                               panel.cfg.public_url), flush=True)
+    restarting = []
+    if UPDATER.enabled:
+        UPDATER.restart = lambda: (restarting.append(1), httpd.shutdown())
+        threading.Thread(target=UPDATER.loop, args=(panel,), daemon=True).start()
     httpd.serve_forever()
+    httpd.server_close()
+    if restarting:
+        UPDATER.relaunch()
+
+
+# ==================== updating itself ====================
+#
+# The panel can fetch newer builds of itself from GitHub. A build is the panel/ folder of the repository,
+# named by its git tree hash. New builds are never written over the installed files: they go next to the
+# database (so they survive a Docker rebuild) and the installed app.py hands over to the newest good one
+# when it starts. A build that fails to start twice is marked bad and skipped.
+
+class BadBuild(ApiError):
+    """The build itself is no good (as opposed to the download failing): don't fetch it again."""
+
+
+class Updater:
+    API = "https://api.github.com"
+    RAW = "https://raw.githubusercontent.com"
+    SAFE_PATH = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.\- ]*(/[A-Za-z0-9_][A-Za-z0-9_.\- ]*)*$")
+    SKIP = ("tests/", "__pycache__/", "data/")
+    MAX_FILES, MAX_BYTES = 600, 60 * 1024 * 1024
+
+    def __init__(self, folder=None):
+        self.enabled = env("PANEL_AUTO_UPDATE", "1") != "0"
+        self.repo = env("PANEL_UPDATE_REPO", "Dmighty9mm/test2")
+        self.branch = env("PANEL_UPDATE_BRANCH", "main")
+        self.path = env("PANEL_UPDATE_PATH", "panel").strip("/")
+        self.token = env("PANEL_UPDATE_TOKEN", "")
+        self.every = max(2, int(env("PANEL_UPDATE_MINUTES", "10"))) * 60
+        self.dir = folder or env("PANEL_UPDATE_DIR", os.path.join(os.path.dirname(os.path.abspath(CFG.db)), "updates"))
+        self.lock = threading.Lock()
+        self.status = {"latest": "", "latestAt": 0, "commit": "", "checkedAt": 0, "error": "", "busy": ""}
+        self.restart = None  # serve() sets this: called once a new build is ready
+
+    # ----- what is installed -----
+
+    @staticmethod
+    def build_of(folder):
+        """(tree hash, time of its commit) from a folder's BUILD file; ("", 0) when it has none."""
+        try:
+            with open(os.path.join(folder, "BUILD"), encoding="utf-8") as f:
+                parts = f.read().split()
+            return (parts[0][:40] if parts else ""), (int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0)
+        except OSError:
+            return "", 0
+
+    def running(self):
+        return self.build_of(HERE)[0]
+
+    def base_id(self):
+        """Names the installed files, so a new zip or image is noticed even when it has no BUILD file."""
+        build = self.build_of(HERE)[0]
+        if build:
+            return build
+        try:
+            with open(os.path.abspath(__file__), "rb") as f:
+                return "local-" + hashlib.sha1(f.read()).hexdigest()[:16]
+        except OSError:
+            return ""
+
+    def state(self):
+        try:
+            with open(os.path.join(self.dir, "state.json"), encoding="utf-8") as f:
+                st = json.load(f)
+        except (OSError, ValueError):
+            st = {}
+        return {"current": st.get("current") or "", "bad": list(st.get("bad") or [])[-20:], "pending": st.get("pending") or "",
+                "tries": int(st.get("tries") or 0), "base": st.get("base") or "", "installedAt": st.get("installedAt") or 0}
+
+    def save_state(self, st):
+        os.makedirs(self.dir, exist_ok=True)
+        tmp = os.path.join(self.dir, "state.json.tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(st, f)
+        os.replace(tmp, os.path.join(self.dir, "state.json"))
+
+    # ----- starting up -----
+
+    def hand_over(self, argv):
+        """Called by the installed app.py before it serves: runs the newest good downloaded build instead, if any."""
+        if not self.enabled or os.environ.get("PANEL_UPDATE_ACTIVE"):
+            return
+        st = self.state()
+        base = self.base_id()
+        if st["base"] != base:
+            # the installed files changed (a new zip or image): they win over older downloads
+            st.update(base=base, current="", pending="", tries=0)
+            self.save_state(st)
+            return
+        cur = st["current"]
+        app = os.path.join(self.dir, cur, "app.py") if cur else ""
+        if not cur or cur == base or cur in st["bad"] or not os.path.isfile(app):
+            return
+        if st["pending"] == cur and st["tries"] >= 2:
+            print("Update %s did not start twice. Staying on the installed build." % cur[:10], flush=True)
+            st["bad"].append(cur)
+            st.update(current="", pending="", tries=0)
+            self.save_state(st)
+            return
+        st.update(pending=cur, tries=(st["tries"] + 1 if st["pending"] == cur else 1))
+        self.save_state(st)
+        print("Starting build %s from %s" % (cur[:10], os.path.dirname(app)), flush=True)
+        os.environ["PANEL_UPDATE_ACTIVE"] = cur
+        os.environ["PANEL_BASE_APP"] = os.path.abspath(__file__)
+        os.execv(sys.executable, [sys.executable, app] + list(argv))
+
+    def started_fine(self):
+        """A downloaded build that has been serving for a while is trusted from then on."""
+        st = self.state()
+        if st["pending"]:
+            st.update(pending="", tries=0)
+            self.save_state(st)
+
+    def relaunch(self):
+        """Replace this process with the installed app.py, which hands over to the newest build."""
+        base = os.environ.pop("PANEL_BASE_APP", None) or os.path.abspath(__file__)
+        os.environ.pop("PANEL_UPDATE_ACTIVE", None)
+        os.execv(sys.executable, [sys.executable, base])
+
+    # ----- GitHub -----
+
+    def fetch(self, url, accept=None, limit=8 * 1024 * 1024):
+        req = urllib.request.Request(url, headers={"User-Agent": "plebmc-panel-updater", "Accept": accept or "application/vnd.github+json"})
+        if self.token:
+            req.add_header("Authorization", "Bearer " + self.token)
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = r.read(limit + 1)
+        if len(data) > limit:
+            raise ApiError(502, "The update is too large.")
+        return data
+
+    def check(self):
+        """Ask GitHub which build is the newest. Returns its hash."""
+        try:
+            head = json.loads(self.fetch("%s/repos/%s/branches/%s" % (self.API, self.repo, urllib.parse.quote(self.branch)))).get("commit") or {}
+            commit = str(head.get("sha") or "")
+            if not re.fullmatch(r"[0-9a-f]{40}", commit):
+                raise ApiError(502, "GitHub sent an answer the panel doesn't understand.")
+            if commit != self.status["commit"] or not self.status["latest"]:
+                try:
+                    when = calendar.timegm(time.strptime(head["commit"]["committer"]["date"], "%Y-%m-%dT%H:%M:%SZ"))
+                except (KeyError, TypeError, ValueError):
+                    when = int(time.time())
+                tree = json.loads(self.fetch("%s/repos/%s/git/trees/%s" % (self.API, self.repo, commit)))
+                found = [e["sha"] for e in tree.get("tree") or [] if e.get("path") == self.path and e.get("type") == "tree"]
+                if not found:
+                    raise ApiError(502, "There is no %s folder in %s." % (self.path, self.repo))
+                self.status.update(latest=found[0], commit=commit, latestAt=when)
+            self.status.update(checkedAt=int(time.time()), error="")
+            return self.status["latest"]
+        except ApiError as e:
+            self.status.update(checkedAt=int(time.time()), error=e.message)
+            raise
+        except Exception as e:  # network trouble, rate limits, bad JSON
+            msg = "Couldn't reach GitHub: %s" % (getattr(e, "reason", None) or e)
+            self.status.update(checkedAt=int(time.time()), error=str(msg)[:200])
+            raise ApiError(502, self.status["error"])
+
+    def download(self, build, commit, when=0):
+        """Fetch a build into its own folder, check every file against git's hashes, and make sure it starts."""
+        tree = json.loads(self.fetch("%s/repos/%s/git/trees/%s?recursive=1" % (self.API, self.repo, build)))
+        files = [e for e in tree.get("tree") or [] if e.get("type") == "blob" and not str(e.get("path", "")).startswith(self.SKIP)
+                 and not any(part.startswith(".") for part in str(e.get("path", "")).split("/"))]
+        if tree.get("truncated") or not files or len(files) > self.MAX_FILES or sum(int(e.get("size") or 0) for e in files) > self.MAX_BYTES:
+            raise ApiError(502, "The update has too many files or is too large.")
+        final = os.path.join(self.dir, build)
+        tmp = final + ".part"
+        shutil.rmtree(tmp, ignore_errors=True)
+        try:
+            for e in files:
+                rel = e["path"]
+                if not self.SAFE_PATH.fullmatch(rel) or ".." in rel:
+                    raise ApiError(502, "The update has a file name the panel won't accept: %s" % rel[:80])
+                data = self.fetch("%s/%s/%s/%s/%s" % (self.RAW, self.repo, commit, self.path, urllib.parse.quote(rel)), accept="*/*", limit=self.MAX_BYTES)
+                if hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest() != e["sha"]:
+                    raise ApiError(502, "A downloaded file didn't match: %s" % rel[:80])
+                dest = os.path.join(tmp, *rel.split("/"))
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                with open(dest, "wb") as f:
+                    f.write(data)
+            with open(os.path.join(tmp, "BUILD"), "w", encoding="utf-8") as f:
+                f.write("%s %d\n" % (build, when))
+            if not os.path.isfile(os.path.join(tmp, "static", "index.html")):
+                raise BadBuild(502, "The update is missing the website's files.")
+            try:
+                out = subprocess.run([sys.executable, os.path.join(tmp, "app.py"), "selfcheck"], capture_output=True, timeout=60,
+                                     env={**os.environ, "PANEL_AUTO_UPDATE": "0"})
+            except (OSError, subprocess.SubprocessError) as e:
+                raise ApiError(502, "The update couldn't be tested: %s" % e)
+            if out.returncode != 0 or b"selfcheck ok" not in out.stdout:
+                raise BadBuild(502, "The newest build on GitHub didn't pass its start-up test, so it wasn't installed.")
+            shutil.rmtree(final, ignore_errors=True)
+            os.replace(tmp, final)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        return final
+
+    def install(self, force=False):
+        """Check, and if there is a newer build, download it and restart into it. Returns what happened."""
+        if not self.lock.acquire(blocking=False):
+            raise ApiError(409, "An update is already running.")
+        try:
+            self.status["busy"] = "checking"
+            latest = self.check()
+            st = self.state()
+            if latest == self.running():
+                return "current"
+            if latest in st["bad"] and not force:
+                self.status["error"] = "Build %s didn't work before, so it is skipped. The next build will be tried." % latest[:10]
+                return "bad"
+            if not force and self.status["latestAt"] <= self.build_of(HERE)[1]:
+                return "older"  # this build is newer than GitHub's (a zip from before its changes were merged)
+            self.status["busy"] = "downloading"
+            try:
+                self.download(latest, self.status["commit"], self.status["latestAt"])
+            except BadBuild as e:
+                st["bad"].append(latest)
+                self.save_state(st)
+                self.status["error"] = e.message
+                raise
+            except ApiError as e:
+                self.status["error"] = e.message
+                raise
+            except Exception as e:
+                self.status["error"] = "The download failed: %s" % str(getattr(e, "reason", None) or e)[:160]
+                raise ApiError(502, self.status["error"])
+            st = self.state()
+            st["bad"] = [b for b in st["bad"] if b != latest]
+            st.update(current=latest, pending="", tries=0, installedAt=int(time.time()))
+            self.save_state(st)
+            for name in os.listdir(self.dir):  # keep the new build and the one that is running
+                full = os.path.join(self.dir, name)
+                if os.path.isdir(full) and name not in (latest, self.running()):
+                    shutil.rmtree(full, ignore_errors=True)
+            print("Update %s is ready. Restarting." % latest[:10], flush=True)
+            self.status["busy"] = "restarting"
+            if self.restart:
+                threading.Timer(1.0, self.restart).start()
+            return "installed"
+        finally:
+            if self.status["busy"] != "restarting":
+                self.status["busy"] = ""
+            self.lock.release()
+
+    def loop(self, panel):
+        time.sleep(90)
+        self.started_fine()
+        while True:
+            try:
+                if panel.update_settings()["auto"]:
+                    if self.install() == "installed":
+                        panel.audit("updater", "update", "installed build %s" % self.status["latest"][:10])
+                else:
+                    self.check()
+            except ApiError:
+                pass
+            except Exception as e:  # never let the checker die
+                self.status["error"] = str(e)[:200]
+            time.sleep(self.every)
+
+
+UPDATER = Updater()
 
 
 # ==================== command line ====================
@@ -2204,6 +2531,14 @@ def ask_password():
 
 
 def main(argv):
+    if argv == ["selfcheck"]:
+        # run on a freshly downloaded build before it is trusted: getting here means it loads
+        if not os.path.isfile(os.path.join(STATIC, "index.html")):
+            sys.exit("static/index.html is missing")
+        print("selfcheck ok")
+        return
+    if not argv:
+        UPDATER.hand_over(argv)
     panel = Panel(Db(CFG.db))
     if not argv:
         if len(CFG.server_key) < 24:

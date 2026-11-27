@@ -32,10 +32,48 @@ accent color, tagline, text, server address, Discord link, feature rows (with pi
 FAQ, the TNT banner and footer. Pictures (PNG, JPEG, GIF or WebP, up to 5 MB) are uploaded
 to the panel and kept in its database. **Reset to defaults** puts everything back.
 
+### Voting
+
+The **Vote** page lists the server lists players vote on (by default `https://vote.plebmc.top/`),
+with the steps and the reward. The browser remembers which sites a visitor voted on today:
+until they're done, the Vote link shows a red dot and a small reminder pops up in the corner
+(one **Later** hides it for the day). Owners change the vote sites, the reward shown and the
+note on **Admin > Site content > Voting**; with no vote sites, all of it is hidden. The site
+only links out: PlebioAPI still pays the coins when the vote comes in over Votifier
+(`voting.reward` in its config), so keep the number on the site the same as that one.
+
+### The website updating itself
+
+The panel keeps itself up to date. Every 10 minutes it asks GitHub for the newest `panel/` folder on the
+`main` branch of `Dmighty9mm/test2`. When that is newer than what is running, it downloads it, checks every
+file against git's hashes, tests that the new build starts, and restarts into it (a few seconds). So once a
+panel change is merged into `main`, the site picks it up on its own: no zip to upload.
+
+- New builds are stored next to the database (`updates/` beside `panel.db`), never written over the
+  installed files, so they survive a Docker rebuild and the installed copy is always there to fall back on.
+- A build that fails its start-up test is not installed. A build that fails to start twice is dropped and
+  the site goes back to the installed copy. Deleting the `updates/` folder does the same by hand.
+- It never goes backwards: a zip built from changes that are not merged yet is newer than `main`, so it is
+  left alone until `main` catches up.
+- Uploading a new zip (or rebuilding the image) still works and wins over older downloads.
+- **Admin > Updates > Website updates** (owners): see the running build, *Check now*, *Update now*, and
+  switch automatic installs off. Updates show in the admin log.
+- Accounts, coins, settings and uploaded pictures live in the database and are not touched.
+
+Whoever can merge into that branch decides what code the site runs, so keep the repository's write access tight.
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `PANEL_AUTO_UPDATE` | `1` | `0` turns the updater off completely |
+| `PANEL_UPDATE_REPO` | `Dmighty9mm/test2` | The GitHub repository to follow |
+| `PANEL_UPDATE_BRANCH` | `main` | The branch to follow |
+| `PANEL_UPDATE_MINUTES` | `10` | How often to check |
+| `PANEL_UPDATE_TOKEN` | none | A read-only GitHub token, only needed if the repository is private |
+
 ### Client updates
 
 Each PlebClient tells the panel its version when it starts (`/api/client/version`). On
-**Client updates**, set *Latest version* to the newest release: older clients show an
+**Updates**, set *Latest version* to the newest release: older clients show an
 Update screen with a Later button. Set *Oldest allowed version* to block clients that are
 too old (they can't get past the Update screen). This build of the client is version 2.0.
 
@@ -198,8 +236,8 @@ never reaches a backend server or the proxy's command log.
 
 ## Stats and leaderboards
 
-**Stats**: type a player's name to see their stats, one game at a time: PlebNite
-(first), PlebRPG and PlebMc (coins, cosmetics, daily streak). **Leaderboards**: pick a
+**Stats**: type a player's name to see their stats, one game at a time: PlebMc
+(first: coins, cosmetics, daily streak), PlebNite and PlebRPG. **Leaderboards**: pick a
 game and "All stats" shows the top 10 of every stat side by side (Kills, Wins, Deaths,
 Play time and so on, like the Discord bot); pick one stat for its top 100. PlebNite and
 PlebRPG show their boards (empty) before their servers send anything. Click a name to
@@ -265,3 +303,9 @@ sharing the proxy's IP are logged in as each other. PlebMc accounts don't depend
 python3 -m unittest discover -s panel/tests      # panel tests
 sh plugins/PlebMcShop/test/run.sh                # PlebioAPI tests, incl. panel end to end
 ```
+
+### Plebio and motion
+
+Plebio, the mascot, stands around the site: by the homepage numbers, next to page headings, on the vote strip and reminder, on the TNT banner, on the sign-in card and sitting on the footer. Click him and he reacts. Owners can turn him off under Admin > Site content > Brand. His pictures live in `static/plebio/`.
+
+Pages animate as they load and homepage sections slide in as you scroll. Everything is transform and opacity only, and it all switches off (Plebio stands still too) for people whose device asks for reduced motion.
