@@ -388,6 +388,32 @@ class PanelLogic(unittest.TestCase):
         self.assertEqual([d["kind"] for d in self.p.public_info()["downloads"]], ["offline", "forge-1.8.9"])
         self.assertEqual(self.p.public_info()["downloads"][0]["url"], "https://example.com/p.html")
 
+    def test_site_content(self):
+        owner = self.p.create_account("Owner", "password1", "owner")
+        c = self.p.public_info()["content"]
+        self.assertEqual(c["logo"], "/static/logo.png")
+        self.assertEqual(len(c["features"]), 3)
+        png = b"\x89PNG\r\n\x1a\n" + b"x" * 40
+        with self.assertRaises(app.ApiError):
+            self.p.put_site_image(owner, {"data": app.b64(b"<svg onload=alert(1)>")})
+        url = self.p.put_site_image(owner, {"data": "data:image/png;base64," + app.b64(png)})["url"]
+        self.assertRegex(url, r"^/api/site/img/[0-9a-f]{16}$")
+        self.assertEqual(bytes(self.p.site_image(url.rsplit("/", 1)[-1])["data"]), png)
+        for bad in ({"logo": "https://evil.example/x.png"}, {"logo": "/static/../app.py"}, {"accent": "red"},
+                    {"discordUrl": "javascript:alert(1)"}):
+            with self.assertRaises(app.ApiError):
+                self.p.set_site_content(owner, bad)
+        r = self.p.set_site_content(owner, {"title1": "Hello", "logo": url, "accent": "#22B8E6", "discordUrl": "https://discord.gg/x",
+                                            "features": [{"title": "One", "text": "x", "image": url}, {"title": "", "text": ""}],
+                                            "faq": [{"q": "Q?", "a": "A."}, {"q": "no answer", "a": ""}]})
+        c = self.p.public_info()["content"]
+        self.assertEqual((c["title1"], c["logo"], c["accent"]), ("Hello", url, "#22b8e6"))
+        self.assertEqual(len(c["features"]), 1)
+        self.assertEqual(c["faq"], [{"q": "Q?", "a": "A."}])
+        self.assertEqual(c["subtitle"], app.SITE_DEFAULTS["subtitle"])  # left out = the default
+        self.p.reset_site_content(owner)
+        self.assertEqual(self.p.public_info()["content"]["logo"], "/static/logo.png")
+
     def test_client_update_checker(self):
         owner = self.p.create_account("Owner", "password1", "owner")
         r = self.p.client_version("2.0", "web")
@@ -477,6 +503,12 @@ class PanelLogic(unittest.TestCase):
         self.assertEqual(len(self.p.audit_page(q="entry 11")["audit"]), 11)
 
     def test_game_stats_and_leaderboards(self):
+        # PlebNite and PlebRPG have their boards before their servers send anything
+        before = {g["id"]: [s["id"] for s in g["stats"]] for g in self.p.stat_games()}
+        self.assertEqual(list(before), ["plebmc", "plebnite", "plebrpg"])
+        self.assertIn("kills", before["plebnite"])
+        self.assertIn("mob_kills", before["plebrpg"])
+        self.assertEqual(self.p.stats_top("plebrpg", "level")["rows"], [])
         self.p.sync({"players": [{"uuid": "u1", "name": "Bob", "coins": 50, "owned": ["a", "b"], "streak": 3},
                                  {"uuid": "u2", "name": "Ann", "coins": 90, "owned": [], "streak": 1}]})
         r = self.p.put_stats({"game": "plebnite", "labels": {"normal_wins": "Wins"}, "players": [
@@ -485,7 +517,7 @@ class PanelLogic(unittest.TestCase):
             {"name": "not a name!", "stats": {"kills": 99}}]})
         self.assertEqual(r["saved"], 5)
         games = self.p.stat_games()
-        self.assertEqual([g["id"] for g in games], ["plebmc", "plebnite"])
+        self.assertEqual([g["id"] for g in games], ["plebmc", "plebnite", "plebrpg"])
         nite = games[1]
         self.assertEqual(nite["title"], "PlebNite")
         self.assertEqual([(s["id"], s["label"]) for s in nite["stats"]],
@@ -510,6 +542,14 @@ class PanelLogic(unittest.TestCase):
             self.p.put_stats({"game": "", "players": []})
         with self.assertRaises(app.ApiError):
             self.p.stats_top("nogame", "x")
+        # every stat's top 10 at once, like the Discord bot
+        boards = self.p.stats_boards("plebnite")
+        self.assertEqual([b["stat"]["id"] for b in boards["boards"]], ["kills", "normal_wins", "play_time"])
+        self.assertEqual([x["name"] for x in boards["boards"][0]["rows"]], ["bob", "Ann"])
+        self.assertEqual([b["stat"]["id"] for b in self.p.stats_boards("plebmc")["boards"]], ["coins", "items", "streak"])
+        self.assertEqual(len(self.p.stats_boards("plebmc", 1)["boards"][0]["rows"]), 1)
+        with self.assertRaises(app.ApiError):
+            self.p.stats_boards("nogame")
 
 
 class PanelHttp(unittest.TestCase):
@@ -636,11 +676,15 @@ class PanelHttp(unittest.TestCase):
         self.assertEqual(s, 401)
         s, _, _ = self.call("/api/admin/dashboard")
         self.assertEqual(s, 401)
+        s, _, _ = self.call("/api/admin/site", {"title1": "Hacked"})
+        self.assertEqual(s, 401)
+        s, _, _ = self.call("/api/site/img/0000000000000000")
+        self.assertEqual(s, 404)
 
     def test_static_tools(self):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         for path in ("/static/tools/hat.html", "/static/tools/cloak.html", "/static/tools/hat.js", "/static/vendor/three.min.js",
-                     "/static/logo.png"):
+                     "/static/logo.png", "/static/home/wallpaper.jpg", "/static/fonts/jersey-25.woff2"):
             with opener.open(urllib.request.Request(self.base + path), timeout=5) as r:
                 self.assertEqual(r.status, 200, path)
                 self.assertIn("script-src 'self'", r.headers["Content-Security-Policy"])
@@ -650,7 +694,7 @@ class PanelHttp(unittest.TestCase):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open(req, timeout=5) as r:
             page = r.read()
-            self.assertIn(b"PlebMc Panel", page)
+            self.assertIn(b"<title>PlebMc</title>", page)
             # links carry a version, so an update is never mixed with a cached old app.js
             self.assertRegex(page, rb'src="/static/app.js\?v=[1-9][0-9]+"')
             self.assertRegex(page, rb'href="/static/style.css\?v=[1-9][0-9]+"')
@@ -677,6 +721,9 @@ class PanelHttp(unittest.TestCase):
             self.assertEqual((s, b["name"]), (200, "Cal"))
             s, b, _ = self.call("/api/stats/games")
             self.assertIn("plebrpg", [g["id"] for g in b["games"]])
+            s, b, _ = self.call("/api/stats/boards?game=plebrpg")
+            lv = next(x for x in b["boards"] if x["stat"]["id"] == "level")
+            self.assertEqual((s, lv["rows"][0]["name"]), (200, "Cal"))
         finally:
             self.p.cfg.stats_key = ""
 

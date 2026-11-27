@@ -143,6 +143,61 @@ MAX_DESIGN_BYTES = 12 * 1024 * 1024
 MAX_THUMB_BYTES = 200 * 1024
 DESIGN_KINDS = ("hat", "cloak", "wings")
 
+# The homepage: words, pictures and colors owners can change on the website (Admin > Site content).
+# An image is a path under /static/ (the built-in ones) or an uploaded picture at /api/site/img/<id>.
+MAX_SITE_IMAGE = 5 * 1024 * 1024
+SITE_IMAGE_RE = re.compile(r"^(/static/[A-Za-z0-9_./-]{1,120}|/api/site/img/[0-9a-f]{16})$")
+SITE_IMAGES = ("logo", "heroImage", "wordmark")
+SITE_DEFAULTS = {
+    "accent": "#2ea8ff",
+    "logo": "/static/logo.png",
+    "heroImage": "/static/home/wallpaper.jpg",
+    "wordmark": "",  # a picture of the name (the blocky PLEBMC logo); empty draws the site name in pixel letters
+    "badge": "PlebClient is out now",
+    "title1": "Minecraft, but",
+    "title2": "way more pleb.",
+    "subtitle": "One network, three games and our own client. Play PlebNite, PlebRPG and PlebMc PvP in your browser or on "
+                "Windows, earn PlebMc Coins and show off your cosmetics.",
+    "serverIp": "play.plebmc.top",
+    "discordUrl": "",
+    "featuresTitle": "Three games, one account",
+    "featuresText": "Everything you earn follows you: your coins, cosmetics and stats work on every PlebMc game and every PlebClient.",
+    "features": [
+        {"title": "PlebClient", "text": "Our own client with 30+ mods, a HUD editor, keystrokes, zoom and more. Plays in your browser, "
+         "on Windows or with Forge 1.8.9.", "image": "/static/home/mods.jpg"},
+        {"title": "PlebNite", "text": "Drop in, loot up and outlast the storm. Your wins, kills and best placements go straight on "
+         "the leaderboard.", "image": "/static/home/plebnite.jpg"},
+        {"title": "Shop and cosmetics", "text": "Hats, cloaks, wings and trails everyone on PlebMc can see. Try them on in 3D, buy them "
+         "with PlebMc Coins.", "image": "/static/home/shop.jpg"},
+    ],
+    "faq": [
+        {"q": "How do I join?", "a": "Get PlebClient from the Downloads page (or use any Eaglercraft 1.8 client), add the server "
+         "play.plebmc.top and jump in."},
+        {"q": "Is it free?", "a": "Yes. PlebMc and PlebClient are free. Coins come from playing; the shop is cosmetics only."},
+        {"q": "Why do I need a PlebMc account?", "a": "Anyone can join a cracked server with your name. Your account's password "
+         "makes sure only you can spend your coins and wear your cosmetics."},
+        {"q": "Where do I see my stats?", "a": "On the Stats page: type your name and pick PlebNite, PlebRPG or PlebMc. The "
+         "Leaderboards page has the top players for every stat."},
+    ],
+    "ctaTitle": "Ready to play?",
+    "ctaText": "Grab PlebClient, make your account on the start screen and see you on play.plebmc.top.",
+    "footer": "Not affiliated with Mojang or Microsoft.",
+}
+SITE_TEXT_LIMITS = {"badge": 60, "title1": 40, "title2": 40, "subtitle": 300, "serverIp": 60,                     "featuresTitle": 60, "featuresText": 300, "ctaTitle": 60, "ctaText": 300, "footer": 200}
+
+
+def sniff_image(data):
+    """The picture type from its first bytes, or None (only PNG, JPEG, GIF and WebP)."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
 
 def version_key(v):
     """'1.10.2' -> (1, 10, 2, 0) so versions compare like numbers."""
@@ -157,6 +212,13 @@ def env(name, default=None):
 
 GAME_TITLES = {"plebmc": "PlebMc", "plebnite": "PlebNite", "plebrpg": "PlebRPG", "lobby": "Lobby"}
 GAME_ORDER = ["plebmc", "plebnite", "plebrpg"]
+# The boards PlebNite and PlebRPG show before their servers send anything (PlebMcBridge's default stats)
+DEFAULT_GAME_STATS = {
+    "plebnite": [("kills", "Kills"), ("normal_wins", "Wins"), ("plunder_wins", "Plunder wins"), ("deaths", "Deaths"),
+                 ("games_played", "Games played"), ("player_exp", "Exp"), ("play_time", "Play time")],
+    "plebrpg": [("level", "Level"), ("mob_kills", "Mobs killed"), ("player_kills", "Players killed"),
+                ("deaths", "Deaths"), ("play_time", "Play time")],
+}
 
 
 class Config:
@@ -355,6 +417,12 @@ CREATE TABLE IF NOT EXISTS stats (
   PRIMARY KEY (game, name_key, stat)
 );
 CREATE INDEX IF NOT EXISTS stats_top ON stats(game, stat, value);
+CREATE TABLE IF NOT EXISTS site_images (
+  id TEXT PRIMARY KEY,
+  mime TEXT NOT NULL,
+  data BLOB NOT NULL,
+  created_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS client_seen (
   day INTEGER NOT NULL,
   version TEXT NOT NULL,
@@ -1069,10 +1137,29 @@ class Panel:
             {"id": "coins", "label": self.server_status()["currency"] or "Coins"},
             {"id": "items", "label": "Cosmetics owned"}, {"id": "streak", "label": "Daily streak"}]
             + [st for st in (games.get("plebmc") or {}).get("stats", [])]}]
+        for gid, stats in DEFAULT_GAME_STATS.items():
+            if gid not in games:
+                games[gid] = {"title": GAME_TITLES[gid], "stats": [
+                    {"id": sid, "label": label, **({"kind": "time"} if sid.endswith("time") else {})} for sid, label in stats]}
         for gid in sorted(games, key=lambda g: (GAME_ORDER.index(g) if g in GAME_ORDER else 99, g)):
             if gid != "plebmc":
                 out.append({"id": gid, "title": games[gid].get("title") or gid, "stats": games[gid].get("stats", [])})
         return out
+
+    def stats_boards(self, game, limit=10):
+        """Every stat's top players for one game at once, like the Discord bot's leaderboards."""
+        try:
+            limit = max(1, min(10, int(limit)))
+        except (TypeError, ValueError):
+            limit = 10
+        g = next((x for x in self.stat_games() if x["id"] == game), None)
+        if not g:
+            raise ApiError(404, "No stats for that game yet.")
+        boards = []
+        for st in g["stats"]:
+            top = self.stats_top(g["id"], st["id"], 0, limit)
+            boards.append({"stat": st, "total": top["total"], "rows": top["rows"]})
+        return {"game": {"id": g["id"], "title": g["title"]}, "boards": boards}
 
     def put_stats(self, body):
         """One game server's stats for some players: {game, title?, labels?, players: [{name, stats: {id: number}}]}."""
@@ -1194,7 +1281,8 @@ class Panel:
         return {"site": self.cfg.site_name, "openRegistration": self.cfg.open_registration,
                 "server": {"connected": st["connected"], "online": st["online"], "currency": st["currency"]},
                 "client": self.client_release(), "announcement": self.db.get_kv("announcement", None),
-                "downloads": [d for d in self.downloads() if d["url"]]}
+                "downloads": [d for d in self.downloads() if d["url"]], "content": self.site_content(),
+                "accounts": self.db.one("SELECT COUNT(*) n FROM accounts")["n"]}
 
     # ---------- downloads (links only) ----------
 
@@ -1231,6 +1319,92 @@ class Panel:
         self.db.set_kv("download_links", links)
         self.audit(actor["name"], "downloads", ", ".join("%s %s" % (k, "on" if v["url"] else "off") for k, v in links.items()))
         return {"ok": True, "downloads": self.downloads()}
+
+    # ---------- homepage content (owners) ----------
+
+    def site_content(self):
+        saved = self.db.get_kv("site_content", None) or {}
+        out = json.loads(json.dumps(SITE_DEFAULTS))
+        for k, v in saved.items():
+            if k in out and v not in (None, ""):
+                out[k] = v
+        return out
+
+    def _site_image(self, v, default):
+        v = str(v or "").strip()
+        if not v:
+            return default
+        if not SITE_IMAGE_RE.match(v) or ".." in v:
+            raise ApiError(400, "Pick a picture you uploaded.")
+        return v
+
+    def set_site_content(self, actor, body):
+        out = {}
+        for k, n in SITE_TEXT_LIMITS.items():
+            out[k] = str(body.get(k) if body.get(k) is not None else SITE_DEFAULTS[k]).strip()[:n]
+        accent = str(body.get("accent") or SITE_DEFAULTS["accent"]).strip()
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
+            raise ApiError(400, "The accent color must look like #2ea8ff.")
+        out["accent"] = accent.lower()
+        for k in SITE_IMAGES:
+            out[k] = self._site_image(body.get(k), SITE_DEFAULTS[k])
+        d = str(body.get("discordUrl") or "").strip()[:200]
+        if d and not re.match(r"^https://\S+$", d):
+            raise ApiError(400, "The Discord link must start with https://")
+        out["discordUrl"] = d
+        feats = body.get("features") if isinstance(body.get("features"), list) else SITE_DEFAULTS["features"]
+        out["features"] = []
+        for f in feats[:6]:
+            if not isinstance(f, dict):
+                continue
+            t, x = str(f.get("title") or "").strip()[:60], str(f.get("text") or "").strip()[:300]
+            if t or x:
+                out["features"].append({"title": t, "text": x, "image": self._site_image(f.get("image"), "")})
+        faq = body.get("faq") if isinstance(body.get("faq"), list) else SITE_DEFAULTS["faq"]
+        out["faq"] = []
+        for f in faq[:12]:
+            if not isinstance(f, dict):
+                continue
+            q, a = str(f.get("q") or "").strip()[:150], str(f.get("a") or "").strip()[:600]
+            if q and a:
+                out["faq"].append({"q": q, "a": a})
+        self.db.set_kv("site_content", out)
+        # forget uploads nothing uses any more (a day later, so a page being edited keeps its new pictures)
+        used = {v.rsplit("/", 1)[-1] for v in [out[k] for k in SITE_IMAGES] + [f["image"] for f in out["features"]]
+                if v.startswith("/api/site/img/")}
+        for r in self.db.all("SELECT id FROM site_images WHERE created_at < ?", self.now() - 86400):
+            if r["id"] not in used:
+                self.db.run("DELETE FROM site_images WHERE id=?", r["id"])
+        self.audit(actor["name"], "site", "homepage content saved")
+        return {"ok": True, "content": self.site_content()}
+
+    def reset_site_content(self, actor):
+        self.db.set_kv("site_content", {})
+        self.audit(actor["name"], "site", "homepage content reset")
+        return {"ok": True, "content": self.site_content()}
+
+    def put_site_image(self, actor, body):
+        raw = str(body.get("data") or "")
+        if raw.startswith("data:"):
+            raw = raw.split(",", 1)[-1]
+        try:
+            data = base64.b64decode(raw, validate=True)
+        except ValueError:
+            raise ApiError(400, "That isn't a picture.")
+        if len(data) > MAX_SITE_IMAGE:
+            raise ApiError(400, "Pictures can be up to 5 MB.")
+        mime = sniff_image(data)
+        if not mime:
+            raise ApiError(400, "Use a PNG, JPEG, GIF or WebP picture.")
+        iid = hashlib.sha1(data).hexdigest()[:16]
+        self.db.run("INSERT OR REPLACE INTO site_images(id,mime,data,created_at) VALUES(?,?,?,?)", iid, mime, data, self.now())
+        self.audit(actor["name"], "site", "uploaded picture %s (%d KB)" % (iid, len(data) // 1024))
+        return {"ok": True, "url": "/api/site/img/" + iid}
+
+    def site_image(self, iid):
+        if not re.fullmatch(r"[0-9a-f]{16}", str(iid)):
+            return None
+        return self.db.one("SELECT mime, data FROM site_images WHERE id=?", str(iid))
 
     # ---------- player notes (admins) ----------
 
@@ -1781,6 +1955,8 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET" and route == "stats/top":
             return self.send_json(200, {"ok": True, **p.stats_top(one("game", "plebmc"), one("stat"), one("offset", "0"),
                                                                    one("limit", "10"))})
+        if method == "GET" and route == "stats/boards":
+            return self.send_json(200, {"ok": True, **p.stats_boards(one("game", "plebmc"), one("limit", "10"))})
         if method == "GET" and route == "stats/player":
             return self.send_json(200, {"ok": True, **p.player_stats(one("name"))})
         if method == "GET" and route == "shop":
@@ -1793,6 +1969,19 @@ class Handler(BaseHTTPRequestHandler):
                 raise ApiError(404, "Not found.")
             self.send_response(200)
             self.send_header("Content-Type", "image/png" if data[:8] == b"\x89PNG\r\n\x1a\n" else "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+            self.security_headers()
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if method == "GET" and route.startswith("site/img/"):
+            r = p.site_image(route[len("site/img/"):])
+            if not r:
+                raise ApiError(404, "Not found.")
+            data = bytes(r["data"])
+            self.send_response(200)
+            self.send_header("Content-Type", r["mime"])
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "public, max-age=31536000, immutable")
             self.security_headers()
@@ -1890,6 +2079,13 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST" and route == "admin/downloads":
             actor = self.web_user(role="owner")
             return self.send_json(200, p.set_downloads(actor, self.body()))
+        if method == "POST" and route == "admin/site":
+            actor = self.web_user(role="owner")
+            b = self.body()
+            return self.send_json(200, p.reset_site_content(actor) if b.get("reset") else p.set_site_content(actor, b))
+        if method == "POST" and route == "admin/site/image":
+            actor = self.web_user(role="owner")
+            return self.send_json(200, p.put_site_image(actor, self.body(limit=MAX_SITE_IMAGE * 4 // 3 + 64 * 1024)))
         if method == "POST" and route == "admin/client":
             actor = self.web_user(role="owner")
             return self.send_json(200, p.set_client_release(actor, self.body()))
