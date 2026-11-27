@@ -1,0 +1,46 @@
+name: Bedrock client
+
+on:
+  push:
+    paths:
+      - "bedrock-client/**"
+      - ".github/workflows/bedrock-client.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build
+        working-directory: bedrock-client
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+      - name: Smoke test
+        working-directory: bedrock-client/build
+        run: .\smoke.exe .\PlebClient.dll
+      - name: Screenshots
+        if: always()
+        shell: pwsh
+        working-directory: bedrock-client/build
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          foreach ($n in "hud", "menu") {
+            if (Test-Path "$n.bmp") { [System.Drawing.Image]::FromFile("$PWD\$n.bmp").Save("$PWD\$n.png", [System.Drawing.Imaging.ImageFormat]::Png) }
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PlebClient-Bedrock
+          path: |
+            bedrock-client/build/PlebClient.dll
+            bedrock-client/README.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-screenshots
+          path: bedrock-client/build/*.png
