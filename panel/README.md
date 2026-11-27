@@ -275,3 +275,9 @@ sharing the proxy's IP are logged in as each other. PlebMc accounts don't depend
 python3 -m unittest discover -s panel/tests      # panel tests
 sh plugins/PlebMcShop/test/run.sh                # PlebioAPI tests, incl. panel end to end
 ```
+
+### Plebio and motion
+
+Plebio, the mascot, stands around the site: by the homepage numbers, next to page headings, on the vote strip and reminder, on the TNT banner, on the sign-in card and sitting on the footer. Click him and he reacts. Owners can turn him off under Admin > Site content > Brand. His pictures live in `static/plebio/`.
+
+Pages animate as they load and homepage sections slide in as you scroll. Everything is transform and opacity only, and it all switches off (Plebio stands still too) for people whose device asks for reduced motion.

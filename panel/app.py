@@ -182,6 +182,7 @@ SITE_DEFAULTS = {
     # voting: the server lists players vote on (PlebioAPI pays the reward when a vote comes in over Votifier)
     "voteLinks": [{"name": "Eaglercraft Servers", "url": "https://vote.plebmc.top/"}],
     "voteReward": 100,
+    "mascot": True,
     "voteText": "Votes push PlebMc up the server lists so more players find us. You can vote once a day on each site.",
     "ctaTitle": "Ready to play?",
     "ctaText": "Grab PlebClient, make your account on the start screen and see you on play.plebmc.top.",
@@ -1387,6 +1388,7 @@ class Panel:
             out["voteReward"] = max(0, min(10 ** 9, int(body.get("voteReward", SITE_DEFAULTS["voteReward"]) or 0)))
         except (TypeError, ValueError):
             raise ApiError(400, "The vote reward must be a number.")
+        out["mascot"] = bool(body.get("mascot", SITE_DEFAULTS["mascot"]))
         self.db.set_kv("site_content", out)
         # forget uploads nothing uses any more (a day later, so a page being edited keeps its new pictures)
         used = {v.rsplit("/", 1)[-1] for v in [out[k] for k in SITE_IMAGES] + [f["image"] for f in out["features"]]

@@ -152,7 +152,35 @@ function tile(iconName, label, value, sub) {
   return h("div", { class: "tile" }, h("div", { class: "k" }, icon(iconName), label), h("div", { class: "v" }, value), sub ? h("div", { class: "s" }, sub) : null);
 }
 function empty(iconName, text) {
-  return h("div", { class: "empty" }, icon(iconName), text);
+  return h("div", { class: "empty" }, plebio("vanish", { scale: 1 }) || icon(iconName), text);
+}
+
+// ==================== Plebio, the mascot ====================
+
+/** Each pose's picture size, so the page keeps its shape while the picture loads. */
+const PLEBIO = { idle: [70, 80], idlesway: [76, 80], sit: [70, 78], bow: [60, 80], celebrate: [98, 80], hurt: [82, 84], love: [110, 122],
+  mcdeath: [103, 89], mcjump: [70, 136], onfire: [70, 114], shake: [70, 80], shiver: [72, 80], sneakspam: [76, 80], spotlight: [134, 138],
+  sprint: [70, 83], totem: [70, 82], vanish: [96, 88] };
+const stillOnly = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+/** Plebio in a pose, or null when the owners turned the mascot off. Poke him and he reacts. */
+function plebio(pose, opts = {}) {
+  if (content().mascot === false) return null;
+  const scale = opts.scale || 2;
+  const src = (p) => (stillOnly() ? "/static/plebio/still.png" : "/static/plebio/" + p + ".gif");
+  const size = (p) => (stillOnly() ? [70, 80] : PLEBIO[p]);
+  const img = h("img", { class: "plebio" + (opts.cls ? " " + opts.cls : ""), src: src(pose), alt: "", draggable: "false", title: "Plebio" });
+  const fit = (p) => { img.width = Math.round(size(p)[0] * scale); img.height = Math.round(size(p)[1] * scale); };
+  fit(pose);
+  let busy = 0;
+  let pokes = 0;
+  img.addEventListener("click", () => {
+    if (busy || stillOnly()) return;
+    const react = opts.react || ["hurt", "mcjump", "sneakspam", "shake", "celebrate"][pokes++ % 5];
+    img.src = src(react);
+    fit(react);
+    busy = setTimeout(() => { busy = 0; img.src = src(pose); fit(pose); }, 2000);
+  });
+  return img;
 }
 function card(title, ...kids) {
   return h("div", { class: "card" }, title ? h("div", { class: "card-head" }, typeof title === "string" ? h("h2", {}, title) : title) : null, ...kids);
@@ -307,6 +335,7 @@ function drawFooter() {
   const col = (title, links) => h("div", {}, h("h4", {}, title), h("ul", {}, ...links.filter(Boolean).map(([label, href, ext]) =>
     h("li", {}, h("a", ext ? { href, target: "_blank", rel: "noopener" } : { href }, label)))));
   footer.replaceChildren(h("div", { class: "wrap" },
+    plebio("sit", { cls: "foot-pal", scale: 1 }),
     h("div", { class: "foot-in" },
       h("div", {}, h("a", { class: "brand", href: "#home" }, h("img", { src: siteLogo(), alt: "" }), info.site),
         h("p", {}, c.subtitle || "")),
@@ -349,7 +378,7 @@ function drawVoteNudge(view) {
   const r = rewardText();
   const box = h("div", { class: "vote-nudge", role: "status" },
     h("button", { class: "x", "aria-label": "Remind me later", onclick: () => { saveVoteState({ ...voteState(), later: true }); box.remove(); } }, "×"),
-    h("div", { class: "vn-icon" }, icon("heart")),
+    plebio("sneakspam", { cls: "vn-pal", scale: 0.8, react: "love" }) || h("div", { class: "vn-icon" }, icon("heart")),
     h("div", {}, h("b", {}, "Voted for " + info.site + " today?"), h("p", {}, r ? "Every vote pays " + r + " and helps new players find us." : "Every vote helps new players find us."),
       h("div", { class: "row" }, h("a", { class: "btn primary small", href: "#vote" }, "Vote now"),
         h("button", { class: "ghost small", onclick: () => { saveVoteState({ ...voteState(), later: true }); box.remove(); } }, "Later"))));
@@ -369,7 +398,7 @@ async function voteView() {
     const done = links.filter((l) => v.sites.includes(l.url)).length;
     const bar = h("i");
     bar.style.width = Math.round(done / links.length * 100) + "%";
-    progress.replaceChildren(h("div", { class: "row" }, h("b", {}, done === links.length ? "All done for today. Thank you!" : done + " of " + links.length + " voted today"),
+    progress.replaceChildren(...[done === links.length ? plebio("celebrate", { cls: "vp-pal", scale: 1 }) : null].filter(Boolean), h("div", { class: "row" }, h("b", {}, done === links.length ? "All done for today. Thank you!" : done + " of " + links.length + " voted today"),
       h("span", { class: "spacer" }), h("span", { class: "muted" }, "Resets every day")), h("div", { class: "meter" }, bar));
     list.replaceChildren(...links.map((l, i) => {
       const voted = v.sites.includes(l.url);
@@ -422,6 +451,7 @@ async function homeView() {
         h("span", {}, h("b", {}, c.serverIp), h("small", {}, s.connected ? fmt(s.online) + " playing now · click to copy" : "Click to copy the address")), ping) : null),
     ann ? h("div", { style: "width:100%;max-width:760px;margin-top:10px;text-align:left" }, ann) : null,
     h("div", { class: "hotbar" },
+      plebio("idlesway", { cls: "hot-pal", scale: 1.5 }),
       h("div", { class: "slot" }, h("b", {}, s.connected ? fmt(s.online) : "–"), h("span", {}, "Playing now")),
       h("div", { class: "slot" }, h("b", {}, fmt(info.accounts)), h("span", {}, "Accounts")),
       h("div", { class: "slot" }, h("b", {}, "3"), h("span", {}, "Games")),
@@ -484,7 +514,7 @@ async function homeView() {
   if (voteLinks().length) {
     const r = rewardText();
     wrap.append(h("section", { class: "sec", style: "padding-top:0" }, h("div", { class: "wrap" }, h("div", { class: "vote-strip" },
-      h("div", { class: "vs-coin" }, icon("heart")),
+      plebio("love", { cls: "vs-pal", scale: 1 }) || h("div", { class: "vs-coin" }, icon("heart")),
       h("div", {}, h("h2", {}, r ? "Vote every day, get " + r : "Vote for " + info.site + " every day"),
         h("p", {}, "It takes a few seconds and helps new players find the server.")),
       h("a", { class: "btn big", href: "#vote" }, "Vote now", icon("arrow"))))));
@@ -501,7 +531,7 @@ async function homeView() {
 
   // the last banner: a TNT block
   wrap.append(h("section", { class: "sec" }, h("div", { class: "wrap" },
-    h("div", { class: "tnt" }, h("div", { class: "label" }, h("h2", {}, c.ctaTitle || ""))),
+    h("div", { class: "tnt" }, plebio("onfire", { cls: "tnt-pal", scale: 1.5 }), h("div", { class: "label" }, h("h2", {}, c.ctaTitle || ""))),
     h("div", { class: "tnt-foot" }, h("p", {}, c.ctaText || ""),
       h("div", { class: "hero-cta" }, h("a", { class: "btn primary big", href: dl }, icon("download"), "Download PlebClient"),
         c.discordUrl ? h("a", { class: "btn big", href: c.discordUrl, target: "_blank", rel: "noopener" }, icon("discord"), "Join the Discord") : h("a", { class: "btn big", href: "#shop" }, icon("bag"), "Browse the shop"))))));
@@ -857,7 +887,7 @@ function loginView() {
     }
     btn.disabled = false;
   } },
-  h("div", { class: "center" }, h("img", { src: siteLogo(), alt: "", style: "width:72px;height:72px;image-rendering:pixelated;object-fit:contain" })),
+  h("div", { class: "center" }, plebio("bow", { scale: 1.5 }) || h("img", { src: siteLogo(), alt: "", style: "width:72px;height:72px;image-rendering:pixelated;object-fit:contain" })),
   h("h1", { class: "center" }, "Sign in"),
   h("p", { class: "muted center" }, "Your Minecraft name and your " + info.site + " password."),
   field("Minecraft name", { id: "name", name: "name", autocomplete: "username", required: true, maxlength: 16 }),
@@ -1741,6 +1771,8 @@ async function siteView() {
   drawFaq();
   drawVotes();
 
+  const mascot = h("input", { type: "checkbox", id: "s-mascot" });
+  mascot.checked = c.mascot !== false;
   const saveBtn = h("button", { class: "primary", onclick: async () => {
     featPickers.forEach(([f, pk]) => { f.image = pk.get(); });
     const body = Object.fromEntries(fields.map((f) => [f.key, f.get()]));
@@ -1748,7 +1780,7 @@ async function siteView() {
       features: feats.map((f) => ({ title: (f.title || "").trim(), text: (f.text || "").trim(), image: f.image || "" })),
       faq: faqs.map((f) => ({ q: (f.q || "").trim(), a: (f.a || "").trim() })).filter((f) => f.q && f.a),
       voteLinks: votes.map((v) => ({ name: (v.name || "").trim(), url: (v.url || "").trim() })).filter((v) => v.name || v.url),
-      voteReward: Math.max(0, parseInt(reward.value, 10) || 0) });
+      voteReward: Math.max(0, parseInt(reward.value, 10) || 0), mascot: mascot.checked });
     saveBtn.disabled = true;
     try {
       const r = await api("admin/site", body);
@@ -1766,7 +1798,8 @@ async function siteView() {
       card("Brand", logo.el, h("label", { for: "s-accent" }, "Accent color"), h("div", { class: "row" }, accent,
         ...[["PlebMc blue", "#2ea8ff"], ["Client cyan", "#3fd8e6"], ["TNT red", "#db3f2b"], ["Gold", "#f5c542"]].map(([n, v]) =>
           h("button", { type: "button", class: "ghost small", onclick: () => { accent.value = v; setAccent(v); } }, n))),
-      ...F.serverIp.el, ...F.discordUrl.el, ...F.footer.el),
+      ...F.serverIp.el, ...F.discordUrl.el, ...F.footer.el,
+      h("label", { class: "check", for: "s-mascot" }, mascot, " Show Plebio around the site")),
       card("Under the big picture", ...F.badge.el, ...F.title1.el, ...F.title2.el, ...F.subtitle.el)),
     h("div", { class: "grid g2" }, card("Pictures", hero.el, show.el), card("TNT banner at the bottom", ...F.ctaTitle.el, ...F.ctaText.el)),
     card("Feature cards", ...F.featuresTitle.el, ...F.featuresText.el, h("div", { style: "height:14px" }), featBox),
@@ -1806,6 +1839,43 @@ const VIEWS = {
   audit: ["Admin log", auditView, "admin"],
 };
 
+// ==================== motion ====================
+
+let revealer = null;
+/** Brings a fresh page to life: homepage sections slide in as they scroll into view, and the big numbers count up. */
+function animate(root) {
+  if (revealer) revealer.disconnect();
+  if (stillOnly() || !("IntersectionObserver" in window)) return;
+  revealer = new IntersectionObserver((seen) => seen.forEach((e) => {
+    if (!e.isIntersecting) return;
+    e.target.classList.add("in");
+    revealer.unobserve(e.target);
+    // once it has arrived, hand the element back so hover effects aren't slowed by the reveal
+    setTimeout(() => { e.target.classList.remove("reveal", "in", "from-left", "from-right"); e.target.style.transitionDelay = ""; }, 1100);
+  }), { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
+  root.querySelectorAll(".home .sec-title, .home .frow, .home .step3, .home .vote-strip, .home .qa details, .home .qa-foot, .home .tnt, .home .tnt-foot, .home .podium-wrap").forEach((el) => {
+    const i = el.parentElement ? Array.prototype.indexOf.call(el.parentElement.children, el) : 0;
+    el.classList.add("reveal");
+    if (el.classList.contains("frow")) el.classList.add(i % 2 ? "from-right" : "from-left");
+    else el.style.transitionDelay = Math.min(i, 5) * 70 + "ms";
+    revealer.observe(el);
+  });
+  root.querySelectorAll(".slot b").forEach((b) => {
+    const to = parseInt(b.textContent.replace(/,/g, ""), 10);
+    if (!/^[\d,]+$/.test(b.textContent) || to < 2) return;
+    const t0 = performance.now();
+    const step = (t) => {
+      const k = Math.min(1, (t - t0 - 350) / 900);
+      b.textContent = fmt(Math.round(to * (k <= 0 ? 0 : 1 - Math.pow(1 - k, 3))));
+      if (k < 1 && b.isConnected) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+/** Who stands next to each page's heading. */
+const HEAD_POSE = { downloads: "sprint", stats: "sit", leaderboard: "celebrate", shop: "spotlight", vote: "love", me: "idlesway" };
+
 /** Every page but the homepage sits in the page frame: a big heading, then the view. */
 function framed(view, title, el) {
   const head = HEADS[view];
@@ -1813,7 +1883,8 @@ function framed(view, title, el) {
   const top = narrow ? null : h("div", { class: "page-head" },
     ADMIN_VIEWS.has(view) ? h("span", { class: "crumb" }, h("b", {}, "Admin"), " / " + title) : null,
     head ? h("h1", {}, head[0] + " ", h("span", {}, head[1])) : h("h1", {}, title),
-    head && head[2] ? h("p", {}, head[2]) : null);
+    head && head[2] ? h("p", {}, head[2]) : null,
+    HEAD_POSE[view] ? plebio(HEAD_POSE[view], { cls: "head-pal", scale: PLEBIO[HEAD_POSE[view]][1] > 100 ? 1 : 1.5 }) : null);
   return h("div", { class: "wrap page" + (narrow ? " narrow-page" : "") }, top, el);
 }
 
@@ -1830,16 +1901,17 @@ async function route() {
   let el;
   try {
     if ((need === "admin" && !isAdmin()) || (need === "owner" && !isOwner())) {
-      el = me ? h("div", { class: "card narrow" }, h("h2", {}, need === "owner" ? "Owners only" : "Admins only"),
+      el = me ? h("div", { class: "card narrow center" }, plebio("shake", { scale: 1.5 }), h("h2", {}, need === "owner" ? "Owners only" : "Admins only"),
         h("p", { class: "muted" }, need === "owner" ? "Only owners can change this." : "This page is for admins.")) : loginView();
     } else {
       if (view !== "home") app.replaceChildren(framed(view, title, h("div", { class: "skeleton" })));
       el = await fn();
     }
   } catch (err) {
-    el = h("div", { class: "card narrow" }, h("p", {}, err.message), h("a", { href: "#home" }, "Back home"));
+    el = h("div", { class: "card narrow center" }, plebio("mcdeath", { scale: 1.5 }), h("p", {}, err.message), h("a", { href: "#home" }, "Back home"));
   }
   app.replaceChildren(view === "home" ? el : framed(view, title, el));
+  animate(app);
   setNav(view);
   drawFooter();
   drawVoteNudge(view);

@@ -425,6 +425,9 @@ class PanelLogic(unittest.TestCase):
         self.p.set_site_content(owner, {"voteLinks": [], "voteReward": 0})
         c = self.p.public_info()["content"]
         self.assertEqual((c["voteLinks"], c["voteReward"]), ([], 0))  # none = voting hidden
+        self.assertTrue(c["mascot"])  # Plebio shows unless an owner turns him off
+        self.p.set_site_content(owner, {"mascot": False})
+        self.assertFalse(self.p.public_info()["content"]["mascot"])
         self.p.reset_site_content(owner)
         self.assertEqual(self.p.public_info()["content"]["logo"], "/static/logo.png")
 
@@ -698,7 +701,7 @@ class PanelHttp(unittest.TestCase):
     def test_static_tools(self):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         for path in ("/static/tools/hat.html", "/static/tools/cloak.html", "/static/tools/hat.js", "/static/vendor/three.min.js",
-                     "/static/logo.png", "/static/home/wallpaper.jpg", "/static/fonts/jersey-25.woff2"):
+                     "/static/logo.png", "/static/home/wallpaper.jpg", "/static/fonts/jersey-25.woff2", "/static/plebio/idle.gif", "/static/plebio/still.png"):
             with opener.open(urllib.request.Request(self.base + path), timeout=5) as r:
                 self.assertEqual(r.status, 200, path)
                 self.assertIn("script-src 'self'", r.headers["Content-Security-Policy"])
