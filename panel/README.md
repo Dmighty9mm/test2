@@ -42,10 +42,38 @@ note on **Admin > Site content > Voting**; with no vote sites, all of it is hidd
 only links out: PlebioAPI still pays the coins when the vote comes in over Votifier
 (`voting.reward` in its config), so keep the number on the site the same as that one.
 
+### The website updating itself
+
+The panel keeps itself up to date. Every 10 minutes it asks GitHub for the newest `panel/` folder on the
+`main` branch of `Dmighty9mm/test2`. When that is newer than what is running, it downloads it, checks every
+file against git's hashes, tests that the new build starts, and restarts into it (a few seconds). So once a
+panel change is merged into `main`, the site picks it up on its own: no zip to upload.
+
+- New builds are stored next to the database (`updates/` beside `panel.db`), never written over the
+  installed files, so they survive a Docker rebuild and the installed copy is always there to fall back on.
+- A build that fails its start-up test is not installed. A build that fails to start twice is dropped and
+  the site goes back to the installed copy. Deleting the `updates/` folder does the same by hand.
+- It never goes backwards: a zip built from changes that are not merged yet is newer than `main`, so it is
+  left alone until `main` catches up.
+- Uploading a new zip (or rebuilding the image) still works and wins over older downloads.
+- **Admin > Updates > Website updates** (owners): see the running build, *Check now*, *Update now*, and
+  switch automatic installs off. Updates show in the admin log.
+- Accounts, coins, settings and uploaded pictures live in the database and are not touched.
+
+Whoever can merge into that branch decides what code the site runs, so keep the repository's write access tight.
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `PANEL_AUTO_UPDATE` | `1` | `0` turns the updater off completely |
+| `PANEL_UPDATE_REPO` | `Dmighty9mm/test2` | The GitHub repository to follow |
+| `PANEL_UPDATE_BRANCH` | `main` | The branch to follow |
+| `PANEL_UPDATE_MINUTES` | `10` | How often to check |
+| `PANEL_UPDATE_TOKEN` | none | A read-only GitHub token, only needed if the repository is private |
+
 ### Client updates
 
 Each PlebClient tells the panel its version when it starts (`/api/client/version`). On
-**Client updates**, set *Latest version* to the newest release: older clients show an
+**Updates**, set *Latest version* to the newest release: older clients show an
 Update screen with a Later button. Set *Oldest allowed version* to block clients that are
 too old (they can't get past the Update screen). This build of the client is version 2.0.
 

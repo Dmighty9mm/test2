@@ -244,7 +244,7 @@ function pager(container, load, render, opts = {}) {
 // [id, label, icon, needs: "me" (signed in), "admin" or "owner"]
 const NAV = [["home", "Home", "home"], ["downloads", "Download", "download"], ["stats", "Stats", "chart"], ["leaderboard", "Leaderboards", "trophy"], ["shop", "Shop", "bag"], ["vote", "Vote", "heart"]];
 const ADMIN_NAV = [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["announce", "Announcements", "megaphone"],
-  ["site", "Site content", "edit", "owner"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Client updates", "refresh"], ["audit", "Admin log", "list"]];
+  ["site", "Site content", "edit", "owner"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Updates", "refresh"], ["audit", "Admin log", "list"]];
 const ADMIN_VIEWS = new Set(["admin", "players", "player", "ranks", "rank", "announce", "site", "makers", "publish", "client", "audit"]);
 // page headings: [first word, second word (in color), a line under it]
 const HEADS = {
@@ -1555,8 +1555,45 @@ function olderVersion(a, b) {
   return false;
 }
 
+/** Owners: the website fetching its own new builds from GitHub. */
+function panelUpdateCard(u, ro) {
+  const box = h("div");
+  const short = (b) => (b ? b.slice(0, 10) : "unknown");
+  const draw = () => {
+    const out = h("div");
+    const same = u.latest && u.latest === u.running;
+    const newer = u.latest && !same && (!u.runningAt || u.latestAt > u.runningAt);
+    const act = (body, good) => async (e) => {
+      e.target.disabled = true;
+      try { u = await api("admin/update", body); draw(); if (good) toast(good(u)); } catch (err) { message(out, err.message); e.target.disabled = false; }
+    };
+    const auto = h("input", { type: "checkbox", id: "u-auto", disabled: ro || !u.enabled, onchange: (e) => act({ action: "auto", auto: e.target.checked })(e) });
+    auto.checked = u.auto && u.enabled;
+    box.replaceChildren(...[
+      h("p", { class: "muted" }, "The website checks github.com/" + u.repo + " (" + u.branch + ") every " + u.minutes + " minutes. When a new panel build is merged there, it downloads it, tests that it starts, and restarts into it. Accounts and settings are not touched."),
+      h("div", { class: "row", style: "gap:8px;flex-wrap:wrap;margin:10px 0" },
+        h("span", { class: "pill" }, "Running " + short(u.running)),
+        !u.enabled ? h("span", { class: "pill warn" }, "turned off on this server")
+          : u.busy === "restarting" ? h("span", { class: "pill warn" }, "restarting")
+            : same ? h("span", { class: "pill good" }, "up to date")
+              : newer ? h("span", { class: "pill warn" }, "new build " + short(u.latest))
+                : u.latest ? h("span", { class: "pill" }, "newer than GitHub") : h("span", { class: "pill" }, "not checked yet")),
+      h("p", { class: "faint", style: "font-size:13px;margin:0 0 8px" }, u.checkedAt ? "Last checked " + ago(u.checkedAt) + "." : "Checks a minute or two after the site starts.",
+        u.installedAt ? " Last update installed " + ago(u.installedAt) + "." : ""),
+      u.error ? h("div", { class: "banner update-bar" }, icon("online"), h("span", {}, u.error)) : null,
+      h("label", { class: "check", for: "u-auto" }, auto, " Install new builds automatically"),
+      ro || !u.enabled ? (ro ? h("p", { class: "muted" }, "Only owners can change these.") : null) : h("div", { class: "row", style: "gap:8px;margin-top:8px" },
+        h("button", { onclick: act({ action: "check" }, (r) => (r.latest === r.running ? "You're on the newest build." : "Checked.")) }, icon("refresh"), "Check now"),
+        !same && u.latest ? h("button", { class: "primary", onclick: act({ action: "install" }, (r) => (r.busy === "restarting" ? "Installed. The site restarts in a few seconds." : "Nothing to install.")) }, "Update now") : null),
+      out].filter(Boolean));
+    if (u.busy === "restarting") setTimeout(async function again() { try { u = await api("admin/update"); draw(); } catch (e) { setTimeout(again, 2000); } }, 4000);
+  };
+  draw();
+  return card("Website updates", box);
+}
+
 async function clientView() {
-  const r = await api("admin/client");
+  const [r, upd] = await Promise.all([api("admin/client"), api("admin/update")]);
   const c = r.client;
   const out = h("div");
   const ro = !isOwner();
@@ -1584,7 +1621,7 @@ async function clientView() {
     card("Versions in use (last 7 days)", r.versions.length ? h("div", { class: "scroll" }, h("table", {},
       h("thead", {}, h("tr", {}, h("th", {}, "Version"), h("th", {}, "Platform"), h("th", { class: "num" }, "Starts"), h("th", {}, ""))), vbody))
       : empty("refresh", "No client has checked in yet.")),
-    downloadsCard(r.downloads, ro));
+    downloadsCard(r.downloads, ro), panelUpdateCard(upd, ro));
 }
 
 function downloadsCard(list, ro) {
@@ -1835,7 +1872,7 @@ const VIEWS = {
   announce: ["Announcements", announceView, "admin"],
   site: ["Site content", siteView, "owner"],
   publish: ["Publish to shop", publishView, "admin"],
-  client: ["Client updates", clientView, "admin"],
+  client: ["Updates", clientView, "admin"],
   audit: ["Admin log", auditView, "admin"],
 };
 

@@ -1,10 +1,13 @@
 """Tests for the PlebMc Panel: python3 -m unittest discover -s panel/tests"""
+import hashlib
 import json
 import os
+import tempfile
 import sys
 import threading
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 
 os.environ["PANEL_SCRYPT_N"] = "1024"  # fast hashing for tests
@@ -567,6 +570,93 @@ class PanelLogic(unittest.TestCase):
         self.assertEqual(len(self.p.stats_boards("plebmc", 1)["boards"][0]["rows"]), 1)
         with self.assertRaises(app.ApiError):
             self.p.stats_boards("nogame")
+
+
+class FakeGitHub:
+    """Serves a folder the way GitHub does: a branch head, its trees and raw files."""
+
+    def __init__(self, folder, when="2030-01-01T00:00:00Z"):
+        self.files, self.when, self.calls = {}, when, []
+        for root, _, names in os.walk(folder):
+            for n in names:
+                full = os.path.join(root, n)
+                rel = os.path.relpath(full, folder).replace(os.sep, "/")
+                if "__pycache__" not in rel and not rel.startswith(("data/", "BUILD")):
+                    with open(full, "rb") as f:
+                        self.files[rel] = f.read()
+
+    @staticmethod
+    def blob(data):
+        return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+
+    def tree(self):
+        return hashlib.sha1(json.dumps(sorted((k, self.blob(v)) for k, v in self.files.items())).encode()).hexdigest()
+
+    def fetch(self, url, accept=None, limit=0):
+        self.calls.append(url)
+        if "/branches/" in url:
+            return json.dumps({"commit": {"sha": "c" * 40, "commit": {"committer": {"date": self.when}}}}).encode()
+        if url.endswith("/git/trees/" + "c" * 40):
+            return json.dumps({"tree": [{"path": "panel", "type": "tree", "sha": self.tree()}]}).encode()
+        if "/git/trees/" in url:
+            return json.dumps({"tree": [{"path": k, "type": "blob", "sha": self.blob(v), "size": len(v)} for k, v in self.files.items()]}).encode()
+        return self.files[urllib.parse.unquote(url.split("/" + "c" * 40 + "/panel/", 1)[1])]
+
+
+class PanelUpdater(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.up = app.Updater(os.path.join(self.tmp.name, "updates"))
+        self.gh = FakeGitHub(app.HERE)
+        self.up.fetch = self.gh.fetch
+        self.restarts = []
+        self.up.restart = lambda: self.restarts.append(1)
+
+    def test_downloads_checks_and_installs(self):
+        self.assertEqual(self.up.install(), "installed")
+        build = self.gh.tree()
+        folder = os.path.join(self.up.dir, build)
+        self.assertEqual(app.Updater.build_of(folder)[0], build)
+        self.assertTrue(os.path.isfile(os.path.join(folder, "static", "index.html")))
+        self.assertFalse(os.path.exists(os.path.join(folder, "tests")))  # only what the site needs
+        self.assertEqual(self.up.state()["current"], build)
+        self.assertEqual(self.up.status["busy"], "restarting")
+
+    def test_refuses_a_changed_file(self):
+        real = self.gh.fetch
+        self.up.fetch = lambda url, **kw: real(url, **kw) + (b"#" if url.endswith("/panel/app.py") else b"")
+        with self.assertRaises(app.ApiError):
+            self.up.install()
+        self.assertEqual(self.up.state()["current"], "")
+        self.assertEqual(os.listdir(self.up.dir) if os.path.isdir(self.up.dir) else [], [])
+
+    def test_a_build_that_does_not_start_is_skipped(self):
+        self.gh.files["app.py"] = b"raise SystemExit(3)\n"
+        with self.assertRaises(app.ApiError):
+            self.up.install()
+        self.assertEqual(self.up.state()["bad"], [self.gh.tree()])
+        before = len(self.gh.calls)
+        self.assertEqual(self.up.install(), "bad")  # asked GitHub what is newest, downloaded nothing
+        self.assertEqual(len(self.gh.calls) - before, 1)
+
+    def test_never_goes_back_to_an_older_build(self):
+        self.gh.when = "2001-01-01T00:00:00Z"
+        real = app.Updater.build_of
+        app.Updater.build_of = staticmethod(lambda folder: ("a" * 40, 2000000000) if folder == app.HERE else real(folder))
+        self.addCleanup(setattr, app.Updater, "build_of", staticmethod(real))
+        self.assertEqual(self.up.install(), "older")
+        self.assertEqual(self.restarts, [])
+
+    def test_a_build_that_fails_twice_is_dropped_at_start(self):
+        build = "b" * 40
+        os.makedirs(os.path.join(self.up.dir, build))
+        with open(os.path.join(self.up.dir, build, "app.py"), "w") as f:
+            f.write("")
+        self.up.save_state({**self.up.state(), "base": self.up.base_id(), "current": build, "pending": build, "tries": 2})
+        self.up.hand_over([])  # returns instead of starting it again
+        st = self.up.state()
+        self.assertEqual((st["current"], st["bad"]), ("", [build]))
 
 
 class PanelHttp(unittest.TestCase):
