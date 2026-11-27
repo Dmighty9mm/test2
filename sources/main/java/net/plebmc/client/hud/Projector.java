@@ -66,6 +66,14 @@ final class Projector {
 		return true;
 	}
 
+	int guiW() {
+		return guiW;
+	}
+
+	int guiH() {
+		return guiH;
+	}
+
 	double distance(double x, double y, double z) {
 		double dx = x - eyeX;
 		double dy = y - eyeY;

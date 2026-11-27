@@ -1,10 +1,7 @@
 package net.plebmc.client.hud;
 
-import java.io.IOException;
 import java.util.List;
 
-import net.lax1dude.eaglercraft.v1_8.Mouse;
-import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
 import net.plebmc.client.apollo.Apollo;
 import net.plebmc.client.apollo.ApolloDebugLog;
@@ -12,105 +9,97 @@ import net.plebmc.client.apollo.ApolloModule;
 import net.plebmc.client.network.PluginChannels;
 
 /**
- * Apollo debug screen: connection status, every module's enable state and
- * current state, and the most recent messages with how each was handled.
- * "Verbose log" also prints every plugin message to the browser console.
+ * Apollo debug (Developer mode): connection status, every module's enable
+ * state and current state, and the most recent messages with how each was
+ * handled. "Verbose log" also prints every plugin message to the console.
  */
-public final class ApolloDebugScreen extends GuiScreen {
+public final class ApolloDebugScreen extends PlebScreen {
 
-	private final GuiScreen parent;
 	private int scroll;
+	private int wx, wy, ww, wh;
 
 	public ApolloDebugScreen(GuiScreen parent) {
-		this.parent = parent;
+		super(parent);
 	}
 
 	@Override
-	public void initGui() {
-		this.buttonList.clear();
-		this.buttonList.add(new GuiButton(1, this.width - 154, this.height - 24, 150, 20,
-				"Verbose log: " + (Apollo.isDebug() ? "ON" : "OFF")));
-		this.buttonList.add(new GuiButton(0, 4, this.height - 24, 100, 20, "Back"));
-	}
-
-	@Override
-	protected void actionPerformed(GuiButton b) {
-		if (b.id == 0) {
-			this.mc.displayGuiScreen(parent);
-		} else if (b.id == 1) {
+	protected void build() {
+		ww = this.width - 16;
+		wh = this.height - 16;
+		wx = 8;
+		wy = 8;
+		closeButton(wx + ww - 22, wy + 10);
+		int by = wy + wh - 24;
+		Button back = button("Back", wx + 8, by, 60, 16, this::back);
+		back.icon("back").style(Style.GHOST);
+		Button preview = button("Preview features", wx + 74, by, 110, 16, () -> {
+			ApolloPreview.run(this.mc);
+			this.mc.displayGuiScreen(null);
+		});
+		preview.style(Style.PRIMARY).icon("eye").tip = "Fills every Apollo module, the shop, quests and account with demo data";
+		Button clear = button("Clear preview", wx + 190, by, 90, 16, ApolloPreview::clear);
+		clear.icon("reset");
+		toggle("Verbose log", null, wx + ww - 128, by - 1, 120, 18, Apollo::isDebug, () -> {
 			boolean on = !Apollo.isDebug();
 			Apollo.setDebug(on);
 			PluginChannels.setDebug(on);
-			this.initGui();
-		}
+		}).tip = "Print every plugin message to the browser console";
 	}
 
 	@Override
-	public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-		Draw.fill(0, 0, this.width, this.height, 0xC0000000);
-		int y = 4;
-		String head = "Apollo: " + (Apollo.isServerApollo() ? "server speaks Apollo" : "no Apollo server") + " | channel "
-				+ (Apollo.isJsonMode() ? Apollo.CHANNEL_JSON : Apollo.CHANNEL_PROTO) + " | handshake "
-				+ (Apollo.isHandshakeSent() ? "sent" : "not sent") + " | received " + Apollo.receivedCount()
-				+ ", dropped " + Apollo.droppedCount();
-		Draw.text(Draw.fit(head, this.width - 8), 4, y, 0xFFFFFF55, true);
-		y += 12;
-		int half = this.width / 2 - 6;
-		int my = y;
+	protected void scrolled(int mx, int my, int dir) {
+		scroll = Math.max(0, Math.min(Apollo.debugLog().entries().size(), scroll + dir * 3));
+	}
+
+	@Override
+	protected void drawContent(int mx, int my, float pt) {
+		Ui.window(wx, wy, ww, wh);
+		String head = (Apollo.isServerApollo() ? "Server speaks Apollo" : "No Apollo server") + "  ·  "
+				+ (Apollo.isJsonMode() ? Apollo.CHANNEL_JSON : Apollo.CHANNEL_PROTO) + "  ·  handshake "
+				+ (Apollo.isHandshakeSent() ? "sent" : "not sent") + "  ·  " + Apollo.receivedCount() + " in, "
+				+ Apollo.droppedCount() + " dropped";
+		header(wx, wy, ww, "debug", "Apollo debug", head, false);
+		int top = wy + 44, bottom = wy + wh - 30;
+		int half = (ww - 24) / 2;
+		int x1 = wx + 8, x2 = wx + 16 + half;
+		Ui.text("Modules", x1, top, Ui.MUTED);
+		Ui.text("Messages (newest last, scroll for older)", x2, top, Ui.MUTED);
+		int y = top + 12;
 		for (ApolloModule m : Apollo.modules()) {
-			String line = (m.isEnabled() ? "+ " : "- ") + m.displayName() + " (" + m.receivedCount() + "): "
-					+ m.describeState();
-			Draw.text(Draw.fit(line, half), 4, my, m.isEnabled() ? 0xFFDDDDDD : 0xFF888888, false);
-			my += 9;
-			if (my > this.height - 32) {
+			if (y > bottom - 9) {
 				break;
 			}
+			Ui.round(x1, y + 2, 4, 4, m.isEnabled() ? Ui.GOOD : Ui.FAINT);
+			String line = m.displayName() + " (" + m.receivedCount() + "): " + m.describeState();
+			Ui.text(Ui.fit(line, half - 8), x1 + 7, y, m.isEnabled() ? Ui.TEXT : Ui.FAINT);
+			y += 9;
 		}
 		List<ApolloDebugLog.Entry> log = Apollo.debugLog().entries();
-		int ly = y;
-		int lines = (this.height - 32 - y) / 9;
+		int lines = (bottom - top - 12) / 9;
 		int start = Math.max(0, log.size() - lines - scroll);
-		for (int i = start; i < log.size() && ly < this.height - 32; i++) {
+		int ly = top + 12;
+		for (int i = start; i < log.size() && ly <= bottom - 9; i++) {
 			ApolloDebugLog.Entry e = log.get(i);
 			int c;
 			switch (e.status) {
 			case HANDLED:
-				c = 0xFF55FF55;
+				c = Ui.GOOD;
 				break;
 			case SENT:
-				c = 0xFF55FFFF;
+				c = Ui.accent();
 				break;
 			case ERROR:
-				c = 0xFFFF5555;
+				c = Ui.BAD;
 				break;
 			default:
-				c = 0xFFFFAA00;
+				c = Ui.GOLD;
 				break;
 			}
-			Draw.text(Draw.fit(e.toString(), half), this.width / 2f + 2, ly, c, false);
+			Ui.text(Ui.fit(e.toString(), half), x2, ly, c);
 			ly += 9;
 		}
-		super.drawScreen(mouseX, mouseY, partialTicks);
-	}
-
-	@Override
-	public void handleMouseInput() throws IOException {
-		super.handleMouseInput();
-		int d = Mouse.getEventDWheel();
-		if (d != 0) {
-			scroll = Math.max(0, Math.min(Apollo.debugLog().entries().size(), scroll + (d > 0 ? 3 : -3)));
+		if (log.isEmpty()) {
+			Ui.text("Nothing yet", x2, top + 12, Ui.FAINT);
 		}
-	}
-
-	@Override
-	protected void keyTyped(char c, int key) {
-		if (key == 1) {
-			this.mc.displayGuiScreen(parent);
-		}
-	}
-
-	@Override
-	public boolean doesGuiPauseGame() {
-		return false;
 	}
 }

@@ -1,0 +1,263 @@
+# PlebioAPI (BungeeCord, formerly PlebMcShop) - PlebMc Coins, quests and the cosmetics shop behind the PlebMc
+# client's "Shop & Quests" menu (Right Shift). Runs on the proxy, so one balance works on
+# every server. PlebMc Coins are separate from every other economy on the network.
+# Run /pleb reload after editing.
+
+currency-name: 'PlebMc Coins'
+
+# Quest days and the daily login use this time zone. Empty = the proxy's.
+timezone: 'America/Chicago'
+
+# Coins for joining the network once a day. The streak goes up each day you come back
+# within streak-reset-hours and starts over after the last reward.
+login-rewards:
+  enabled: true
+  # The quest category the daily login shows under in the client.
+  category: general
+  rewards: [50, 75, 100, 125, 150, 200, 300]
+  cooldown-hours: 20
+  streak-reset-hours: 48
+
+# Coins for time online (anywhere on the network).
+playtime:
+  enabled: true
+  every-minutes: 15
+  coins: 10
+  notify: true
+
+# Quests come in categories. The client shows them in one Quests screen with an
+# All / General / PlebNite filter, each split into Daily and Weekly.
+#   servers: the BungeeCord server names whose events count for the category.
+#            '*' = every server (network-wide).
+#   icon:    general, plebnite, star, quests, shop, squad, ... (client icon names)
+#   color:   the category's accent in the client.
+# Every day daily-count quests are picked from each category's "daily" list (the same for
+# everyone), and every week (from Monday) weekly-count from its "weekly" list.
+# Rewards are paid the moment a quest is finished, once.
+# Quest types: login (a daily login claimed), play (a minute online), join (connecting to
+# a server), chat (a chat message, at most one every 10 seconds), kill, death, match, win,
+# or anything a backend sends with /plebquest <player> <type> [amount].
+quests:
+  reset-hour: 0
+  daily-count: 3
+  weekly-count: 2
+  categories:
+    general:
+      name: 'General'
+      icon: general
+      color: '#3FD8E6'
+      servers: ['*']
+      daily:
+        general_play_30:  {name: 'Hang out for 30 minutes', description: 'Be online anywhere on PlebMc', type: play, goal: 30, reward: 60}
+        general_join_3:   {name: 'Server hopper', description: 'Join or switch servers 3 times', type: join, goal: 3, reward: 40}
+        general_chat_10:  {name: 'Say hi', description: 'Send 10 chat messages', type: chat, goal: 10, reward: 40}
+        general_play_60:  {name: 'Stick around for an hour', description: 'Be online for 60 minutes', type: play, goal: 60, reward: 100}
+      weekly:
+        login_5:          {name: 'Log in on 5 days', description: 'Claim your daily login 5 times', type: login, goal: 5, reward: 400}
+        general_play_300: {name: 'Play for 5 hours', description: 'Be online anywhere this week', type: play, goal: 300, reward: 500}
+        general_chat_100: {name: 'Chatterbox', description: 'Send 100 chat messages this week', type: chat, goal: 100, reward: 250}
+    plebnite:
+      name: 'PlebNite'
+      icon: plebnite
+      color: '#FF9A3C'
+      servers: [plebnite]
+      daily:
+        kills_3:   {name: 'Get 3 kills', description: 'Eliminate players in matches', type: kill, goal: 3, reward: 75}
+        kills_8:   {name: 'Get 8 kills', description: 'Eliminate players in matches', type: kill, goal: 8, reward: 150}
+        matches_3: {name: 'Play 3 matches', description: 'Finish 3 matches', type: match, goal: 3, reward: 75}
+        matches_6: {name: 'Play 6 matches', description: 'Finish 6 matches', type: match, goal: 6, reward: 125}
+        win_1:     {name: 'Win a match', description: 'Be the last one standing', type: win, goal: 1, reward: 150}
+        play_30:   {name: 'Play PlebNite for 30 minutes', description: 'Be on PlebNite', type: play, goal: 30, reward: 60}
+      weekly:
+        kills_40:   {name: 'Get 40 kills', description: 'Eliminate players this week', type: kill, goal: 40, reward: 600}
+        wins_5:     {name: 'Win 5 matches', description: 'Be the last one standing 5 times', type: win, goal: 5, reward: 750}
+        matches_25: {name: 'Play 25 matches', description: 'Finish 25 matches this week', type: match, goal: 25, reward: 500}
+        play_300:   {name: 'Play PlebNite for 5 hours', description: 'Be on PlebNite this week', type: play, goal: 300, reward: 500}
+
+# Put an item on right after buying it.
+equip-on-buy: true
+
+# Players not on the PlebMc client get quest and login rewards as chat lines instead of popups.
+chat-for-other-clients: true
+
+# Coins, quests and rewards are only for players on the PlebMc client. Players on
+# other clients earn nothing (and get no coin messages). false = everyone earns.
+plebclient-only: true
+
+# Worlds where nobody's cosmetics are shown: 'world' or 'server:world' (needs PlebMcBridge on that server).
+hidden-in-worlds: []
+
+# /pleb needs plebshop.admin.
+
+# The admin menu in the PlebMc client (Right Shift > Admin): online players with their coins
+# and cosmetics, give/take/set coins, give/take cosmetics, send a player to a server, kick,
+# announcements to everyone, and reload. Only for players signed in to a PlebMc account
+# (the panel) whose role is one of these. The proxy checks it again for
+# every action, and logs each one in the console.
+admin-menu:
+  enabled: true
+  roles: ['admin', 'owner']
+  broadcast-title: '&b&lAnnouncement'
+  # A second password just for the admin menu: /login, then /adminlogin <password>.
+  # Set it in the proxy console: pleb adminpass set <name> <password>
+  # (doesn't depend on nLogin sessions or players' IPs)
+  require-password: true
+
+# Logins: with nLogin on the proxy, account changes and the admin menu need /login first
+# (nothing to set). The staff lock below is only used without nLogin.
+# Staff lock: on a cracked (offline-mode) server anyone can type the Owner's name and
+# get the Owner's UUID and rank. Protected names need a password at login
+# (the Eaglercraft password screen). Set them in the proxy console:
+#   pleb staff set <name> <password>
+# Needs plugins/EaglercraftXBungee/authservice.yml: enable_authentication_system: true
+# and use_onboard_eaglerx_system: false. Java players can't use a protected name
+# unless the proxy is in online mode. The admin menu and in-game /pleb only work
+# for a name that gave its password at this login.
+staff-lock:
+  enabled: true
+
+# PlebMc accounts: the real fix for players spending each other's coins. Host the panel
+# (panel/ in this repo, see panel/README.md) on your VPS, then fill these in and
+# /pleb reload. With accounts on, a player has to sign in to the account that owns
+# their name before they can buy, equip or open the admin menu:
+#   /account login <password>   (any client; the password never reaches a server or the log)
+#   Right Shift > Sign in       (PlebMc client; "Remember me" signs in by itself next time)
+# New players: /account register <password> <password>, or /account code for the website.
+# This doesn't use IPs or nLogin sessions, so players sharing one IP can't ride along.
+accounts:
+  enabled: false
+  # Where the proxy reaches the panel. Same machine: http://127.0.0.1:8080
+  url: 'https://client.plebmc.top'
+  # The link players see (leave empty to use url)
+  public-url: ''
+  # PANEL_SERVER_KEY from the panel's .env (keep it secret)
+  server-key: ''
+  # A name that has an account must sign in this soon after joining or is kicked (0 = never kick)
+  sign-in-seconds: 90
+
+messages:
+  prefix: '&8[&b&lPlebMc&8] &7'
+  bought: 'Bought %item%!'
+  not-enough: 'You need %need% more coins.'
+  already-owned: 'You already own %item%.'
+  not-owned: 'You don''t own %item% yet.'
+  not-for-sale: '%item% can''t be bought.'
+  no-permission: 'You can''t buy %item%.'
+  unknown-item: 'That item isn''t in the shop.'
+  quest-title: '&aQuest complete!'
+  quest-message: '%quest%: +%coins% %currency%'
+  login-title: '&6Daily login'
+  login-message: 'Day %streak%: +%coins% %currency%'
+  playtime-title: '&bThanks for playing'
+  playtime-message: '+%coins% %currency%'
+
+# Shop collections: the tabs across the top of the client's shop. Every item is in one
+# (collection: partners), PlebMc when it doesn't say. Add as many as you like.
+#   icon:  a client icon name (mascot, shop, partner, star, gift, ...)
+#   color: the collection's accent in the client
+collections:
+  plebmc:   {name: 'PlebMc', icon: mascot, description: 'Cosmetics from the PlebMc team'}
+  partners: {name: 'Partners', icon: partner, color: '#FF7AC6', description: 'Cosmetics made with PlebMc partners'}
+
+# The shop. Each item:
+#   category: hat, cloak or wings
+#   render:   the look the client draws
+#             hats:   tophat, crown, halo, partyhat, beanie, horns, cap, headphones, bunny,
+#                     wizard, viking, cowboy, propeller, chef (or use model, below)
+#             wings:  angel, demon, dragon, butterfly, bat (or use model, below)
+#             cloaks: leave it out
+#   collection: optional, which shop tab it's in (a key from 'collections', default plebmc)
+#   creator:  optional, who made it ("by ..." in the shop), for partner cosmetics
+#   price:    coins (-1 = not for sale, give it with /pleb give)
+#   color:    optional tint, like '#FFD700' (a cloak without a texture is this color)
+#   texture:  cloaks: a PNG in this plugin's folder, like 'cloaks/mycloak.png'.
+#             Use the normal Minecraft cape layout (64x32) or any multiple of it for
+#             high resolution: 128x64, 256x128, 512x256 (8x), 1024x512, up to 4096x2048.
+#             The art for the back of the cloak goes in the 10x16 box at (1,1) of the
+#             64x32 layout (at 512x256 that's the 80x128 box at (8,8)). Players download
+#             it from the proxy once and keep it until it changes. /pleb reload
+#             picks up new or edited files.
+#             Animated cloaks: stack the frames top to bottom in one PNG (each frame is
+#             the cape layout, e.g. 256x128, so 16 frames = 256x2048), up to 64 frames,
+#             8 MB. 'frametime' is milliseconds per frame (default 100). The PlebMc
+#             Cloak Maker (tools/cloak-maker in the client repo) builds these for you.
+#   model:    hats and wings: a 3D model in this plugin's folder, like 'hats/myhat.bbmodel'. Save it
+#             from Blockbench (File > Save Model) with its texture painted in, drop it in
+#             the hats folder, add an item and run /pleb reload. Players download it
+#             once, just like cloak textures. A Java block/item model .json works too
+#             (then add texture: 'hats/myhat.png'). Rotated cubes and groups are fine.
+#             position: auto (default) centers it on the head and stands it on top;
+#                       model keeps Blockbench's coordinates (0,0,0 = bottom middle of
+#                       the head, the top of the head is y 8)
+#             Wings (in 'wings/'): build the right wing only (x 0 and up), the client
+#                       mirrors it. y goes up from the waist (the shoulders are y 12),
+#                       z 0 is the back and +z sticks out behind. The panel's Cosmetic
+#                       Maker builds these for you.
+#             scale:    bigger or smaller, like 1.2 (default 1)
+#             offset:   [x, y, z] in pixels after placing, like [0, -1, 0] to sink it 1 pixel
+#   permission: optional, needed to buy it
+# The id (the key) is what's saved, so don't rename ids players already own.
+items:
+  tophat:      {name: 'Top Hat', category: hat, render: tophat, price: 1500, description: 'A classy black top hat'}
+  gold_tophat: {name: 'Gold Top Hat', category: hat, render: tophat, price: 6000, color: '#E8B923', description: 'For the richest plebs'}
+  diamond_crown: {name: 'Diamond Crown', category: hat, render: crown, price: 15000, color: '#5DE2E7', description: 'The rarest crown there is'}
+  halo:        {name: 'Halo', category: hat, render: halo, price: 5000, description: 'A glowing ring over your head'}
+  partyhat:    {name: 'Party Hat', category: hat, render: partyhat, price: 1000, description: 'Striped cone hat'}
+  beanie:      {name: 'Blue Beanie', category: hat, render: beanie, price: 800, color: '#3A7BD5', description: 'Warm knitted beanie'}
+  red_beanie:  {name: 'Red Beanie', category: hat, render: beanie, price: 800, color: '#C0392B', description: 'Warm knitted beanie'}
+  green_beanie: {name: 'Green Beanie', category: hat, render: beanie, price: 800, color: '#27AE60', description: 'Warm knitted beanie'}
+  horns:       {name: 'Devil Horns', category: hat, render: horns, price: 3500, description: 'Two red horns'}
+  dropzone_crown: {name: 'Drop Zone Crown', category: hat, render: crown, price: -1, color: '#4FC3F7', description: 'Season 1 Battle Pass reward'}
+  # A hat from a Blockbench model (the sample model is copied to plugins/PlebioAPI/hats/):
+  # king_crown: {name: 'King Crown', category: hat, model: 'hats/king_crown.bbmodel', price: 10000, description: 'A 3D crown'}
+  cap:         {name: 'Snapback', category: hat, render: cap, price: 900, color: '#2D9CDB', description: 'A cap with the brim to the front'}
+  headphones:  {name: 'Headphones', category: hat, render: headphones, price: 2500, description: 'Hear the storm coming'}
+  bunny:       {name: 'Bunny Ears', category: hat, render: bunny, price: 1800, description: 'Two tall fluffy ears'}
+  wizard:      {name: 'Wizard Hat', category: hat, render: wizard, price: 4000, description: 'Pointy, starry and a bit magic'}
+  viking:      {name: 'Viking Helmet', category: hat, render: viking, price: 4500, description: 'Iron and horns'}
+  cowboy:      {name: 'Cowboy Hat', category: hat, render: cowboy, price: 2200, description: 'Yeehaw'}
+  propeller:   {name: 'Propeller Cap', category: hat, render: propeller, price: 3000, description: 'It spins'}
+  chef:        {name: 'Chef Hat', category: hat, render: chef, price: 1200, description: 'Cooking up wins'}
+
+  plebmc_cloak: {name: 'PlebMc Cloak', category: cloak, texture: 'cloaks/plebmc.png', price: 6000, description: 'HD cloak with the PlebMc mark'}
+  storm_cloak:  {name: 'Storm Cloak', category: cloak, texture: 'cloaks/storm.png', price: 9000, description: 'The storm, on your back (HD)'}
+  aurora_cloak: {name: 'Aurora Cloak', category: cloak, texture: 'cloaks/aurora.png', frametime: 90, price: 12000, description: 'Animated northern lights'}
+  inferno_cloak: {name: 'Inferno Cloak', category: cloak, texture: 'cloaks/inferno.png', frametime: 70, price: 15000, description: 'Animated flames'}
+  galaxy_cloak: {name: 'Galaxy Cloak', category: cloak, texture: 'cloaks/galaxy.png', frametime: 110, price: 15000, description: 'Swirling stars'}
+  rainbow_wave_cloak: {name: 'Rainbow Wave Cloak', category: cloak, texture: 'cloaks/rainbow_wave.png', frametime: 80, price: 10000, description: 'Colors that never stop'}
+  red_cloak:    {name: 'Red Cloak', category: cloak, color: '#B71C1C', price: 1500, description: 'A plain red cloak'}
+  midnight_cloak: {name: 'Midnight Cloak', category: cloak, color: '#1A1F3A', price: 1500, description: 'A plain dark blue cloak'}
+  mint_cloak:   {name: 'Mint Cloak', category: cloak, color: '#3FD8B0', price: 1500, description: 'A plain mint cloak'}
+  gold_cloak:   {name: 'Gold Cloak', category: cloak, color: '#E8B923', price: 4000, description: 'A plain golden cloak'}
+
+  angel_wings:  {name: 'Angel Wings', category: wings, render: angel, price: 8000, description: 'White feathered wings'}
+  golden_wings: {name: 'Golden Wings', category: wings, render: angel, color: '#E8B923', price: 15000, description: 'Feathers of pure gold'}
+  demon_wings:  {name: 'Demon Wings', category: wings, render: demon, price: 8000, description: 'Dark red and spiky'}
+  dragon_wings: {name: 'Dragon Wings', category: wings, render: dragon, price: 12000, description: 'Scaled wings with claws'}
+  butterfly_wings: {name: 'Butterfly Wings', category: wings, render: butterfly, price: 6000, description: 'Bright and fluttery'}
+  bat_wings:    {name: 'Bat Wings', category: wings, render: bat, price: 5000, description: 'For night owls (and bats)'}
+
+  # Partner cosmetics go in the Partners tab. For example:
+  # streamer_cloak: {name: 'Streamer Cloak', category: cloak, texture: 'cloaks/streamer.png', collection: partners, creator: 'SomeStreamer', price: 5000, description: 'Made with SomeStreamer'}
+  # streamer_hat:   {name: 'Streamer Crown', category: hat, model: 'hats/streamer.bbmodel', collection: partners, creator: 'SomeStreamer', price: -1, description: 'Given out on stream'}
+
+# Votes on server lists (eaglercraftservers.com and others) pay coins. The client's
+# Vote button and /vote open 'url'. Server lists tell PlebioAPI about votes over
+# Votifier: run 'pleb votifier' in the proxy console for the port, token and public
+# key to paste into the server list's Votifier settings, and open that TCP port.
+# Already running NuVotifier? Set votifier.enabled: false and have NuVotifier run
+# 'pleb vote {username}' for each vote. One vote per player is paid every 5 minutes at most.
+voting:
+  enabled: true
+  reward: 100
+  url: 'https://eaglercraftservers.com/server/plebmc'
+  announce: true
+  announce-message: '&b%player% &7voted for PlebMc and got &e%amount% %currency%&7! Vote too: &f/vote'
+  votifier:
+    enabled: true
+    host: 0.0.0.0
+    port: 8192
+
+# Item packs a PlebioAPI update already added to your items (so ones you delete
+# don't come back). Leave this alone.
+added-item-packs: [wings]

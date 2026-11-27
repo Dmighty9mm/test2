@@ -22,7 +22,18 @@ public final class Draw {
 	}
 
 	/** Filled rectangle; fractional coordinates are rounded to GUI pixels. */
+	/**
+	 * Multiplies the alpha of everything drawn through here (0..1). A screen
+	 * sets it around its own drawing to fade in or out, then puts it back to 1.
+	 */
+	public static float fade = 1f;
+
+	private static int faded(int argb) {
+		return fade >= 1f ? argb : alpha(argb, fade);
+	}
+
 	public static void fill(float x, float y, float w, float h, int argb) {
+		argb = faded(argb);
 		if (w <= 0 || h <= 0 || (argb >>> 24) == 0) {
 			return;
 		}
@@ -43,6 +54,7 @@ public final class Draw {
 		if (s == null || s.isEmpty()) {
 			return 0;
 		}
+		argb = faded(argb);
 		if ((argb >>> 24) < 5) {
 			return width(s);
 		}

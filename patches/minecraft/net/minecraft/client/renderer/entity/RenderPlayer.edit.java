@@ -35,7 +35,12 @@
 
 + 		this.zombieModel = zombieModel;
 
-> CHANGE  8 : 10  @  8 : 10
+> INSERT  6 : 8  @  6
+
++ 		this.addLayer(new net.plebmc.client.hud.CosmeticLayer(this));
++ 		this.addLayer(new net.plebmc.client.hud.CloakLayer(this));
+
+> CHANGE  2 : 4  @  2 : 4
 
 ~ 	protected RenderPlayer(RenderManager renderManager, ModelBase modelBase, float size) {
 ~ 		super(renderManager, modelBase, size);

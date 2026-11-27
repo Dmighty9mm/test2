@@ -32,6 +32,29 @@ public final class ModRegistry {
         public final Mods.ToggleSprint toggleSprint = add(new Mods.ToggleSprint());
         public final Mods.Zoom zoom = add(new Mods.Zoom());
         public final Mods.Fullbright fullbright = add(new Mods.Fullbright());
+        public final Mods.Compass compass = add(new Mods.Compass());
+        public final Mods.SquadPing squadPing = add(new Mods.SquadPing());
+        public final Mods.StormTracker storm = add(new Mods.StormTracker());
+        public final Mods.Squad squad = add(new Mods.Squad());
+        public final Mods.Supplies supplies = add(new Mods.Supplies());
+        public final Mods.LowHealth lowHealth = add(new Mods.LowHealth());
+        public final Mods.FpsBoost fpsBoost = add(new Mods.FpsBoost());
+        public final MoreMods.Speed speed = add(new MoreMods.Speed());
+        public final MoreMods.DayCounter dayCounter = add(new MoreMods.DayCounter());
+        public final MoreMods.Biome biome = add(new MoreMods.Biome());
+        public final MoreMods.Server serverAddress = add(new MoreMods.Server());
+        public final MoreMods.Arrows arrows = add(new MoreMods.Arrows());
+        public final MoreMods.LightLevel lightLevel = add(new MoreMods.LightLevel());
+        public final MoreMods.SessionTimer sessionTimer = add(new MoreMods.SessionTimer());
+        public final MoreMods.Crosshair crosshair = add(new MoreMods.Crosshair());
+        public final MoreMods.Scoreboard scoreboard = add(new MoreMods.Scoreboard());
+        public final MoreMods.Chat chat = add(new MoreMods.Chat());
+        public final MoreMods.HurtCam hurtCam = add(new MoreMods.HurtCam());
+        public final MoreMods.BlockOutline blockOutline = add(new MoreMods.BlockOutline());
+        public final MoreMods.ClearWeather clearWeather = add(new MoreMods.ClearWeather());
+        public final MoreMods.Overlays overlays = add(new MoreMods.Overlays());
+        public final MoreMods.DeathCoords deathCoords = add(new MoreMods.DeathCoords());
+        public final MoreMods.OwnNametag ownNametag = add(new MoreMods.OwnNametag());
 
         private <T extends Mod> T add(T m) {
                 mods.add(m);
@@ -73,6 +96,20 @@ public final class ModRegistry {
                         if (!Double.isNaN(x) && !Double.isNaN(y)) {
                                 m.setPosition((float) x, (float) y);
                         }
+                        if (s.get("opts") instanceof Map) {
+                                Map<?, ?> o = (Map<?, ?>) s.get("opts");
+                                for (Mod.Setting st : m.settings()) {
+                                        if (!o.containsKey(st.key)) {
+                                                continue; // not in this save (or import): keep what it is
+                                        }
+                                        if (st.isText()) {
+                                                st.setText(o.get(st.key) instanceof String ? (String) o.get(st.key) : null);
+                                                continue;
+                                        }
+                                        double v = ProtoValues.asNumber(o.get(st.key), st.def);
+                                        st.set(Double.isNaN(v) ? st.def : (int) v);
+                                }
+                        }
                 }
         }
 
@@ -85,6 +122,13 @@ public final class ModRegistry {
                                 s.put("x", (double) m.fx());
                                 s.put("y", (double) m.fy());
                         }
+                        if (!m.settings().isEmpty()) {
+                                Map<String, Object> o = new LinkedHashMap<>();
+                                for (Mod.Setting st : m.settings()) {
+                                        o.put(st.key, st.isText() ? (Object) st.text() : (Object) (double) st.get());
+                                }
+                                s.put("opts", o);
+                        }
                         root.put(m.id(), s);
                 }
                 return Json.write(root);
@@ -96,9 +140,9 @@ public final class ModRegistry {
                 }
         }
 
-        /** Top-left pixel of a HUD box, clamped fully on screen. */
+        /** Top-left pixel of a HUD box (boxW/boxH already scaled), clamped fully on screen. */
         public static int[] place(Mod m, int boxW, int boxH, int screenW, int screenH) {
-                int x = Math.round(m.fx() * screenW);
+                int x = Math.round(m.fx() * screenW) - (m.centerAnchored() ? boxW / 2 : 0);
                 int y = Math.round(m.fy() * screenH);
                 x = Math.max(0, Math.min(x, screenW - boxW));
                 y = Math.max(0, Math.min(y, screenH - boxH));

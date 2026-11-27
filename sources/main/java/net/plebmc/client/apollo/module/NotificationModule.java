@@ -75,6 +75,15 @@ public final class NotificationModule extends ApolloModule {
                 }
         }
 
+        /** A popup from the client itself (e.g. "Quest complete"), same look as the server's. */
+        public void showLocal(String title, String description, long durationMs) {
+                active.add(new Notification(ApolloText.of(title), ApolloText.of(description), "", Apollo.now(),
+                                durationMs > 0 ? durationMs : DEFAULT_MS));
+                while (active.size() > MAX_ACTIVE) {
+                        active.remove(0);
+                }
+        }
+
         @Override
         public void tick(long now) {
                 for (Iterator<Notification> it = active.iterator(); it.hasNext();) {
@@ -87,6 +96,10 @@ public final class NotificationModule extends ApolloModule {
 
         public List<Notification> active() {
                 return new ArrayList<>(active);
+        }
+
+        public int size() {
+                return active.size();
         }
 
         @Override

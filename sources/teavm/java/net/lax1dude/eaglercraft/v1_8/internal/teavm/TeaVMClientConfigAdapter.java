@@ -242,6 +242,18 @@ public class TeaVMClientConfigAdapter implements IClientConfigAdapter {
 
 	@Override
 	public List<DefaultServer> getDefaultServerList() {
+		// PlebMc: the PlebMc server is always first in the list (it's a default entry, so it can't be removed)
+		boolean has = false;
+		for (int i = 0, l = defaultServers.size(); i < l; ++i) {
+			String a = defaultServers.get(i).addr;
+			if (a != null && a.toLowerCase().contains("eagler.plebmc.top")) {
+				has = true;
+				break;
+			}
+		}
+		if (!has) {
+			defaultServers.add(0, new DefaultServer("PlebMc", "wss://eagler.plebmc.top"));
+		}
 		return defaultServers;
 	}
 

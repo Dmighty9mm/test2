@@ -11,4 +11,12 @@
 
 > DELETE  1  @  1 : 3
 
+> INSERT  41 : 46  @  41
+
++ 			if (net.plebmc.client.hud.PlebTheme.enabled()) {
++ 				net.plebmc.client.hud.PlebTheme.sliderKnob(this,
++ 						this.xPosition + (int) (this.sliderValue * (float) (this.width - 8)), this.dragging);
++ 				return;
++ 			}
+
 > EOF

@@ -1,0 +1,240 @@
+<title>PlebClient Studio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: settings on the left, a live in-game mockup on the right (sticky), the import code under it. */
+:root {
+  --bg: #0b1016; --panel: #111a23; --raised: #17222d; --line: #22313f;
+  --fg: #e6edf2; --muted: #8d9caa; --accent: #3fd8e6; --accent-ink: #062a2e;
+  --good: #4fe39a; --bad: #ff6b6b;
+  --display: "Silkscreen", "Courier New", monospace;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--fg); margin: 0; }
+body { font: 14px/1.5 var(--body); padding: 20px max(16px, env(safe-area-inset-right, 0px)) 40px max(16px, env(safe-area-inset-left, 0px)); }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 400 28px/1.1 var(--display); margin: 0; }
+h1 span { color: var(--accent); }
+.sub { color: var(--muted); margin: 6px 0 0; max-width: 66ch; }
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 480px); gap: 20px; align-items: start; }
+@media (max-width: 940px) { .bench { grid-template-columns: minmax(0, 1fr); } .stage { position: static !important; } }
+.side { display: grid; gap: 14px; min-width: 0; }
+section.step { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.step h2 { margin: 0; font: 400 15px/1.2 var(--display); display: flex; gap: 10px; align-items: center; }
+.step h2 b { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 4px; background: var(--accent); color: var(--accent-ink); font: 400 12px var(--display); }
+.hint { color: var(--muted); font-size: 13px; margin: 0; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 14px; }
+label.f { display: grid; gap: 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; min-width: 0; }
+select, input[type=text] { width: 100%; background: var(--raised); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: 14px var(--body); }
+label.t { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--fg); cursor: pointer; }
+label.t input { accent-color: var(--accent); width: 16px; height: 16px; }
+.mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px 12px; }
+button { font: 500 14px var(--body); border-radius: 6px; border: 1px solid var(--line); background: var(--raised); color: var(--fg); padding: 8px 14px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.stage { position: sticky; top: 12px; display: grid; gap: 12px; min-width: 0; }
+.view { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; aspect-ratio: 16 / 10; background: #000; }
+.view canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+textarea { width: 100%; min-height: 120px; resize: vertical; background: #0a0f14; color: #b9c7d3; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: 12px/1.5 var(--mono); }
+.status { font-size: 13px; color: var(--good); min-height: 1.4em; }
+.status.bad { color: var(--bad); }
+ol { margin: 0; padding-left: 20px; color: var(--muted); font-size: 13px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>PlebClient <span>Studio</span></h1>
+    <p class="sub">Design your crosshair, pick your mods and the look of your menus, then paste one code into PlebClient. Settings, Import all loads it. Anything you don't touch here stays the way you have it.</p>
+  </header>
+
+  <div class="bench">
+    <div class="side">
+      <section class="step">
+        <h2><b>1</b>Crosshair</h2>
+        <label class="t"><input type="checkbox" id="xOn" checked> Use a custom crosshair</label>
+        <div class="grid2">
+          <label class="f">Style<select id="xStyle"></select></label>
+          <label class="f">Color<select id="xColor"></select></label>
+          <label class="f">Size<select id="xSize"></select></label>
+          <label class="f">Gap<select id="xGap"></select></label>
+        </div>
+        <div class="row">
+          <label class="t"><input type="checkbox" id="xDot"> Center dot</label>
+          <label class="t"><input type="checkbox" id="xOutline" checked> Outline</label>
+          <label class="t"><input type="checkbox" id="xInvert"> Invert colors</label>
+        </div>
+      </section>
+
+      <section class="step">
+        <h2><b>2</b>HUD</h2>
+        <div class="grid2">
+          <label class="f">Coordinates layout<select id="cLayout"><option value="0">Stacked</option><option value="1">One line</option></select></label>
+          <label class="f">X label<input type="text" id="lX" value="X: " maxlength="24"></label>
+          <label class="f">Y label<input type="text" id="lY" value="Y: " maxlength="24"></label>
+          <label class="f">Z label<input type="text" id="lZ" value="Z: " maxlength="24"></label>
+          <label class="f">Facing label<input type="text" id="lF" value="Facing: " maxlength="24"></label>
+          <label class="f">Chat timestamps<select id="chatTs"><option value="0">Off</option><option value="1" selected>24-hour</option><option value="2">12-hour</option></select></label>
+        </div>
+        <p class="hint">Mods to turn on (unticked ones are turned off):</p>
+        <div class="mods" id="mods"></div>
+      </section>
+
+      <section class="step">
+        <h2><b>3</b>Menus</h2>
+        <div class="grid2">
+          <label class="f">Accent color<select id="accent"></select></label>
+          <label class="f">Menu background<select id="menuBg"></select></label>
+          <label class="f">Window style<select id="winStyle"></select></label>
+          <label class="f">Title particles<select id="particles"></select></label>
+        </div>
+      </section>
+    </div>
+
+    <div class="stage">
+      <div class="view"><canvas id="cv" width="480" height="300" aria-label="Preview of the HUD and crosshair"></canvas></div>
+      <section class="step">
+        <h2><b>4</b>Import code</h2>
+        <textarea id="code" readonly spellcheck="false" aria-label="Import code"></textarea>
+        <div class="row"><button class="primary" id="copy">Copy code</button></div>
+        <div class="status" id="status" role="status"></div>
+        <ol>
+          <li>Copy the code.</li>
+          <li>In PlebClient: Right Shift, Settings, Import all.</li>
+        </ol>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  // These lists match PlebClient's settings index for index.
+  const STYLES = ['Cross', 'Thin cross', 'Dot', 'Circle', 'Square', 'X', 'Arrow'];
+  const COLORS = [['White', '#ffffff'], ['Cyan', '#4fe3f0'], ['Green', '#6ee78a'], ['Gold', '#f5c542'], ['Red', '#ff6b6b'], ['Pink', '#ff8ad8'], ['Gray', '#b8c4cc']];
+  const SIZES = ['Small', 'Medium', 'Large', 'Huge'], LEN = [3, 5, 7, 10];
+  const GAPS = ['None', 'Small', 'Medium', 'Large'], GAPPX = [0, 1, 2, 4];
+  const ACCENTS = [['PlebClient Cyan', '#3fd8e6'], ['Blue', '#4c9bff'], ['Mint', '#4fe39a'], ['Violet', '#b085ff'], ['Amber', '#f5b942'], ['Rose', '#ff6fae'],
+    ['Crimson', '#ff5a5a'], ['Orange', '#ff9a3c'], ['Lime', '#a6e34f'], ['Teal', '#2ec4b6'], ['Pink', '#ff7ac6'], ['Snow', '#e8eef2']];
+  const MENU_BG = ['Blurred wallpaper', 'Wallpaper', 'Dark', 'Glow', 'Retro grid'];
+  const WIN = ['Solid', 'Glass', 'Clear'];
+  const PARTICLES = ['None', 'Snow', 'Embers', 'Fireflies'];
+  const MODS = [['fps', 'FPS', true], ['cps', 'CPS', true], ['keystrokes', 'Keystrokes', true], ['coordinates', 'Coordinates', true],
+    ['armorstatus', 'Armor', false], ['potion-effects', 'Potion effects', false], ['ping', 'Ping', false], ['clock', 'Clock', false],
+    ['speed', 'Speed', false], ['day-counter', 'Day Counter', false], ['biome', 'Biome', false], ['server-address', 'Server Address', false],
+    ['arrow-counter', 'Arrow Counter', false], ['light-level', 'Light Level', false], ['session-timer', 'Session Timer', false],
+    ['toggle-sneak', 'Toggle Sprint', false], ['zoom', 'Zoom', true], ['lighting', 'Fullbright', false],
+    ['scoreboard', 'Scoreboard tweaks', false], ['chat', 'Chat tweaks', false], ['hurt-cam', 'No hurt shake', false]];
+
+  const fillSel = (id, items, sel) => { const s = $(id); items.forEach((it, i) => { const o = document.createElement('option'); o.value = i; o.textContent = Array.isArray(it) ? it[0] : it; s.appendChild(o); }); s.value = sel; };
+  fillSel('xStyle', STYLES, 0); fillSel('xColor', COLORS, 0); fillSel('xSize', SIZES, 1); fillSel('xGap', GAPS, 1);
+  fillSel('accent', ACCENTS, 0); fillSel('menuBg', MENU_BG, 0); fillSel('winStyle', WIN, 0); fillSel('particles', PARTICLES, 1);
+  const modsEl = $('mods');
+  for (const [id, name, on] of MODS) {
+    const l = document.createElement('label'); l.className = 't';
+    const c = document.createElement('input'); c.type = 'checkbox'; c.dataset.id = id; c.checked = on;
+    l.appendChild(c); l.appendChild(document.createTextNode(' ' + name)); modsEl.appendChild(l);
+  }
+
+  const num = id => Number($(id).value);
+  const on = id => $(id).checked;
+
+  // ---------- the import code (PlebClient's settings export format) ----------
+  function code() {
+    const mods = {};
+    for (const c of modsEl.querySelectorAll('input')) mods[c.dataset.id] = { on: c.checked };
+    mods.crosshair = { on: on('xOn'), opts: { style: num('xStyle'), color: num('xColor'), size: num('xSize'), gap: num('xGap'),
+      dot: on('xDot') ? 1 : 0, outline: on('xOutline') ? 1 : 0, invert: on('xInvert') ? 1 : 0 } };
+    mods.coordinates.opts = { compact: num('cLayout'), label_x: $('lX').value, label_y: $('lY').value, label_z: $('lZ').value, label_facing: $('lF').value };
+    mods.chat.opts = { timestamps: num('chatTs') };
+    const prefs = { accent: num('accent'), menuBackground: num('menuBg'), windowOpacity: num('winStyle'), titleParticles: num('particles') };
+    return JSON.stringify({ 'plebclient-settings': 1, mods, prefs });
+  }
+
+  // ---------- preview ----------
+  const cv = $('cv'), g = cv.getContext('2d');
+  const S = 2; // one GUI pixel = 2 canvas pixels here
+  function sky() {
+    const gr = g.createLinearGradient(0, 0, 0, cv.height);
+    gr.addColorStop(0, '#7fb0ff'); gr.addColorStop(0.55, '#b9d6ff'); gr.addColorStop(0.56, '#5c9a3a'); gr.addColorStop(1, '#3d6b27');
+    g.fillStyle = gr; g.fillRect(0, 0, cv.width, cv.height);
+    // a few blocks for contrast behind the crosshair
+    const bx = cv.width / 2 - 40, by = cv.height / 2 - 24;
+    g.fillStyle = '#8a8a8a'; g.fillRect(bx, by, 32, 32); g.fillStyle = '#6d4c30'; g.fillRect(bx + 40, by + 8, 32, 32);
+    g.fillStyle = '#1a1a1a'; g.fillRect(bx + 14, by + 34, 24, 10);
+  }
+  function text(s, x, y, col) {
+    g.font = '16px "Silkscreen", monospace'; g.textBaseline = 'top';
+    g.fillStyle = 'rgba(0,0,0,.45)'; const w = g.measureText(s).width; g.fillRect(x - 3, y - 2, w + 6, 18);
+    g.fillStyle = '#3f3f3f'; g.fillText(s, x + 2, y + 2); g.fillStyle = col; g.fillText(s, x, y);
+  }
+  function crosshair() {
+    if (!on('xOn')) { // vanilla: a 9px plus
+      g.globalCompositeOperation = 'difference'; g.fillStyle = '#fff';
+      const cx = cv.width / 2, cy = cv.height / 2; g.fillRect(cx - 9, cy - 1, 18, 2); g.fillRect(cx - 1, cy - 9, 2, 18);
+      g.globalCompositeOperation = 'source-over'; return;
+    }
+    const cx = Math.floor(cv.width / 2 / S), cy = Math.floor(cv.height / 2 / S);
+    const len = LEN[num('xSize')], gap = GAPPX[num('xGap')], st = num('xStyle'), rects = [];
+    if (st === 0 || st === 1) {
+      const th = st === 0 ? 2 : 1, o = Math.floor(th / 2), k = th === 2 ? 0 : 1;
+      rects.push([cx - gap - len, cy - o, len, th], [cx + gap + k, cy - o, len, th], [cx - o, cy - gap - len, th, len], [cx - o, cy + gap + k, th, len]);
+    } else if (st === 2) { const d = Math.max(2, Math.floor(len / 2)); rects.push([cx - Math.floor(d / 2), cy - Math.floor(d / 2), d, d]); }
+    else if (st === 3) { const r = len + gap; for (let a = 0; a < 360; a += 15) rects.push([cx + Math.round(Math.cos(a * Math.PI / 180) * r), cy + Math.round(Math.sin(a * Math.PI / 180) * r), 1, 1]); }
+    else if (st === 4) { const r = Math.floor(len / 2) + gap + 1; rects.push([cx - r, cy - r, r * 2 + 1, 1], [cx - r, cy + r, r * 2 + 1, 1], [cx - r, cy - r + 1, 1, r * 2 - 1], [cx + r, cy - r + 1, 1, r * 2 - 1]); }
+    else if (st === 5) { for (let i = gap + 1; i <= gap + len; i++) rects.push([cx - i, cy - i, 1, 1], [cx + i, cy - i, 1, 1], [cx - i, cy + i, 1, 1], [cx + i, cy + i, 1, 1]); }
+    else { for (let i = 0; i <= len; i++) rects.push([cx - i, cy + gap + i, 1, 1], [cx + i, cy + gap + i, 1, 1]); }
+    if (on('xDot') && st !== 2) rects.push([cx, cy, 1, 1]);
+    const inv = on('xInvert');
+    if (on('xOutline') && !inv) { g.fillStyle = 'rgba(0,0,0,.56)'; for (const r of rects) g.fillRect((r[0] - 1) * S, (r[1] - 1) * S, (r[2] + 2) * S, (r[3] + 2) * S); }
+    if (inv) g.globalCompositeOperation = 'difference';
+    g.fillStyle = inv ? '#fff' : COLORS[num('xColor')][1];
+    for (const r of rects) g.fillRect(r[0] * S, r[1] * S, r[2] * S, r[3] * S);
+    g.globalCompositeOperation = 'source-over';
+  }
+  function draw() {
+    sky();
+    const acc = ACCENTS[num('accent')][1];
+    const checked = id => modsEl.querySelector(`input[data-id="${id}"]`)?.checked;
+    let y = 10;
+    const line = s => { text(s, 10, y, '#fff'); y += 22; };
+    if (checked('fps')) line('FPS: 144');
+    if (checked('cps')) line('9 | 2 CPS');
+    if (checked('coordinates')) {
+      const f = $('lF').value + 'North (-Z)';
+      if (num('cLayout') === 1) line($('lX').value + '-120  ' + $('lY').value + '64  ' + $('lZ').value + '348  ' + f);
+      else { line($('lX').value + '-120'); line($('lY').value + '64'); line($('lZ').value + '348'); line(f); }
+    }
+    if (checked('speed')) line('Speed: 4.3 m/s');
+    if (checked('day-counter')) line('Day 12  13:20');
+    if (checked('biome')) line('Biome: Plains');
+    if (checked('arrow-counter')) line('Arrows: 64');
+    if (checked('ping')) line('Ping: 42 ms');
+    if (checked('keystrokes')) {
+      const k = (lbl, x, yy, w, h, sub) => { g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(x, yy, w, h); g.fillStyle = '#fff'; g.font = '14px "Silkscreen", monospace'; g.textAlign = 'center'; g.fillText(lbl, x + w / 2, yy + (sub ? 4 : h / 2 - 7)); if (sub) g.fillText(sub, x + w / 2, yy + 22); g.textAlign = 'left'; };
+      const bx = cv.width - 140, by = cv.height - 150;
+      k('W', bx + 44, by, 40, 40); k('A', bx, by + 44, 40, 40); k('S', bx + 44, by + 44, 40, 40); k('D', bx + 88, by + 44, 40, 40);
+      k('LMB', bx, by + 88, 62, 46, '9'); k('RMB', bx + 66, by + 88, 62, 46, '2');
+    }
+    // a thin accent bar like PlebClient's windows, so the accent shows
+    g.fillStyle = acc; g.fillRect(0, cv.height - 3, cv.width, 3);
+    crosshair();
+    $('code').value = code();
+  }
+  document.querySelectorAll('select, input').forEach(el => el.addEventListener('input', draw));
+  modsEl.addEventListener('change', draw);
+  $('copy').onclick = async () => {
+    const s = $('status');
+    try { await navigator.clipboard.writeText($('code').value); s.textContent = 'Copied. Paste it with Settings, Import all.'; s.className = 'status'; }
+    catch (e) { $('code').select(); s.textContent = 'Couldn’t copy. The code is selected: copy it with Ctrl+C.'; s.className = 'status bad'; }
+  };
+  if (document.fonts) document.fonts.ready.then(draw);
+  draw();
+})();
+</script>

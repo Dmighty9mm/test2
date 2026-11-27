@@ -22,7 +22,22 @@
 
 + 	public float fontScale = 1.0f;
 
-> INSERT  36 : 39  @  36
+> INSERT  30 : 42  @  30
+
++ 		if (this.visible && net.plebmc.client.hud.PlebTheme.enabled()) {
++ 			this.hovered = mouseX >= this.xPosition && mouseY >= this.yPosition && mouseX < this.xPosition + this.width
++ 					&& mouseY < this.yPosition + this.height;
++ 			if (this.enabled && this.hovered) {
++ 				Mouse.showCursor(EnumCursorType.HAND);
++ 			}
++ 			net.plebmc.client.hud.PlebTheme.drawButton(this, mouseX, mouseY, this.hovered,
++ 					this.enabled && this.getHoverState(true) == 0);
++ 			this.mouseDragged(mc, mouseX, mouseY);
++ 			net.plebmc.client.hud.PlebTheme.drawButtonLabel(this, mc.fontRendererObj, this.hovered);
++ 			return;
++ 		}
+
+> INSERT  6 : 9  @  6
 
 + 			if (this.enabled && this.hovered) {
 + 				Mouse.showCursor(EnumCursorType.HAND);

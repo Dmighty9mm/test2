@@ -91,6 +91,15 @@ public class EaglerFolderResourcePack extends AbstractResourcePack {
 		return timestamp;
 	}
 
+	/** PlebClient: the storage prefix and folder, so custom item models can list the pack's files. */
+	public String plebPrefix() {
+		return prefix;
+	}
+
+	public String plebFolder() {
+		return resourcePackFile;
+	}
+
 	public String getDisplayName() {
 		return displayName;
 	}
@@ -270,14 +279,26 @@ public class EaglerFolderResourcePack extends AbstractResourcePack {
 	}
 
 	public static void loadRemoteResourcePack(String url, String hash, Consumer<EaglerFolderResourcePack> cb, Consumer<Runnable> ast, Runnable loading) {
-		if (!isSupported || !hash.matches("^[a-f0-9]{40}$")) {
+		if (!isSupported || url == null || url.isEmpty()) {
 			cb.accept(null);
 			return;
 		}
+		// PlebClient: servers often send the hash in upper case, or none at all (newer servers allow that)
+		hash = hash == null ? "" : hash.trim().toLowerCase();
+		final boolean verify = hash.matches("^[a-f0-9]{40}$");
+		if (!verify) {
+			SHA1Digest urlDigest = new SHA1Digest();
+			byte[] urlBytes = url.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+			urlDigest.update(urlBytes, 0, urlBytes.length);
+			byte[] urlHash = new byte[20];
+			urlDigest.doFinal(urlHash, 0);
+			hash = "u" + ArrayUtils.hexString(urlHash).substring(1);
+		}
+		final String packName = hash;
 		final List<EaglerFolderResourcePack> lst = getFolderResourcePacks(SERVER_RESOURCE_PACKS);
 		for(int i = 0, l = lst.size(); i < l; ++i) {
 			EaglerFolderResourcePack rp = lst.get(i);
-			if(rp.resourcePackFile.equals(hash)) {
+			if(verify && rp.resourcePackFile.equals(packName)) {
 				cb.accept(rp);
 				return;
 			}
@@ -292,7 +313,7 @@ public class EaglerFolderResourcePack extends AbstractResourcePack {
 				digest.update(arr, 0, arr.length);
 				byte[] hashOut = new byte[20];
 				digest.doFinal(hashOut, 0);
-				if(!hash.equals(ArrayUtils.hexString(hashOut))) {
+				if(verify && !packName.equals(ArrayUtils.hexString(hashOut))) {
 					logger.error("Downloaded resource pack hash does not equal expected resource pack hash!");
 					cb.accept(null);
 					return;
@@ -304,8 +325,16 @@ public class EaglerFolderResourcePack extends AbstractResourcePack {
 					}
 				}
 				loading.run();
+				if (!verify) {
+					// no hash: always take the newest copy of the pack at this address
+					for(int i = 0, l = lst.size(); i < l; ++i) {
+						if(lst.get(i).resourcePackFile.equals(packName)) {
+							deleteResourcePack(SERVER_RESOURCE_PACKS, packName);
+						}
+					}
+				}
 				try {
-					cb.accept(importResourcePack(hash, SERVER_RESOURCE_PACKS, arr));
+					cb.accept(importResourcePack(packName, SERVER_RESOURCE_PACKS, arr));
 				}catch(IOException ex) {
 					logger.error("Failed to load resource pack downloaded from server!");
 					logger.error(ex);

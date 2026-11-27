@@ -1,7 +1,7 @@
 package net.plebmc.client.apollo.proto;
 
 /** RFC 4648 base64 (standard and URL-safe alphabets on decode), for JSON bytes fields. */
-final class Base64 {
+public final class Base64 {
 
         private static final char[] ALPHABET =
                         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".toCharArray();
@@ -9,7 +9,7 @@ final class Base64 {
         private Base64() {
         }
 
-        static String encode(byte[] data) {
+        public static String encode(byte[] data) {
                 StringBuilder sb = new StringBuilder((data.length + 2) / 3 * 4);
                 for (int i = 0; i < data.length; i += 3) {
                         int b0 = data[i] & 0xFF;
@@ -23,7 +23,7 @@ final class Base64 {
                 return sb.toString();
         }
 
-        static byte[] decode(String s) {
+        public static byte[] decode(String s) {
                 byte[] out = new byte[s.length() * 3 / 4 + 3];
                 int n = 0;
                 int acc = 0;

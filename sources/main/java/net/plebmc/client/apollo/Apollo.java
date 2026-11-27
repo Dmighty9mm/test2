@@ -138,6 +138,7 @@ public final class Apollo {
         }
 
         static void addModule(ApolloModule m) {
+                byClass.clear();
                 modules.add(m);
                 modulesById.put(m.id(), m);
                 router.current = m;
@@ -188,6 +189,22 @@ public final class Apollo {
                         return;
                 }
                 route(channel, msg);
+        }
+
+        /**
+         * Feeds one JSON message (proto3 JSON with "@type") through the normal
+         * router, as if the server sent it, without switching the connection
+         * to JSON. Used by the "Preview features" button so every overlay can
+         * be checked without a server.
+         */
+        public static boolean preview(String json) {
+                try {
+                        route("preview", ProtoJson.parse(json));
+                        return true;
+                } catch (Throwable t) {
+                        record("preview", "?", ApolloDebugLog.Status.ERROR, String.valueOf(t));
+                        return false;
+                }
         }
 
         static void route(String channel, ProtoMessage msg) {
@@ -344,10 +361,19 @@ public final class Apollo {
                 return Collections.unmodifiableList(modules);
         }
 
+        /** Lookups by class, cached: the render hooks ask for modules many times per frame. */
+        private static final Map<Class<?>, ApolloModule> byClass = new HashMap<>();
+
         @SuppressWarnings("unchecked")
         public static <T extends ApolloModule> T module(Class<T> type) {
-                for (ApolloModule m : modules) {
+                ApolloModule hit = byClass.get(type);
+                if (hit != null) {
+                        return (T) hit;
+                }
+                for (int i = 0; i < modules.size(); i++) {
+                        ApolloModule m = modules.get(i);
                         if (type.isInstance(m)) {
+                                byClass.put(type, m);
                                 return (T) m;
                         }
                 }
@@ -392,6 +418,7 @@ public final class Apollo {
         public static void resetAllForTests() {
                 modules.clear();
                 modulesById.clear();
+                byClass.clear();
                 router.owners.clear();
                 router.handlers.clear();
                 debugLog.clear();

@@ -23,6 +23,7 @@ import net.plebmc.client.mods.ClickCounter;
 import net.plebmc.client.mods.HudBox;
 import net.plebmc.client.mods.Mod;
 import net.plebmc.client.mods.ModRegistry;
+import net.plebmc.client.mods.ClientPrefs;
 import net.plebmc.client.mods.SettingsStore;
 import net.plebmc.client.network.PluginChannels;
 
@@ -98,7 +99,67 @@ public final class PlebClient {
 		Apollo.setLog(log);
 		try {
 			Apollo.init();
+			// tells the PlebColors server plugin this client draws RGB text codes
+			PluginChannels.register("plebmc:rgb", new PluginChannels.Handler() {
+				@Override
+				public void onMessage(String channel, byte[] data) {
+					rgbServer = true; // PlebColors answered: this server sends true colors
+				}
+			});
+			// saved PlebMc account sign-ins (tokens, never passwords) live in the browser's storage
+			net.plebmc.client.cosmetics.PlebAccount.storage(STORE);
+			// the PlebMc account this client plays as (the start screen signs in or makes one)
+			net.plebmc.client.cosmetics.ClientSession.setup((url, json, done) -> net.lax1dude.eaglercraft.v1_8.internal.PlatformPlebHttp
+					.post(url, json, (status, body) -> done.done(status, body)), STORE, name -> {
+						if (!name.equals(net.lax1dude.eaglercraft.v1_8.profile.EaglerProfile.getName())) {
+							net.lax1dude.eaglercraft.v1_8.profile.EaglerProfile.setName(name);
+							net.lax1dude.eaglercraft.v1_8.profile.EaglerProfile.save();
+						}
+					});
+			// tells outdated clients to update (the owner sets the latest version on the panel)
+			net.plebmc.client.cosmetics.UpdateCheck.check(PlebClient.platformName());
+			net.plebmc.client.cosmetics.Cosmetics.init(new PluginChannels.Log() {
+				@Override
+				public void info(String msg) {
+					LOG.info(msg);
+				}
+
+				@Override
+				public void warn(String msg) {
+					LOG.warn(msg);
+				}
+			});
+			net.plebmc.client.cosmetics.Cosmetics.setToasts(new net.plebmc.client.cosmetics.Cosmetics.Toasts() {
+				@Override
+				public void show(String title, String message) {
+					net.plebmc.client.apollo.module.NotificationModule nm = Apollo
+							.module(net.plebmc.client.apollo.module.NotificationModule.class);
+					if (nm != null && ClientPrefs.get().toasts) {
+						nm.showLocal(title, message, ClientPrefs.get().toastMs());
+					}
+				}
+			});
 			mods.load(STORE);
+			net.plebmc.client.mods.FpsLarp.INSTANCE.load(STORE);
+			ClientPrefs.get().load(STORE);
+			net.plebmc.client.cosmetics.Cosmetics.loadSeen(STORE.get(QUESTS_SEEN_KEY));
+			net.plebmc.client.cosmetics.Cosmetics.loadLook(STORE.get(LOOK_KEY));
+			savedLook = net.plebmc.client.cosmetics.Cosmetics.lookVersion();
+			// the shop's catalog and textures, saved in the browser's file system (IndexedDB)
+			net.plebmc.client.cosmetics.Cosmetics.setCache(new net.plebmc.client.cosmetics.Cosmetics.Cache() {
+				@Override
+				public byte[] get(String key) {
+					net.lax1dude.eaglercraft.v1_8.internal.vfs2.VFile2 f = new net.lax1dude.eaglercraft.v1_8.internal.vfs2.VFile2(
+							"plebmc_shop", key.replace('/', '_'));
+					return f.exists() ? f.getAllBytes() : null;
+				}
+
+				@Override
+				public void put(String key, byte[] value) {
+					new net.lax1dude.eaglercraft.v1_8.internal.vfs2.VFile2("plebmc_shop", key.replace('/', '_'))
+							.setAllBytes(value);
+				}
+			});
 		} catch (Throwable t) {
 			LOG.warn("mod/Apollo init failed: " + t);
 		}
@@ -115,17 +176,104 @@ public final class PlebClient {
 		});
 	}
 
+	/** What Right Shift opens (Settings > Behavior). */
+	static net.minecraft.client.gui.GuiScreen shiftScreen() {
+		switch (ClientPrefs.get().shiftOpens) {
+		case 1:
+			return new ModsScreen(null);
+		case 2:
+			return new QuestsScreen(null);
+		case 3:
+			return new ShopScreen(null);
+		default:
+			return new LauncherScreen(null);
+		}
+	}
+
 	public static ModRegistry mods() {
 		return mods;
+	}
+
+	/** The frame count the debug lines show (Fps Larp can change it; the game never runs differently). */
+	public static String larpDebug(String line) {
+		try {
+			return net.plebmc.client.mods.FpsLarp.INSTANCE.debugLine(line, Minecraft.getDebugFPS(),
+					System.currentTimeMillis());
+		} catch (Throwable t) {
+			return line;
+		}
 	}
 
 	static GameView view() {
 		return view;
 	}
 
+	static final String QUESTS_SEEN_KEY = "questsSeen";
+	static final String LOOK_KEY = "lastLook";
+	private static int savedLook;
+
+	/** Saves the last balance and outfit (for the title screen) when they changed. */
+	static void saveLookIfChanged() {
+		try {
+			int v = net.plebmc.client.cosmetics.Cosmetics.lookVersion();
+			if (v != savedLook) {
+				savedLook = v;
+				STORE.set(LOOK_KEY, net.plebmc.client.cosmetics.Cosmetics.lookJson());
+			}
+		} catch (Throwable t) {
+			LOG.warn("could not save the last look: " + t);
+		}
+	}
+
+	/** Remembers which quests the player has seen (for the NEW tags). */
+	static void saveQuestsSeen() {
+		try {
+			STORE.set(QUESTS_SEEN_KEY, net.plebmc.client.cosmetics.Cosmetics.seenJson());
+		} catch (Throwable t) {
+			LOG.warn("could not save seen quests: " + t);
+		}
+	}
+
+	/** Copies every setting (not the login) to the clipboard; false if that failed. */
+	public static boolean exportSettings() {
+		try {
+			saveSettings();
+			net.minecraft.client.gui.GuiScreen.setClipboardString(net.plebmc.client.mods.SettingsTransfer.export(STORE));
+			return true;
+		} catch (Throwable t) {
+			LOG.warn("could not export settings: " + t);
+			return false;
+		}
+	}
+
+	/** Loads an export from the clipboard: the number of parts loaded, or -1 if it isn't one. */
+	public static int importSettings() {
+		try {
+			int n = net.plebmc.client.mods.SettingsTransfer.importInto(STORE,
+					net.minecraft.client.gui.GuiScreen.getClipboardString());
+			if (n > 0) {
+				mods.load(STORE);
+				net.plebmc.client.mods.FpsLarp.INSTANCE.load(STORE);
+				ClientPrefs.get().load(STORE);
+				saveSettings();
+			}
+			return n;
+		} catch (Throwable t) {
+			LOG.warn("could not import settings: " + t);
+			return -1;
+		}
+	}
+
+	/** Every game tick (also on menus): finishes account-panel requests on builds that poll them. */
+	public static void tick() {
+		net.lax1dude.eaglercraft.v1_8.internal.PlatformPlebHttp.poll();
+	}
+
 	public static void saveSettings() {
 		try {
 			mods.save(STORE);
+			net.plebmc.client.mods.FpsLarp.INSTANCE.save(STORE);
+			ClientPrefs.get().save(STORE);
 		} catch (Throwable t) {
 			LOG.warn("could not save mod settings: " + t);
 		}
@@ -172,6 +320,8 @@ public final class PlebClient {
 
 	/** Disconnect or world unload: drop all per-connection state. */
 	public static void onLeave() {
+		rgbServer = false;
+		ItemNbtWatch.reset();
 		if (mc != null && PluginChannels.isJoined()) {
 			PluginChannels.reset();
 		}
@@ -180,18 +330,58 @@ public final class PlebClient {
 	// ==================== input ====================
 
 	/** A key press in game with no screen open; true = consumed here. */
+	/** The server's PlebColors plugin said it sends hex colors and gradients to this client. */
+	static boolean rgbServer;
+
 	public static boolean onKeyDown(int key) {
 		if (mc == null || mc.currentScreen != null || mc.theWorld == null) {
 			return false;
 		}
+		EasterEggs.gameKey(key);
 		if (key == KEY_RSHIFT) {
-			mc.displayGuiScreen(new ModMenuScreen(null));
+			mc.displayGuiScreen(shiftScreen());
 			return true;
 		}
 		if (key == mc.gameSettings.keyBindSprint.getKeyCode()) {
 			mods.toggleSprint.onSprintKey();
 		}
+		if (key == KeyboardConstants.KEY_F && mc.gameSettings.keyBindSneak.isKeyDown()) {
+			squadPing();
+		}
 		return false;
+	}
+
+	private static long lastPing;
+
+	/**
+	 * Sneak + F: PlebNite (and other modern servers) mark the block you look
+	 * at for your squad when you press the swap-hands key while sneaking.
+	 * 1.8 has no off hand, so this sends that action itself: the player
+	 * digging packet with action 6 (SWAP_ITEM_WITH_OFFHAND in 1.9+), which the
+	 * server's version translator passes through. Only sent to servers that
+	 * speak Apollo (never to a plain 1.8 server, which doesn't know action 6).
+	 */
+	static boolean squadPing() {
+		if (!mods.squadPing.isActive() || mc.isSingleplayer() || !Apollo.isServerApollo()) {
+			return false;
+		}
+		long now = System.currentTimeMillis();
+		if (now - lastPing < 300L) {
+			return false;
+		}
+		lastPing = now;
+		NetHandlerPlayClient nh = mc.getNetHandler();
+		if (nh == null || nh.getNetworkManager() == null) {
+			return false;
+		}
+		// action 6, block position 0/0/0 (packed long), face 0 (down): what a 1.9+ client sends
+		byte[] body = { 6, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+		try {
+			return nh.getNetworkManager().sendRawPacket(0x07, body);
+		} catch (Throwable t) {
+			LOG.warn("squad ping failed: " + t);
+			return false;
+		}
 	}
 
 	/** In-world attack (0) or use (1) click. */
@@ -200,8 +390,62 @@ public final class PlebClient {
 	}
 
 	/** EntityRenderer: may the built-in zoom key (C) zoom right now? */
+	/**
+	 * Minecraft.displayGuiScreen: swaps Minecraft's video settings for the
+	 * PlebClient one (unless the player turned that off or asked for the old one).
+	 */
+	public static net.minecraft.client.gui.GuiScreen swapScreen(net.minecraft.client.gui.GuiScreen s) {
+		if (mc == null || !VideoCompat.isVanilla(s)) {
+			return s;
+		}
+		if (VideoOptionsScreen.openVanilla) {
+			VideoOptionsScreen.openVanilla = false;
+			return s;
+		}
+		if (!ClientPrefs.get().videoMenu) {
+			return s;
+		}
+		try {
+			return new VideoOptionsScreen(mc.currentScreen);
+		} catch (Throwable t) {
+			LOG.warn("video settings failed: " + t);
+			return s;
+		}
+	}
+
 	public static boolean zoomAllowed(boolean keyDown) {
 		return keyDown && mods.zoom.isActive();
+	}
+
+	/** Zoom key pressed: the FOV to start at (the Zoom level setting). */
+	public static float zoomStart(float eaglerDefault) {
+		try {
+			return mods.zoom.startFov();
+		} catch (Throwable t) {
+			return eaglerDefault;
+		}
+	}
+
+	/** Mouse wheel while zooming. */
+	public static float zoomScroll(float current, int wheel) {
+		return mods.zoom.scrolled(current, wheel);
+	}
+
+	private static boolean smoothByZoom;
+	private static boolean smoothBefore;
+
+	/** Smooth camera while zoomed (and puts the player's own setting back after). */
+	private static void syncZoomCamera() {
+		boolean want = mc.isZoomKey && mods.zoom.isActive() && mods.zoom.smoothCamera() && mc.currentScreen == null;
+		if (want != smoothByZoom) {
+			if (want) {
+				smoothBefore = mc.gameSettings.smoothCamera;
+				mc.gameSettings.smoothCamera = true;
+			} else {
+				mc.gameSettings.smoothCamera = smoothBefore;
+			}
+			smoothByZoom = want;
+		}
 	}
 
 	/** EntityRenderer.updateLightmap: the gamma to use. */
@@ -230,6 +474,15 @@ public final class PlebClient {
 	}
 
 	/** FontRenderer: Apollo nick hider swaps the player's own name in drawn text. */
+	/** Own Nametag mod: your name over your own head (the caller checks the camera is in third person). */
+	public static boolean showOwnName() {
+		try {
+			return mods != null && mods.ownNametag.isActive();
+		} catch (Throwable t) {
+			return false;
+		}
+	}
+
 	public static String filterText(String text) {
 		if (text == null || mc == null || mc.thePlayer == null) {
 			return text;
@@ -244,12 +497,28 @@ public final class PlebClient {
 	// ==================== HUD ====================
 
 	/** GuiIngame.renderGameOverlay end: Apollo overlays then HUD mods. */
+	/** The partial tick of the frame being drawn (HUD mods read the camera with it). */
+	static float framePartialTicks = 1f;
+
 	public static void renderHud(ScaledResolution res, float partialTicks) {
 		if (mc == null) {
 			return;
 		}
+		framePartialTicks = partialTicks;
+		try {
+			PlebVisuals.deathCheck();
+		} catch (Throwable t) {
+			LOG.warn("death check failed: " + t);
+		}
 		int guiW = res.getScaledWidth();
 		int guiH = res.getScaledHeight();
+		try {
+			FpsBoost.sync(mc, mods.fpsBoost.isActive());
+			syncZoomCamera();
+		} catch (Throwable t) {
+			LOG.warn("FPS boost failed: " + t);
+		}
+		ItemNbtWatch.tick(mc);
 		try {
 			Apollo.tick();
 			long now = Apollo.now();
@@ -267,8 +536,10 @@ public final class PlebClient {
 			float fov = mc.entityRenderer.currentProjMatrixFOV > 1f ? mc.entityRenderer.currentProjMatrixFOV
 					: mc.gameSettings.fovSetting;
 			ApolloOverlay.INSTANCE.render(guiW, guiH, now, have, ex, ey, ez, yaw, pitch, fov, mc.displayWidth,
-					mc.displayHeight);
-			if (!(mc.currentScreen instanceof HudEditorScreen) && !mc.gameSettings.showDebugInfo) {
+					mc.displayHeight, partialTicks);
+			if (!(mc.currentScreen instanceof HudEditorScreen) && !(mc.currentScreen instanceof LauncherScreen)
+					&& !mc.gameSettings.showDebugInfo) {
+				lowHealth(guiW, guiH);
 				for (Mod m : mods.all()) {
 					if (m.hasHud() && m.isActive()) {
 						drawMod(m, m.layout(view, MEASURE), guiW, guiH, false);
@@ -278,32 +549,154 @@ public final class PlebClient {
 		} catch (Throwable t) {
 			LOG.warn("HUD render failed: " + t);
 		}
+		try {
+			if (mc.currentScreen == null) {
+				SecretMods.hud(guiW, guiH);
+			}
+			VoteAlert.render(guiW, guiH);
+			if (!(mc.currentScreen instanceof PlebScreen)) {
+				EasterEggs.overlay(guiW, guiH);
+			}
+		} catch (Throwable t) {
+			LOG.warn("vote alert failed: " + t);
+		}
 	}
 
 	/** Draws one HUD box at its saved position; returns {x, y, w, h}. */
 	static int[] drawMod(Mod m, HudBox box, int guiW, int guiH, boolean outline) {
+		return drawMod(m, box, guiW, guiH, outline ? 0xFFFFFF55 : 0);
+	}
+
+	/**
+	 * Draws one HUD box at its saved position with the mod's size, text
+	 * color and background; returns its on-screen {x, y, w, h}.
+	 */
+	static int[] drawMod(Mod m, HudBox box, int guiW, int guiH, int outline) {
 		if (box == null || box.width <= 0) {
 			return null;
 		}
-		int[] p = ModRegistry.place(m, box.width, box.height, guiW, guiH);
+		float sc = m.hudScale();
+		int w = Math.max(1, Math.round(box.width * sc));
+		int h = Math.max(1, Math.round(box.height * sc));
+		int[] p = ModRegistry.place(m, w, h, guiW, guiH);
+		int textColor = m.hudTextColor();
+		int bg = m.hudBackground();
+		boolean shadow = ClientPrefs.get().hudShadow;
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.pushMatrix();
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.translate(p[0], p[1], 0f);
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.scale(sc, sc, 1f);
 		for (HudBox.Rect r : box.rects) {
-			Draw.fill(p[0] + r.x, p[1] + r.y, r.w, r.h, r.argb);
+			int c = r.argb;
+			if (bg >= 0 && (c == HudBox.BG || c == HudBox.BG_LIGHT)) {
+				c = bg;
+			}
+			Draw.fill(r.x, r.y, r.w, r.h, c);
 		}
+		if (!box.items.isEmpty()) {
+			drawItems(box.items);
+			// text over the icons (item models draw in front of z 0)
+			net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.translate(0f, 0f, 200f);
+		}
+		long now = System.currentTimeMillis();
 		for (HudBox.Text t : box.texts) {
-			float tx = t.centered ? p[0] + t.x - Draw.width(t.text) / 2f : p[0] + t.x;
-			Draw.text(t.text, tx, p[1] + t.y, t.argb, true);
+			int c = textColor != 0 && t.argb == HudBox.TEXT ? textColor : t.argb;
+			float tx = t.centered ? t.x - Draw.width(t.text) / 2f : t.x;
+			if (c == Mod.CHROMA) {
+				drawChroma(t.text, tx, t.y, p[0] + tx * sc, now, shadow);
+			} else {
+				Draw.text(t.text, tx, t.y, c, shadow);
+			}
 		}
-		if (outline) {
-			int c = 0xFFFFFF55;
-			Draw.fill(p[0] - 1, p[1] - 1, box.width + 2, 1, c);
-			Draw.fill(p[0] - 1, p[1] + box.height, box.width + 2, 1, c);
-			Draw.fill(p[0] - 1, p[1], 1, box.height, c);
-			Draw.fill(p[0] + box.width, p[1], 1, box.height, c);
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.popMatrix();
+		if (outline != 0) {
+			Draw.fill(p[0] - 1, p[1] - 1, w + 2, 1, outline);
+			Draw.fill(p[0] - 1, p[1] + h, w + 2, 1, outline);
+			Draw.fill(p[0] - 1, p[1], 1, h, outline);
+			Draw.fill(p[0] + w, p[1], 1, h, outline);
 		}
-		return new int[] { p[0], p[1], box.width, box.height };
+		return new int[] { p[0], p[1], w, h };
+	}
+
+	/** Rainbow text, one character at a time; screenX keeps the wave lined up across boxes. */
+	static void drawChroma(String text, float x, float y, float screenX, long now, boolean shadow) {
+		String fmt = "";
+		for (int i = 0; i < text.length(); i++) {
+			char ch = text.charAt(i);
+			if (ch == '\u00a7' && i + 1 < text.length()) {
+				char k = Character.toLowerCase(text.charAt(i + 1));
+				fmt = k >= 'k' && k <= 'o' ? fmt + "\u00a7" + k : "";
+				i++;
+				continue;
+			}
+			String one = fmt + ch;
+			Draw.text(one, x, y, Mod.chroma(screenX, now), shadow);
+			float cw = Draw.width(one);
+			x += cw;
+			screenX += cw;
+		}
+	}
+
+	/** Real item icons (the stack when there is one, else the named item). */
+	static void drawItems(java.util.List<HudBox.Item> items) {
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.enableRescaleNormal();
+		net.minecraft.client.renderer.RenderHelper.enableGUIStandardItemLighting();
+		try {
+			for (HudBox.Item it : items) {
+				net.minecraft.item.ItemStack st = it.stack instanceof net.minecraft.item.ItemStack
+						? (net.minecraft.item.ItemStack) it.stack
+						: ItemIcons.forName(it.id);
+				if (st != null) {
+					mc.getRenderItem().renderItemAndEffectIntoGUI(st, it.x, it.y);
+				}
+			}
+		} catch (Throwable t) {
+			LOG.warn("item icon failed: " + t);
+		}
+		net.minecraft.client.renderer.RenderHelper.disableStandardItemLighting();
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.disableRescaleNormal();
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.disableLighting();
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.enableBlend();
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.enableAlpha();
+	}
+
+	/** Red screen edges while health is low (Low Health Warning). */
+	private static void lowHealth(int w, int h) {
+		float k = mods.lowHealth.intensity(view.health(), System.currentTimeMillis());
+		if (k <= 0f) {
+			return;
+		}
+		int band = Math.max(12, Math.min(w, h) / 6);
+		for (int i = 0; i < band; i++) {
+			float f = 1f - i / (float) band;
+			int a = Math.round(170 * k * f * f);
+			if (a <= 0) {
+				continue;
+			}
+			int c = (a << 24) | 0xC01010;
+			Draw.fill(i, i, w - i * 2, 1, c);
+			Draw.fill(i, h - 1 - i, w - i * 2, 1, c);
+			Draw.fill(i, i + 1, 1, h - i * 2 - 2, c);
+			Draw.fill(w - 1 - i, i + 1, 1, h - i * 2 - 2, c);
+		}
 	}
 
 	static EntityPlayerSP player() {
 		return mc == null ? null : mc.thePlayer;
+	}
+
+	/** "web", "wasm" or "desktop", for the panel's version stats. */
+	static String platformName() {
+		try {
+			String t = String.valueOf(net.lax1dude.eaglercraft.v1_8.EagRuntime.getPlatformType());
+			if (t.contains("WASM")) {
+				return "wasm";
+			}
+			if (t.contains("JAVASCRIPT")) {
+				return "web";
+			}
+			return t.toLowerCase();
+		} catch (RuntimeException e) {
+			return "unknown";
+		}
 	}
 }

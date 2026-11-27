@@ -1,6 +1,19 @@
 package net.plebmc.client.hud;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+
+import net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager;
+import net.lax1dude.eaglercraft.v1_8.opengl.WorldRenderer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.RenderHelper;
+import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.item.ItemStack;
+import net.plebmc.client.mods.Mods;
 
 import net.plebmc.client.apollo.Apollo;
 import net.plebmc.client.apollo.ApolloText;
@@ -32,86 +45,262 @@ final class ApolloOverlay {
 
         static final ApolloOverlay INSTANCE = new ApolloOverlay();
 
+        // modules are created once at start-up: look them up once, not every frame
+        private static VignetteModule vignetteM;
+        private static StopwatchModule stopwatchM;
+        private static CooldownModule cooldownM;
+        private static ChatModule chatM;
+        private static TitleModule titleM;
+        private static NotificationModule notificationM;
+        private static BeamModule beamM;
+        private static WaypointModule waypointM;
+        private static HologramModule hologramM;
+        private static TeamModule teamM;
+        private static BorderModule borderM;
+
+        private static void lookup() {
+                if (teamM == null) {
+                        vignetteM = Apollo.module(VignetteModule.class);
+                        stopwatchM = Apollo.module(StopwatchModule.class);
+                        cooldownM = Apollo.module(CooldownModule.class);
+                        chatM = Apollo.module(ChatModule.class);
+                        titleM = Apollo.module(TitleModule.class);
+                        notificationM = Apollo.module(NotificationModule.class);
+                        beamM = Apollo.module(BeamModule.class);
+                        waypointM = Apollo.module(WaypointModule.class);
+                        hologramM = Apollo.module(HologramModule.class);
+                        teamM = Apollo.module(TeamModule.class);
+                        borderM = Apollo.module(BorderModule.class);
+                }
+        }
+
+        private final List<Mods.Compass.Marker> compassMarkers = new ArrayList<>();
+        private final Map<String, EntityPlayer> loadedPlayers = new HashMap<>();
+        private float partialTicks;
+
         void render(int w, int h, long now, boolean haveCamera, double eyeX, double eyeY, double eyeZ, float yaw, float pitch,
-                        float fov, int pxW, int pxH) {
-                VignetteModule vignette = Apollo.module(VignetteModule.class);
+                        float fov, int pxW, int pxH, float partialTicks) {
+                lookup();
+                this.partialTicks = partialTicks;
+                VignetteModule vignette = vignetteM;
                 if (vignette != null && vignette.isEnabled() && vignette.isActive()) {
-                        vignette(w, h, vignette.opacity());
+                        vignette(w, h, vignette.resource(), vignette.opacity());
                 }
+                compassMarkers.clear();
+                Minecraft mc = Minecraft.getMinecraft();
+                cam.setup(eyeX, eyeY, eyeZ, yaw, pitch, fov, pxW, pxH, w, h);
+                indexPlayers(mc);
                 if (haveCamera) {
-                        cam.setup(eyeX, eyeY, eyeZ, yaw, pitch, fov, pxW, pxH, w, h);
-                        beams();
-                        waypoints();
+                        if (mc.gameSettings.shaders) {
+                                beams(); // no world pass hook with shaders on: fall back to HUD columns
+                        }
+                        waypoints(mc.gameSettings.shaders);
                         holograms();
-                        team();
+                        team(mc, true);
                         border(w, h);
+                } else {
+                        waypointMarkers();
+                        team(mc, false);
                 }
-                stopwatch(w, now);
-                cooldowns(w, h, now);
+                PlebClient.mods().compass.setMarkers(new ArrayList<Mods.Compass.Marker>(compassMarkers));
+                stopwatch(w, h, now);
+                cooldowns(mc, w, h, now);
                 liveChat(h);
                 titles(w, h, now);
                 notifications(w, now);
         }
 
-        // ==================== screen-space ====================
-
-        private static void vignette(int w, int h, float opacity) {
-                // darkened edges in 8 bands (vanilla vignette look, plain quads)
-                int bands = 8;
-                for (int i = 0; i < bands; i++) {
-                        float a = opacity * 0.55f * (1f - i / (float) bands);
-                        int c = Draw.alpha(0xFF000000, a / bands * 2f);
-                        int bw = Math.max(1, w / 24);
-                        int bh = Math.max(1, h / 24);
-                        int x = i * bw;
-                        int y = i * bh;
-                        Draw.fill(x, y, w - 2 * x, bh, c);
-                        Draw.fill(x, h - y - bh, w - 2 * x, bh, c);
-                        Draw.fill(x, y + bh, bw, h - 2 * y - 2 * bh, c);
-                        Draw.fill(w - x - bw, y + bh, bw, h - 2 * y - 2 * bh, c);
+        /** Loaded players by UUID, so markers can follow the live entity instead of the last server update. */
+        private void indexPlayers(Minecraft mc) {
+                loadedPlayers.clear();
+                if (mc.theWorld == null || teamM == null || !teamM.isEnabled() || teamM.size() == 0) {
+                        return;
+                }
+                List<EntityPlayer> ps = mc.theWorld.playerEntities;
+                for (int i = 0; i < ps.size(); i++) {
+                        EntityPlayer p = ps.get(i);
+                        loadedPlayers.put(PlebEntities.uuid(p), p);
                 }
         }
 
-        private static void stopwatch(int w, long now) {
-                StopwatchModule sw = Apollo.module(StopwatchModule.class);
+        /** Vanilla yaw that faces the point (0 = +Z south, 90 = -X west). */
+        private float bearing(double x, double z) {
+                return (float) Math.toDegrees(Math.atan2(-(x - cam.eyeX), z - cam.eyeZ));
+        }
+
+        // ==================== screen-space ====================
+
+        /**
+         * The server's vignette: screen edges darkened at the server's opacity
+         * (stronger while knocked, lighter at low health on PlebNite). The HUD is
+         * drawn into Eaglercraft's overlay buffer, which is laid over the world
+         * with premultiplied alpha, so the darkening is drawn as black with a
+         * smooth alpha falloff from the center instead of the vanilla
+         * multiply-blended texture (that would turn the whole overlay opaque).
+         */
+        private static void vignette(int w, int h, String resource, float opacity) {
+                float o = Math.max(0f, Math.min(1f, opacity));
+                if (o <= 0f) {
+                        return;
+                }
+                GlStateManager.disableTexture2D();
+                GlStateManager.disableAlpha();
+                GlStateManager.enableBlend();
+                GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+                GlStateManager.shadeModel(7425); // smooth
+                Tessellator t = Tessellator.getInstance();
+                WorldRenderer wr = t.getWorldRenderer();
+                wr.begin(7, DefaultVertexFormats.POSITION_COLOR);
+                int n = 12;
+                for (int iy = 0; iy < n; iy++) {
+                        for (int ix = 0; ix < n; ix++) {
+                                vig(wr, w, h, n, ix, iy + 1, o);
+                                vig(wr, w, h, n, ix + 1, iy + 1, o);
+                                vig(wr, w, h, n, ix + 1, iy, o);
+                                vig(wr, w, h, n, ix, iy, o);
+                        }
+                }
+                t.draw();
+                GlStateManager.shadeModel(7424);
+                GlStateManager.enableAlpha();
+                GlStateManager.enableTexture2D();
+                GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+        }
+
+        private static void vig(WorldRenderer wr, int w, int h, int n, int ix, int iy, float o) {
+                double nx = ix * 2.0 / n - 1.0;
+                double ny = iy * 2.0 / n - 1.0;
+                // elliptical distance from the center: 0 at the middle, 1 at the edge midpoints
+                double d = Math.sqrt(nx * nx + ny * ny);
+                double k = Math.max(0.0, Math.min(1.0, (d - 0.45) / 0.85));
+                float a = (float) (o * k * (0.6 + 0.4 * k) * 1.15);
+                wr.pos(w * ix / (double) n, h * iy / (double) n, -90.0D).color(0f, 0f, 0f, Math.min(0.95f, a)).endVertex();
+        }
+
+        /** Match timer: top center, under the compass when it's there. */
+        private static void stopwatch(int w, int h, long now) {
+                StopwatchModule sw = stopwatchM;
                 if (sw == null || !sw.isEnabled() || !sw.isShown()) {
                         return;
                 }
                 String s = StopwatchModule.format(sw.elapsedMs(now));
                 int tw = Draw.width(s);
-                Draw.fill(w / 2f - tw / 2f - 3, 3, tw + 6, 12, 0x6F000000);
-                Draw.text(s, w / 2f - tw / 2f, 5, sw.isRunning() ? 0xFFFFFFFF : 0xFFFFFF55, true);
+                Mods.Compass compass = PlebClient.mods().compass;
+                float y = 22;
+                if (compass.isActive() && compass.fy() < 0.25f) {
+                        int[] cp = net.plebmc.client.mods.ModRegistry.place(compass, Mods.Compass.WIDTH, Mods.Compass.HEIGHT,
+                                        w, h);
+                        y = cp[1] + Mods.Compass.HEIGHT + 3;
+                }
+                float x = w / 2f - (tw + 14) / 2f;
+                Draw.fill(x, y, tw + 14, 13, 0x80000000);
+                // a little stopwatch glyph
+                int c = sw.isRunning() ? 0xFFFFFFFF : 0xFFFFFF55;
+                Draw.fill(x + 3, y + 4, 6, 6, 0xFF555555);
+                Draw.fill(x + 4, y + 5, 4, 4, c);
+                Draw.fill(x + 5, y + 2, 2, 2, 0xFF555555);
+                Draw.fill(x + 6, y + 6, 1, 2, 0xFF000000);
+                Draw.text(s, x + 12, y + 3, c, true);
         }
 
-        private static void cooldowns(int w, int h, long now) {
-                CooldownModule cd = Apollo.module(CooldownModule.class);
-                if (cd == null || !cd.isEnabled()) {
+        /**
+         * Cooldown icons above the hotbar: the item, a dark sweep that unwinds
+         * clockwise as the cooldown runs out, and the seconds left.
+         */
+        private static void cooldowns(Minecraft mc, int w, int h, long now) {
+                CooldownModule cd = cooldownM;
+                if (cd == null || !cd.isEnabled() || cd.size() == 0) {
                         return;
                 }
                 List<CooldownModule.Cooldown> list = cd.active();
-                int size = 24;
-                int gap = 4;
+                int size = 20;
+                int gap = 3;
                 int total = list.size() * (size + gap) - gap;
                 int x = w / 2 - total / 2;
                 int y = h - 22 - 18 - size - 6;
-                for (CooldownModule.Cooldown c : list) {
+                if (mc.thePlayer != null && !mc.playerController.shouldDrawHUD()) {
+                        y += 18;
+                }
+                for (int i = 0; i < list.size(); i++) {
+                        CooldownModule.Cooldown c = list.get(i);
                         float f = c.fraction(now);
-                        Draw.fill(x, y, size, size, 0x80000000);
-                        int fh = Math.round(size * f);
-                        Draw.fill(x, y + size - fh, size, fh, 0x80FF5555);
-                        String label = c.icon.isEmpty() ? c.name : c.icon;
-                        label = label.substring(0, Math.min(3, label.length()));
-                        Draw.text(label, x + 2, y + 2, 0xFFAAAAAA, true);
+                        Draw.fill(x, y, size, size, 0x90000000);
+                        ItemStack icon = ItemIcons.forCooldown(c.icon, c.name);
+                        if (icon != null) {
+                                try {
+                                        GlStateManager.enableRescaleNormal();
+                                        RenderHelper.enableGUIStandardItemLighting();
+                                        mc.getRenderItem().renderItemAndEffectIntoGUI(icon, x + 2, y + 2);
+                                        RenderHelper.disableStandardItemLighting();
+                                        GlStateManager.disableRescaleNormal();
+                                        GlStateManager.disableLighting();
+                                        GlStateManager.enableBlend();
+                                } catch (Throwable t) {
+                                        icon = null;
+                                }
+                        }
+                        if (icon == null) {
+                                String label = c.name.isEmpty() ? "?" : c.name.substring(0, Math.min(3, c.name.length()));
+                                Draw.text(label, x + size / 2f - Draw.width(label) / 2f, y + 3, 0xFFAAAAAA, true);
+                        }
+                        sweep(x + size / 2f, y + size / 2f, size / 2f, f, 0x9A000000);
                         long ms = c.remaining(now);
-                        String t = ms >= 10000 ? (ms / 1000) + "s" : (ms / 1000) + "." + (ms % 1000 / 100) + "s";
+                        String t = ms >= 10000 ? (ms / 1000) + "s" : (ms / 1000) + "." + (ms % 1000 / 100);
                         int tw = Draw.width(t);
-                        Draw.text(t, x + size / 2f - tw / 2f, y + size - 10, 0xFFFFFFFF, true);
+                        GlStateManager.pushMatrix();
+                        GlStateManager.translate(0f, 0f, 200f);
+                        Draw.text(t, x + size - tw - 1 + 0.5f, y + size - 8, ms < 1000 ? 0xFF55FF55 : 0xFFFFFFFF, true);
+                        GlStateManager.popMatrix();
                         x += size + gap;
                 }
         }
 
+        /** A filled pie of {@code fraction} of a square, starting at 12 o'clock going clockwise. */
+        private static void sweep(float cx, float cy, float r, float fraction, int argb) {
+                if (fraction <= 0f) {
+                        return;
+                }
+                float a = ((argb >>> 24) & 0xFF) / 255f;
+                float rr = ((argb >> 16) & 0xFF) / 255f;
+                float gg = ((argb >> 8) & 0xFF) / 255f;
+                float bb = (argb & 0xFF) / 255f;
+                GlStateManager.pushMatrix();
+                GlStateManager.translate(0f, 0f, 150f);
+                GlStateManager.disableTexture2D();
+                GlStateManager.enableBlend();
+                GlStateManager.disableAlpha();
+                GlStateManager.tryBlendFuncSeparate(770, 771, 0, 1);
+                Tessellator t = Tessellator.getInstance();
+                WorldRenderer wr = t.getWorldRenderer();
+                wr.begin(7, DefaultVertexFormats.POSITION_COLOR);
+                int steps = Math.max(1, Math.round(48 * Math.min(1f, fraction)));
+                double end = Math.PI * 2 * Math.min(1f, fraction);
+                double rad = r * 1.4142;
+                for (int i = 0; i < steps; i++) {
+                        double a0 = end * i / steps - Math.PI / 2;
+                        double a1 = end * (i + 1) / steps - Math.PI / 2;
+                        float x0 = clampSq(cx + Math.cos(a0) * rad, cx, r);
+                        float y0 = clampSq(cy + Math.sin(a0) * rad, cy, r);
+                        float x1 = clampSq(cx + Math.cos(a1) * rad, cx, r);
+                        float y1 = clampSq(cy + Math.sin(a1) * rad, cy, r);
+                        wr.pos(cx, cy, 0).color(rr, gg, bb, a).endVertex();
+                        wr.pos(x0, y0, 0).color(rr, gg, bb, a).endVertex();
+                        wr.pos(x1, y1, 0).color(rr, gg, bb, a).endVertex();
+                        wr.pos(x1, y1, 0).color(rr, gg, bb, a).endVertex();
+                }
+                t.draw();
+                GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+                GlStateManager.enableAlpha();
+                GlStateManager.enableTexture2D();
+                GlStateManager.popMatrix();
+        }
+
+        private static float clampSq(double v, float c, float r) {
+                return (float) Math.max(c - r, Math.min(c + r, v));
+        }
+
         private static void liveChat(int h) {
-                ChatModule chat = Apollo.module(ChatModule.class);
+                ChatModule chat = chatM;
                 if (chat == null || !chat.isEnabled()) {
                         return;
                 }
@@ -126,7 +315,7 @@ final class ApolloOverlay {
         }
 
         private static void titles(int w, int h, long now) {
-                TitleModule tm = Apollo.module(TitleModule.class);
+                TitleModule tm = titleM;
                 if (tm == null || !tm.isEnabled()) {
                         return;
                 }
@@ -141,29 +330,40 @@ final class ApolloOverlay {
                 }
         }
 
+        /** Pop-ups, top right: slide in, accent bar in the title's color, a bar that runs down with the time left. */
         private static void notifications(int w, long now) {
-                NotificationModule nm = Apollo.module(NotificationModule.class);
-                if (nm == null || !nm.isEnabled()) {
+                NotificationModule nm = notificationM;
+                if (nm == null || !nm.isEnabled() || nm.size() == 0) {
                         return;
                 }
                 int y = 4;
-                int bw = 170;
+                int bw = 172;
                 for (NotificationModule.Notification n : nm.active()) {
                         float v = n.visibility(now);
                         if (v <= 0f) {
                                 continue;
                         }
-                        List<String> desc = Draw.wrap(ApolloText.plain(n.description), bw - 8);
-                        int bh = 16 + desc.size() * 10;
-                        float x = w - 4 - bw * v;
-                        Draw.fill(x, y, bw, bh, Draw.alpha(0xD0101018, v));
-                        Draw.fill(x, y, 2, bh, Draw.alpha(0xFF55FFFF, v));
-                        Draw.runs(n.title, x + 6, y + 4, v, true);
-                        int ly = y + 15;
+                        List<String> desc = Draw.wrap(ApolloText.plain(n.description), bw - 12);
+                        if (desc.size() > 4) {
+                                desc = desc.subList(0, 4);
+                        }
+                        int bh = 17 + desc.size() * 10 + 3;
+                        float ease = 1f - (1f - v) * (1f - v);
+                        float x = w - 4 - bw * ease;
+                        int accent = n.title.isEmpty() ? 0xFF55FFFF : (n.title.get(0).argb | 0xFF000000);
+                        if (accent == 0xFFFFFFFF) {
+                                accent = 0xFF55FFFF;
+                        }
+                        Draw.fill(x, y, bw, bh, Draw.alpha(0xE0101018, v));
+                        Draw.fill(x, y, 2, bh, Draw.alpha(accent, v));
+                        Draw.runs(n.title, x + 7, y + 5, v, true);
+                        int ly = y + 17;
                         for (String line : desc) {
-                                Draw.text(line, x + 6, ly, Draw.alpha(0xFFCCCCCC, v), false);
+                                Draw.text(line, x + 7, ly, Draw.alpha(0xFFCCCCCC, v), false);
                                 ly += 10;
                         }
+                        float left = n.durationMs <= 0 ? 0f : Math.max(0f, Math.min(1f, (n.start + n.durationMs - now) / (float) n.durationMs));
+                        Draw.fill(x + 2, y + bh - 1, (bw - 2) * left, 1, Draw.alpha(accent, v * 0.8f));
                         y += bh + 4;
                 }
         }
@@ -171,16 +371,16 @@ final class ApolloOverlay {
         // ==================== world-anchored ====================
 
         private void beams() {
-                BeamModule bm = Apollo.module(BeamModule.class);
+                BeamModule bm = beamM;
                 if (bm == null || !bm.isEnabled()) {
                         return;
                 }
                 for (BeamModule.Beam b : bm.all()) {
-                        beam(b.pos.x, b.pos.y, b.pos.z, b.argb);
+                        beam(b.pos.x + 0.5, b.pos.y, b.pos.z + 0.5, b.argb);
                 }
         }
 
-        /** A vertical beam from the block up to the build limit, as a projected column. */
+        /** HUD fallback beam (shaders on): a projected column from the block up. */
         private void beam(double x, double y, double z, int argb) {
                 if (!cam.project(x, y, z)) {
                         return;
@@ -197,29 +397,64 @@ final class ApolloOverlay {
                 Draw.fill(bx - width / 2f, top, width, bottom - top, Draw.alpha(argb, 0.45f));
         }
 
-        private void waypoints() {
-                WaypointModule wm = Apollo.module(WaypointModule.class);
+        /**
+         * Waypoint labels (name + distance + a diamond) at the waypoint; the sky
+         * beam itself is drawn in the world. Every waypoint also goes on the compass.
+         */
+        private void waypoints(boolean hudBeams) {
+                WaypointModule wm = waypointM;
                 if (wm == null || !wm.isEnabled()) {
                         return;
                 }
-                for (WaypointModule.Waypoint wp : wm.visible("")) {
-                        beam(wp.pos.x, wp.pos.y, wp.pos.z, wp.argb);
-                        if (!cam.project(wp.pos.x, wp.pos.y + 1.5, wp.pos.z)) {
+                List<WaypointModule.Waypoint> list = wm.visible("");
+                for (int i = 0; i < list.size(); i++) {
+                        WaypointModule.Waypoint wp = list.get(i);
+                        double px = wp.pos.x + 0.5;
+                        double pz = wp.pos.z + 0.5;
+                        int dist = (int) Math.round(cam.distance(px, wp.pos.y, pz));
+                        compassMarkers.add(new Mods.Compass.Marker(bearing(px, pz), wp.argb, wp.name, dist, true));
+                        if (hudBeams) {
+                                beam(px, wp.pos.y, pz, wp.argb);
+                        }
+                        if (!cam.project(px, wp.pos.y + 1.2, pz)) {
                                 continue;
                         }
-                        int dist = (int) Math.round(cam.distance(wp.pos.x, wp.pos.y, wp.pos.z));
-                        String label = wp.name + " [" + dist + "m]";
+                        String label = wp.name + " \u00a77" + dist + "m";
                         int lw = Draw.width(label);
                         float lx = cam.sx - lw / 2f;
-                        float ly = cam.sy - 14;
-                        Draw.fill(lx - 2, ly - 1, lw + 4, 10, 0x80000000);
+                        float ly = cam.sy - 16;
+                        Draw.fill(lx - 3, ly - 2, lw + 6, 11, 0x90000000);
+                        Draw.fill(lx - 3, ly + 9, lw + 6, 1, wp.argb | 0xFF000000);
                         Draw.text(label, lx, ly, 0xFFFFFFFF, true);
-                        Draw.fill(cam.sx - 3, cam.sy - 3, 6, 6, wp.argb);
+                        diamond(cam.sx, cam.sy - 2, 3, wp.argb | 0xFF000000);
+                }
+        }
+
+        /** Compass entries for waypoints when the HUD camera is unavailable (third person). */
+        private void waypointMarkers() {
+                WaypointModule wm = waypointM;
+                if (wm == null || !wm.isEnabled()) {
+                        return;
+                }
+                List<WaypointModule.Waypoint> list = wm.visible("");
+                for (int i = 0; i < list.size(); i++) {
+                        WaypointModule.Waypoint wp = list.get(i);
+                        double px = wp.pos.x + 0.5;
+                        double pz = wp.pos.z + 0.5;
+                        compassMarkers.add(new Mods.Compass.Marker(bearing(px, pz), wp.argb, wp.name,
+                                        (int) Math.round(cam.distance(px, wp.pos.y, pz)), true));
+                }
+        }
+
+        private static void diamond(float cx, float cy, int r, int argb) {
+                for (int i = -r; i <= r; i++) {
+                        int half = r - Math.abs(i);
+                        Draw.fill(cx - half, cy + i, half * 2 + 1, 1, argb);
                 }
         }
 
         private void holograms() {
-                HologramModule hm = Apollo.module(HologramModule.class);
+                HologramModule hm = hologramM;
                 if (hm == null || !hm.isEnabled()) {
                         return;
                 }
@@ -239,26 +474,63 @@ final class ApolloOverlay {
                 }
         }
 
-        private void team() {
-                TeamModule tm = Apollo.module(TeamModule.class);
-                if (tm == null || !tm.isEnabled()) {
+        /**
+         * Teammate markers: a chevron in the teammate's marker color above them
+         * (through walls), with their name and distance when they're out of
+         * render range; every teammate also goes on the compass.
+         */
+        private void team(Minecraft mc, boolean draw) {
+                TeamModule tm = teamM;
+                if (tm == null || !tm.isEnabled() || tm.size() == 0) {
                         return;
                 }
+                String self = mc.thePlayer == null ? "" : PlebEntities.uuid(mc.thePlayer);
                 for (TeamModule.Member m : tm.members()) {
-                        if (!m.hasPos || !cam.project(m.pos.x, m.pos.y + 2.3, m.pos.z)) {
+                        if (m.uuid.equals(self)) {
                                 continue;
                         }
-                        // marker: a small colored down-pointing chevron
-                        for (int i = 0; i < 4; i++) {
-                                Draw.fill(cam.sx - 4 + i, cam.sy - 6 + i, 8 - 2 * i, 1, m.argb);
+                        EntityPlayer e = loadedPlayers.get(m.uuid);
+                        double x;
+                        double y;
+                        double z;
+                        if (e != null && !e.isDead) {
+                                float pt = partialTicks;
+                                x = e.lastTickPosX + (e.posX - e.lastTickPosX) * pt;
+                                y = e.lastTickPosY + (e.posY - e.lastTickPosY) * pt + e.height + 0.75;
+                                z = e.lastTickPosZ + (e.posZ - e.lastTickPosZ) * pt;
+                        } else if (m.hasPos) {
+                                x = m.pos.x;
+                                y = m.pos.y + 2.55;
+                                z = m.pos.z;
+                        } else {
+                                continue;
                         }
-                        int lw = Draw.width(m.name);
-                        Draw.runs(m.name, cam.sx - lw / 2f, cam.sy - 16, 1f, true);
+                        int dist = (int) Math.round(cam.distance(x, y, z));
+                        compassMarkers.add(new Mods.Compass.Marker(bearing(x, z), m.argb, ApolloText.plain(m.name), dist, false));
+                        if (!draw || !cam.project(x, y, z) || cam.sx < -8 || cam.sy < -8 || cam.sx > cam.guiW() + 8
+                                        || cam.sy > cam.guiH() + 8) {
+                                continue;
+                        }
+                        int c = m.argb | 0xFF000000;
+                        // chevron with a dark rim
+                        for (int i = 0; i < 5; i++) {
+                                Draw.fill(cam.sx - 6 + i, cam.sy - 7 + i, 12 - 2 * i + 1, 1, 0xA0000000);
+                        }
+                        for (int i = 0; i < 4; i++) {
+                                Draw.fill(cam.sx - 4 + i, cam.sy - 6 + i, 8 - 2 * i + 1, 1, c);
+                        }
+                        if (e == null) {
+                                String d = dist + "m";
+                                int nw = Draw.width(m.name);
+                                int dw = Draw.width(d);
+                                Draw.runs(m.name, cam.sx - nw / 2f, cam.sy - 18, 1f, true);
+                                Draw.text(d, cam.sx - dw / 2f, cam.sy - 27, 0xFFAAAAAA, true);
+                        }
                 }
         }
 
         private void border(int w, int h) {
-                BorderModule bm = Apollo.module(BorderModule.class);
+                BorderModule bm = borderM;
                 if (bm == null || !bm.isEnabled()) {
                         return;
                 }

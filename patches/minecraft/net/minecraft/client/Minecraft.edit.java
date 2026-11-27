@@ -1,6 +1,6 @@
 
 # Eagler Context Redacted Diff
-# Copyright (c) 2024 lax1dude. All rights reserved.
+# Copyright (c) 2026 lax1dude. All rights reserved.
 
 # Version: 1.0
 # Author: lax1dude
@@ -353,7 +353,12 @@
 + 		GlStateManager.recompileShaders();
 + 
 
-> CHANGE  14 : 16  @  14 : 15
+> INSERT  11 : 13  @  11
+
++ 		arraylist = (ArrayList) new ArrayList(net.plebmc.client.itemrender.PlebItems.onReload(arraylist));
++ 
+
+> CHANGE  3 : 5  @  3 : 4
 
 ~ 			logger.info("Caught error stitching, removing all assigned resourcepacks");
 ~ 			logger.info(runtimeexception);
@@ -516,14 +521,17 @@
 
 > DELETE  1  @  1 : 3
 
-> CHANGE  6 : 7  @  6 : 7
+> CHANGE  6 : 15  @  6 : 16
 
-~ 			this.debug = HString.format("%d fps (%d chunk update%s) T: %s%s%s%s",
-
-> CHANGE  5 : 7  @  5 : 9
-
-~ 							this.gameSettings.fancyGraphics ? "" : " fast", this.gameSettings.clouds == 0 ? ""
-~ 									: (this.gameSettings.clouds == 1 ? " fast-clouds" : " fancy-clouds") });
+~ 			this.debug = net.plebmc.client.hud.PlebClient
+~ 					.larpDebug(HString.format("%d fps (%d chunk update%s) T: %s%s%s%s",
+~ 							new Object[] { Integer.valueOf(debugFPS), Integer.valueOf(RenderChunk.renderChunksUpdated),
+~ 									RenderChunk.renderChunksUpdated != 1 ? "s" : "",
+~ 									(float) this.gameSettings.limitFramerate == GameSettings.Options.FRAMERATE_LIMIT
+~ 											.getValueMax() ? "inf" : Integer.valueOf(this.gameSettings.limitFramerate),
+~ 									this.gameSettings.enableVsync ? " vsync" : "",
+~ 									this.gameSettings.fancyGraphics ? "" : " fast", this.gameSettings.clouds == 0 ? ""
+~ 											: (this.gameSettings.clouds == 1 ? " fast-clouds" : " fancy-clouds") }));
 
 > DELETE  3  @  3 : 7
 
@@ -647,7 +655,7 @@
 > CHANGE  25 : 28  @  25 : 26
 
 ~ 						if (this.isZoomKey) {
-~ 							this.adjustedZoomValue = MathHelper.clamp_float(adjustedZoomValue - j * 4.0f, 5.0f, 32.0f);
+~ 							this.adjustedZoomValue = net.plebmc.client.hud.PlebClient.zoomScroll(adjustedZoomValue, j);
 ~ 						} else if (this.thePlayer.isSpectator()) {
 
 > CHANGE  14 : 16  @  14 : 15
@@ -695,7 +703,7 @@
 
 + 			boolean zoomKey = this.gameSettings.keyBindZoomCamera.isKeyDown();
 + 			if (zoomKey != isZoomKey) {
-+ 				adjustedZoomValue = startZoomValue;
++ 				adjustedZoomValue = net.plebmc.client.hud.PlebClient.zoomStart(startZoomValue);
 + 				isZoomKey = zoomKey;
 + 			}
 + 

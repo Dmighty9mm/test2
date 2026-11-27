@@ -21,4 +21,13 @@
 
 ~ 	protected void actionPerformed(GuiButton parGuiButton) {
 
+> INSERT  50 : 56  @  50
+
++ 				if (net.plebmc.client.hud.PlebTheme.enabled()) {
++ 					net.plebmc.client.hud.PlebTheme.sliderKnob(this,
++ 							this.xPosition + (int) (this.field_146156_o * (float) (this.width - 8)),
++ 							this.field_146155_p);
++ 					return;
++ 				}
+
 > EOF

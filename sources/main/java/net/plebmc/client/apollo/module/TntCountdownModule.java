@@ -40,6 +40,11 @@ public final class TntCountdownModule extends ApolloModule {
                 });
         }
 
+        /** True when the server set this TNT's fuse. */
+        public boolean hasFuse(int entityId) {
+                return fuses.containsKey(entityId);
+        }
+
         public int defaultFuseTicks() {
                 return (int) Math.max(0, Math.min(72000, numberProperty("tnt-ticks", 80)));
         }

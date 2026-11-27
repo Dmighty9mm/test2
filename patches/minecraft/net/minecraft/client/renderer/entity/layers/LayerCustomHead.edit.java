@@ -1,6 +1,6 @@
 
 # Eagler Context Redacted Diff
-# Copyright (c) 2024 lax1dude. All rights reserved.
+# Copyright (c) 2026 lax1dude. All rights reserved.
 
 # Version: 1.0
 # Author: lax1dude
@@ -16,7 +16,11 @@
 
 > DELETE  1  @  1 : 2
 
-> CHANGE  69 : 70  @  69 : 70
+> CHANGE  43 : 44  @  43 : 44
+
+~ 			if (item instanceof ItemBlock || net.plebmc.client.itemrender.PlebItems.customHat(itemstack)) {
+
+> CHANGE  25 : 26  @  25 : 26
 
 ~ 							gameprofile = TileEntitySkull.updateGameprofile(new GameProfile((EaglercraftUUID) null, s));
 

@@ -17,6 +17,9 @@ import net.minecraft.potion.Potion;
 import net.minecraft.potion.PotionEffect;
 import net.plebmc.client.mods.ClickCounter;
 import net.plebmc.client.mods.ClientView;
+import net.plebmc.client.mods.Gear;
+import net.plebmc.client.mods.Mate;
+import net.plebmc.client.mods.Storm;
 
 /** {@link ClientView} over the running 1.8 client. */
 final class GameView implements ClientView {
@@ -58,6 +61,12 @@ final class GameView implements ClientView {
 
 	@Override
 	public float yaw() {
+		// the camera's yaw for this very frame (what you see), not the last tick's
+		net.minecraft.entity.Entity cam = mc.getRenderViewEntity();
+		if (cam != null) {
+			float pt = PlebClient.framePartialTicks;
+			return cam.prevRotationYaw + (cam.rotationYaw - cam.prevRotationYaw) * pt;
+		}
 		EntityPlayerSP p = player();
 		return p == null ? 0 : p.rotationYaw;
 	}
@@ -113,22 +122,179 @@ final class GameView implements ClientView {
 		return clicks.cps(button, System.currentTimeMillis());
 	}
 
+	/** The registry name without "minecraft:" ("diamond_helmet"). */
+	static String itemId(ItemStack s) {
+		try {
+			Object rl = net.minecraft.item.Item.itemRegistry.getNameForObject(s.getItem());
+			if (rl instanceof net.minecraft.util.ResourceLocation) {
+				return ((net.minecraft.util.ResourceLocation) rl).getResourcePath();
+			}
+			return rl == null ? "" : String.valueOf(rl);
+		} catch (Throwable t) {
+			return "";
+		}
+	}
+
+	static Gear gear(ItemStack s) {
+		if (s == null || s.getItem() == null) {
+			return null;
+		}
+		boolean dmg = s.isItemStackDamageable();
+		return new Gear(s, itemId(s), s.getDisplayName(), s.stackSize, dmg ? s.getMaxDamage() - s.getItemDamage() : 0,
+				dmg ? s.getMaxDamage() : 0);
+	}
+
 	@Override
-	public List<String> armor() {
+	public List<Gear> armor() {
 		EntityPlayerSP p = player();
 		if (p == null) {
 			return Collections.emptyList();
 		}
-		List<String> out = new ArrayList<>(4);
+		List<Gear> out = new ArrayList<>(4);
 		for (int slot = 3; slot >= 0; slot--) {
-			ItemStack s = p.inventory.armorItemInSlot(slot);
-			if (s == null) {
-				out.add("");
-			} else if (s.isItemStackDamageable()) {
-				out.add(s.getDisplayName() + " " + (s.getMaxDamage() - s.getItemDamage()) + "/" + s.getMaxDamage());
-			} else {
-				out.add(s.getDisplayName());
+			out.add(gear(p.inventory.armorItemInSlot(slot)));
+		}
+		return out;
+	}
+
+	@Override
+	public Gear held() {
+		EntityPlayerSP p = player();
+		return p == null ? null : gear(p.getHeldItem());
+	}
+
+	@Override
+	public float health() {
+		EntityPlayerSP p = player();
+		return p == null || mc.playerController == null || !mc.playerController.gameIsSurvivalOrAdventure() ? -1f
+				: p.getHealth();
+	}
+
+	@Override
+	public float maxHealth() {
+		EntityPlayerSP p = player();
+		return p == null ? 20f : p.getMaxHealth();
+	}
+
+	@Override
+	public float absorption() {
+		EntityPlayerSP p = player();
+		return p == null ? 0f : p.getAbsorptionAmount();
+	}
+
+	private long suppliesAt = -1;
+	private final java.util.Map<String, Integer> supplies = new java.util.HashMap<>();
+
+	@Override
+	public int supply(String group) {
+		EntityPlayerSP p = player();
+		if (p == null) {
+			return 0;
+		}
+		long now = System.currentTimeMillis();
+		if (now - suppliesAt > 250L || now < suppliesAt) {
+			// count once a few times a second, not once per group per frame
+			suppliesAt = now;
+			supplies.clear();
+			ItemStack[] inv = p.inventory.mainInventory;
+			for (int i = 0; i < inv.length; i++) {
+				ItemStack s = inv[i];
+				if (s == null || s.getItem() == null) {
+					continue;
+				}
+				String g = group(s);
+				if (g != null) {
+					Integer n = supplies.get(g);
+					supplies.put(g, (n == null ? 0 : n) + s.stackSize);
+				}
 			}
+		}
+		Integer n = supplies.get(group);
+		return n == null ? 0 : n;
+	}
+
+	private static String group(ItemStack s) {
+		net.minecraft.item.Item it = s.getItem();
+		if (it == net.minecraft.init.Items.arrow) {
+			return "arrows";
+		}
+		if (it == net.minecraft.init.Items.golden_apple) {
+			return "gapples";
+		}
+		if (it == net.minecraft.init.Items.ender_pearl) {
+			return "pearls";
+		}
+		if (it == net.minecraft.init.Items.potionitem) {
+			return "potions";
+		}
+		if (it instanceof net.minecraft.item.ItemBlock) {
+			net.minecraft.block.Block b = ((net.minecraft.item.ItemBlock) it).getBlock();
+			if (b == net.minecraft.init.Blocks.tnt) {
+				return "tnt";
+			}
+			// solid blocks you can build with (not torches, flowers, rails...)
+			return b.isFullBlock() || b.getMaterial().isSolid() && b.isOpaqueCube() ? "blocks" : null;
+		}
+		return null;
+	}
+
+	@Override
+	public Storm storm() {
+		EntityPlayerSP p = player();
+		if (p == null || mc.theWorld == null) {
+			return null;
+		}
+		net.minecraft.world.border.WorldBorder wb = mc.theWorld.getWorldBorder();
+		if (wb == null || wb.getDiameter() >= Storm.NO_STORM) {
+			return null;
+		}
+		return new Storm(wb.getCenterX(), wb.getCenterZ(), wb.getDiameter(), wb.getTargetSize(),
+				wb.getStatus() == net.minecraft.world.border.EnumBorderStatus.STATIONARY ? 0L : wb.getTimeUntilTarget(),
+				wb.getClosestDistance(p.posX, p.posZ));
+	}
+
+	@Override
+	public List<Mate> squad() {
+		EntityPlayerSP p = player();
+		net.plebmc.client.apollo.module.TeamModule tm = net.plebmc.client.apollo.Apollo
+				.module(net.plebmc.client.apollo.module.TeamModule.class);
+		if (p == null || mc.theWorld == null || tm == null || !tm.isEnabled() || tm.size() == 0) {
+			return Collections.emptyList();
+		}
+		String self = PlebEntities.uuid(p);
+		List<Mate> out = new ArrayList<>();
+		java.util.Map<String, net.minecraft.entity.player.EntityPlayer> loaded = null;
+		for (net.plebmc.client.apollo.module.TeamModule.Member m : tm.members()) {
+			if (m.uuid.equals(self)) {
+				continue;
+			}
+			if (loaded == null) {
+				loaded = new java.util.HashMap<>();
+				for (net.minecraft.entity.player.EntityPlayer e : mc.theWorld.playerEntities) {
+					loaded.put(PlebEntities.uuid(e), e);
+				}
+			}
+			net.minecraft.entity.player.EntityPlayer e = loaded.get(m.uuid);
+			double x, z, y;
+			float hp = -1f, max = 20f;
+			if (e != null && !e.isDead) {
+				x = e.posX;
+				y = e.posY;
+				z = e.posZ;
+				hp = e.getHealth();
+				max = e.getMaxHealth();
+			} else if (m.hasPos) {
+				x = m.pos.x;
+				y = m.pos.y;
+				z = m.pos.z;
+			} else {
+				out.add(new Mate(net.plebmc.client.apollo.ApolloText.plain(m.name), m.argb, -1, -1f, 20f, Float.NaN));
+				continue;
+			}
+			double dx = x - p.posX, dy = y - p.posY, dz = z - p.posZ;
+			int dist = (int) Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz));
+			out.add(new Mate(net.plebmc.client.apollo.ApolloText.plain(m.name), m.argb, dist, hp, max,
+					(float) Math.toDegrees(Math.atan2(-dx, dz))));
 		}
 		return out;
 	}
@@ -139,7 +305,7 @@ final class GameView implements ClientView {
 		if (p == null) {
 			return Collections.emptyList();
 		}
-		Collection<PotionEffect> active = p.getActivePotionEffects();
+		Collection<PotionEffect> active = p.getActivePotionEffectsList();
 		List<String> out = new ArrayList<>(active.size());
 		for (PotionEffect e : active) {
 			Potion potion = Potion.potionTypes[e.getPotionID()];
@@ -156,5 +322,48 @@ final class GameView implements ClientView {
 			out.add(name + " " + Potion.getDurationString(e));
 		}
 		return out;
+	}
+
+	@Override
+	public long worldTime() {
+		return mc.theWorld == null ? -1 : mc.theWorld.getWorldTime();
+	}
+
+	@Override
+	public String biome() {
+		EntityPlayerSP p = player();
+		if (p == null || mc.theWorld == null) {
+			return null;
+		}
+		try {
+			return mc.theWorld.getBiomeGenForCoords(new net.minecraft.util.BlockPos(p)).biomeName;
+		} catch (Throwable t) {
+			return null;
+		}
+	}
+
+	@Override
+	public String server() {
+		if (mc.theWorld == null) {
+			return null;
+		}
+		if (mc.isSingleplayer()) {
+			return "Singleplayer";
+		}
+		net.minecraft.client.multiplayer.ServerData d = mc.getCurrentServerData();
+		return d == null ? "Multiplayer" : d.serverIP;
+	}
+
+	@Override
+	public int light() {
+		EntityPlayerSP p = player();
+		if (p == null || mc.theWorld == null) {
+			return -1;
+		}
+		try {
+			return mc.theWorld.getLight(new net.minecraft.util.BlockPos(p));
+		} catch (Throwable t) {
+			return -1;
+		}
 	}
 }

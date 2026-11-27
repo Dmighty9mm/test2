@@ -9,13 +9,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.AbstractClientPlayer;
 import net.minecraft.client.model.ModelBiped;
 import net.minecraft.client.model.ModelPlayer;
-import net.minecraft.client.renderer.RenderGlobal;
-import net.minecraft.client.renderer.entity.RenderManager;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.item.EntityTNTPrimed;
 import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.util.AxisAlignedBB;
 import net.plebmc.client.apollo.Apollo;
+import net.plebmc.client.cosmetics.Cosmetics;
 import net.plebmc.client.apollo.ApolloText;
 import net.plebmc.client.apollo.module.EntityModule;
 import net.plebmc.client.apollo.module.Ids;
@@ -39,7 +37,18 @@ public final class PlebEntities {
 
 	static String uuid(Entity e) {
 		EaglercraftUUID u = e.getUniqueID();
-		return u == null ? "" : Ids.uuid(u.getMostSignificantBits(), u.getLeastSignificantBits());
+		if (u == null) {
+			return "";
+		}
+		String s = uuidCache.get(u);
+		if (s == null) {
+			s = Ids.uuid(u.getMostSignificantBits(), u.getLeastSignificantBits());
+			if (uuidCache.size() > 2048) {
+				uuidCache.clear();
+			}
+			uuidCache.put(u, s);
+		}
+		return s;
 	}
 
 	// ==================== nametags ====================
@@ -57,18 +66,57 @@ public final class PlebEntities {
 		if (nm == null || !nm.isEnabled()) {
 			return null;
 		}
-		List<List<ApolloText.Run>> lines = nm.lines(uuid(e));
+		String id = uuid(e);
+		List<List<ApolloText.Run>> lines = nm.lines(id);
 		if (lines == null) {
 			return null;
+		}
+		// converted once per server update, not every frame
+		Object[] hit = tagCache.get(id);
+		if (hit != null && hit[0] == lines) {
+			@SuppressWarnings("unchecked")
+			List<String> cached = (List<String>) hit[1];
+			return cached;
 		}
 		List<String> out = new ArrayList<>(lines.size());
 		for (int i = 0; i < lines.size(); i++) {
 			out.add(legacy(lines.get(i)));
 		}
+		if (tagCache.size() > 512) {
+			tagCache.clear();
+		}
+		tagCache.put(id, new Object[] { lines, out });
 		return out;
 	}
 
+	private static final java.util.Map<String, Object[]> tagCache = new java.util.HashMap<>();
+	private static final java.util.Map<EaglercraftUUID, String> uuidCache = new java.util.HashMap<>();
+
 	/** Server rule: nametags farther than this many blocks are hidden (0 = vanilla 64). */
+	/** True when the player plays on PlebClient (the Pleb head goes by their name). */
+	public static boolean isPleb(EaglercraftUUID u) {
+		return u != null && Cosmetics.isPleb(Ids.uuid(u.getMostSignificantBits(), u.getLeastSignificantBits()));
+	}
+
+	/**
+	 * Draws the Pleb head right after a player's nametag, on the same see-through
+	 * background (in the label's own pixels; {@code half} is half the text width,
+	 * so the vanilla background ends at half + 1) when they play on PlebClient.
+	 * The tab list puts it after the name too.
+	 */
+	public static void nametagBadge(Entity e, String label, int half, int y) {
+		if (!(e instanceof net.minecraft.entity.player.EntityPlayer) || label == null
+				|| !label.contains(e.getName()) || !Cosmetics.isPleb(uuid(e))) {
+			return;
+		}
+		try {
+			Ui.rect(half + 1, y - 1, 11, 9, 0x40000000);
+			Ui.mascot(half + 2, y, 8, 1f);
+		} catch (Throwable t) {
+			// the texture isn't ready: just the name
+		}
+	}
+
 	public static double nametagRange(double vanilla) {
 		ServerRuleModule rules = Apollo.module(ServerRuleModule.class);
 		if (rules == null || !rules.isEnabled()) {
@@ -122,44 +170,23 @@ public final class PlebEntities {
 	}
 
 	/**
-	 * EntityRenderer.renderWorldPass, after entities: outlines players the
-	 * server made glow, in their glow color, visible through walls like the
-	 * vanilla glowing effect of later versions.
+	 * EntityRenderer.renderWorldPass, after entities: Apollo sky beams
+	 * (waypoints, beam module) and the glow outline around players the
+	 * server made glow, visible through walls like the glowing effect of
+	 * later versions.
 	 */
 	public static void renderGlow(float partialTicks) {
-		PlayerColorModule glow = colorModule("glow");
 		Minecraft mc = Minecraft.getMinecraft();
-		if (glow == null || glow.size() == 0 || mc.theWorld == null) {
+		if (mc.theWorld == null) {
 			return;
 		}
-		RenderManager rm = mc.getRenderManager();
-		GlStateManager.disableTexture2D();
-		GlStateManager.disableLighting();
-		GlStateManager.disableDepth();
-		GlStateManager.enableBlend();
-		GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
-		GlStateManager.depthMask(false);
-		List<EntityPlayer> players = mc.theWorld.playerEntities;
-		for (int i = 0; i < players.size(); i++) {
-			EntityPlayer p = players.get(i);
-			if (p == mc.getRenderViewEntity() && mc.gameSettings.thirdPersonView == 0) {
-				continue;
-			}
-			int c = glow.color(uuid(p));
-			if (c == 0 || p.isInvisible()) {
-				continue;
-			}
-			double x = p.lastTickPosX + (p.posX - p.lastTickPosX) * partialTicks - rm.viewerPosX;
-			double y = p.lastTickPosY + (p.posY - p.lastTickPosY) * partialTicks - rm.viewerPosY;
-			double z = p.lastTickPosZ + (p.posZ - p.lastTickPosZ) * partialTicks - rm.viewerPosZ;
-			double hw = p.width / 2.0 + 0.05;
-			AxisAlignedBB bb = new AxisAlignedBB(x - hw, y - 0.02, z - hw, x + hw, y + p.height + 0.05, z + hw);
-			RenderGlobal.func_181563_a(bb, (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF, 255);
+		try {
+			CosmeticTrails.update(mc);
+			WorldFx.renderBeams(mc, partialTicks);
+		} catch (Throwable t) {
+			// drawing must never break the frame
 		}
-		GlStateManager.depthMask(true);
-		GlStateManager.enableDepth();
-		GlStateManager.enableTexture2D();
-		GlStateManager.disableBlend();
+		WorldFx.renderGlow(mc, colorModule("glow"), partialTicks);
 	}
 
 	// ==================== colored fire ====================
@@ -232,18 +259,45 @@ public final class PlebEntities {
 
 	// ==================== TNT countdown ====================
 
-	/** RenderTNTPrimed.doRender: the countdown label, or null when the module is off. */
+	/** Client time each primed TNT was first drawn, by entity id. */
+	private static final java.util.Map<Integer, Long> tntSeen = new java.util.HashMap<>();
+	private static long tntSweep;
+
+	/**
+	 * RenderTNTPrimed.doRender: the countdown label, or null when the module
+	 * is off. The fuse is the one the server set for this TNT (thrown TNT on
+	 * PlebNite is 40 ticks), else the module default. The entity's own fuse is
+	 * synced to it so the white flashing and swelling match the real explosion.
+	 */
 	public static String tntLabel(EntityTNTPrimed tnt) {
 		TntCountdownModule tm = Apollo.module(TntCountdownModule.class);
 		if (tm == null || !tm.isEnabled()) {
 			return null;
 		}
 		long now = Apollo.now();
-		// the client counts its fuse down from 80; that dates the spawn
-		long spawnedAt = now - Math.max(0, 80 - tnt.fuse) * 50L;
-		int ticks = tm.remainingTicks(tnt.getEntityId(), spawnedAt, now);
+		Integer id = tnt.getEntityId();
+		Long seen = tntSeen.get(id);
+		if (seen == null) {
+			// the client counts its fuse down from 80; that dates the spawn
+			seen = now - Math.max(0, 80 - tnt.fuse) * 50L;
+			if (tntSeen.size() < 4096) {
+				tntSeen.put(id, seen);
+			}
+		}
+		if (now - tntSweep > 10000L) {
+			tntSweep = now;
+			for (java.util.Iterator<Long> it = tntSeen.values().iterator(); it.hasNext();) {
+				if (now - it.next() > 60000L) {
+					it.remove();
+				}
+			}
+		}
+		int ticks = tm.remainingTicks(tnt.getEntityId(), seen, now);
+		if (tm.hasFuse(tnt.getEntityId()) || tm.defaultFuseTicks() != 80) {
+			tnt.fuse = Math.max(1, ticks);
+		}
 		float secs = ticks / 20f;
-		String color = secs > 2f ? "§a" : secs > 1f ? "§6" : "§c";
+		String color = secs > 2f ? "\u00a7a" : secs > 1f ? "\u00a76" : "\u00a7c";
 		int tenths = Math.round(secs * 10f);
 		return color + (tenths / 10) + "." + (tenths % 10) + "s";
 	}
@@ -260,5 +314,44 @@ public final class PlebEntities {
 	public static boolean rainbowSheep(Entity e) {
 		EntityModule em = Apollo.module(EntityModule.class);
 		return em != null && em.isEnabled() && em.isRainbowSheep(e.getEntityId());
+	}
+
+	// ==================== holograms ====================
+
+	/**
+	 * ArmorStandRenderer.canRenderName: newer servers' holograms (text
+	 * display entities, 1.19.4+) reach 1.8 as name-visible armor stands, one
+	 * per line. A blank line arrives with an empty name, which vanilla shows
+	 * as "Armor Stand". Hide the label when the name has no visible text.
+	 */
+	public static boolean showArmorStandName(net.minecraft.entity.item.EntityArmorStand e) {
+		if (!net.plebmc.client.mods.ClientPrefs.get().cleanHolograms) {
+			return true;
+		}
+		if (!e.hasCustomName()) {
+			return false;
+		}
+		String s = net.plebmc.client.text.RgbText.strip(e.getCustomNameTag());
+		return s != null && !s.trim().isEmpty();
+	}
+
+	/**
+	 * ArmorStandRenderer.renderModel: true when this armor stand is a
+	 * hologram line whose invisible flag got lost on the way to 1.8, so only
+	 * its text should draw. A hologram line always shows its name and holds
+	 * nothing, and it is a marker or floats (no gravity). Decorative stands
+	 * with armor or items, or without a visible name, still draw.
+	 */
+	public static boolean isHologramStand(net.minecraft.entity.item.EntityArmorStand e) {
+		if (!net.plebmc.client.mods.ClientPrefs.get().cleanHolograms || !e.getAlwaysRenderNameTag()) {
+			return false;
+		}
+		for (int i = 0; i < 5; ++i) {
+			if (e.getEquipmentInSlot(i) != null) {
+				return false;
+			}
+		}
+		// func_181026_s = isMarker (1.8.8)
+		return e.hasNoGravity() || e.func_181026_s();
 	}
 }

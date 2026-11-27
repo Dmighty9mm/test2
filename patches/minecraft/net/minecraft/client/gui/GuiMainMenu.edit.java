@@ -178,9 +178,12 @@
 + 			shouldReload = false;
 + 		}
 
-> CHANGE  6 : 7  @  6 : 7
+> CHANGE  6 : 10  @  6 : 7
 
 ~ 	protected void keyTyped(char parChar1, int parInt1) {
+~ 		if (net.plebmc.client.hud.TitleMenu.active()) {
+~ 			net.plebmc.client.hud.TitleMenu.key(this, parChar1, parInt1);
+~ 		}
 
 > CHANGE  3 : 9  @  3 : 7
 
@@ -203,7 +206,11 @@
 + 		}
 + 
 
-> CHANGE  8 : 11  @  8 : 10
+> INSERT  5 : 6  @  5
+
++ 		net.plebmc.client.hud.PlebMenu.initMainMenu(this, this.buttonList, i);
+
+> CHANGE  3 : 6  @  3 : 5
 
 ~ 		this.buttonList.add(new GuiButton(4, this.width / 2 + 2, i + 72 + 12, 98, 20,
 ~ 				I18n.format("menu.editProfile", new Object[0])));
@@ -225,7 +232,16 @@
 
 ~ 			this.field_92019_w = this.field_92021_u + (line2 ? 24 : 11);
 
-> CHANGE  10 : 23  @  10 : 12
+> INSERT  3 : 9  @  3
+
++ 		if (net.plebmc.client.hud.TitleMenu.active()) {
++ 			for (int k = 0; k < this.buttonList.size(); ++k) {
++ 				((GuiButton) this.buttonList.get(k)).visible = false;
++ 			}
++ 			net.plebmc.client.hud.TitleMenu.init(this);
++ 		}
+
+> CHANGE  7 : 20  @  7 : 9
 
 ~ 		if (EaglercraftVersion.mainMenuEnableGithubButton) {
 ~ 			this.buttonList.add(
@@ -245,9 +261,12 @@
 
 ~ 		this.buttonResetDemo.enabled = this.mc.gameSettings.hasCreatedDemoWorld;
 
-> CHANGE  2 : 3  @  2 : 3
+> CHANGE  2 : 6  @  2 : 3
 
 ~ 	protected void actionPerformed(GuiButton parGuiButton) {
+~ 		if (net.plebmc.client.hud.PlebMenu.mainMenuAction(this, parGuiButton)) {
+~ 			return;
+~ 		}
 
 > CHANGE  9 : 10  @  9 : 10
 
@@ -340,15 +359,31 @@
 ~ 			this.drawPanorama(i, j, f);
 ~ 		}
 
-> DELETE  1  @  1 : 3
+> CHANGE  1 : 6  @  1 : 3
 
-> CHANGE  7 : 12  @  7 : 8
+~ 		if (net.plebmc.client.hud.TitleMenu.active()) {
+~ 			net.plebmc.client.hud.TitleMenu.draw(this, i, j, f, this.splashText);
+~ 			this.updateCheckerOverlay.drawScreen(i, j, f);
+~ 			return;
+~ 		}
+
+> CHANGE  3 : 8  @  3 : 5
+
+~ 		boolean plebTitle = net.plebmc.client.hud.PlebTheme.enabled();
+~ 		if (!plebTitle) {
+~ 			this.drawGradientRect(0, 0, this.width, this.height, -2130706433, 16777215);
+~ 			this.drawGradientRect(0, 0, this.width, this.height, 0, Integer.MIN_VALUE);
+~ 		}
+
+> CHANGE  2 : 9  @  2 : 3
 
 ~ 		boolean minc = (double) this.updateCounter < 1.0E-4D;
 ~ 		if (this.isDefault) {
 ~ 			minc = !minc;
 ~ 		}
-~ 		if (minc) {
+~ 		if (plebTitle && net.plebmc.client.hud.PlebTheme.mainMenuTitle(this, b0)) {
+~ 			// PlebClient wordmark instead of the Minecraft logo
+~ 		} else if (minc) {
 
 > CHANGE  4 : 5  @  4 : 5
 
@@ -370,8 +405,13 @@
 + 		}
 + 
 
-> CHANGE  2 : 3  @  2 : 3
+> CHANGE  1 : 7  @  1 : 3
 
+~ 		if (plebTitle) {
+~ 			net.plebmc.client.hud.PlebTheme.splashTranslate(this);
+~ 		} else {
+~ 			GlStateManager.translate((float) (this.width / 2 + 90), 70.0F, 0.0F);
+~ 		}
 ~ 		GlStateManager.rotate(isForkLabel ? -12.0F : -20.0F, 0.0F, 0.0F, 1.0F);
 
 > INSERT  3 : 6  @  3
@@ -480,9 +520,13 @@
 + 
 + 		this.updateCheckerOverlay.drawScreen(i, j, f);
 
-> CHANGE  3 : 15  @  3 : 11
+> CHANGE  3 : 19  @  3 : 11
 
 ~ 	protected void mouseClicked(int par1, int par2, int par3) {
+~ 		if (net.plebmc.client.hud.TitleMenu.active()) {
+~ 			net.plebmc.client.hud.TitleMenu.click(this, par1, par2, par3);
+~ 			return;
+~ 		}
 ~ 		if (par3 == 0) {
 ~ 			String lbl = "CREDITS.txt";
 ~ 			int w = fontRendererObj.getStringWidth(lbl) * 3 / 4;

@@ -9,6 +9,9 @@ import java.util.Map;
 import net.plebmc.client.apollo.Apollo;
 import net.plebmc.client.mods.ClickCounter;
 import net.plebmc.client.mods.ClientView;
+import net.plebmc.client.mods.Gear;
+import net.plebmc.client.mods.Mate;
+import net.plebmc.client.mods.Storm;
 import net.plebmc.client.mods.HudBox;
 import net.plebmc.client.mods.Mod;
 import net.plebmc.client.mods.ModRegistry;
@@ -91,9 +94,42 @@ public class ClientModsTest {
                         return button == 0 ? 9 : 2;
                 }
 
+                List<Gear> armor = new ArrayList<>(Arrays.asList(null, null, null, null));
+                Gear held;
+                Storm storm;
+                List<Mate> squad = new ArrayList<>();
+                float health = 20f;
+                Map<String, Integer> supplies = new HashMap<>();
+
                 @Override
-                public List<String> armor() {
-                        return Collections.emptyList();
+                public List<Gear> armor() {
+                        return armor;
+                }
+
+                @Override
+                public Gear held() {
+                        return held;
+                }
+
+                @Override
+                public Storm storm() {
+                        return storm;
+                }
+
+                @Override
+                public List<Mate> squad() {
+                        return squad;
+                }
+
+                @Override
+                public float health() {
+                        return health;
+                }
+
+                @Override
+                public int supply(String g) {
+                        Integer n = supplies.get(g);
+                        return n == null ? 0 : n;
                 }
 
                 @Override
@@ -141,6 +177,50 @@ public class ClientModsTest {
                 HudBox coords = reg.coordinates.layout(v, M);
                 check(coords.texts.get(0).text.equals("X: -12.3") && coords.texts.get(2).text.equals("Z: 1000.1")
                                 && coords.texts.get(3).text.equals("Facing: North (-Z)"), "coordinates + facing");
+                reg.coordinates.setting("compact").set(1);
+                reg.coordinates.setting("label_x").setText("x ");
+                HudBox one = reg.coordinates.layout(v, M);
+                check(one.texts.size() == 1 && one.texts.get(0).text.startsWith("x -12.3") && one.texts.get(0).text.contains("Facing: North"),
+                                "one line keeps facing on it, with a custom label");
+                String saved = reg.serialize();
+                reg.coordinates.resetSettings();
+                check(reg.coordinates.setting("label_x").text().equals("X: "), "label resets to default");
+                MapStore ms = new MapStore();
+                ms.set(ModRegistry.STORE_KEY, saved);
+                reg.load(ms);
+                check(reg.coordinates.setting("label_x").text().equals("x "), "custom label saved and loaded");
+                String ex = net.plebmc.client.mods.SettingsTransfer.export(ms);
+                MapStore other = new MapStore();
+                check(net.plebmc.client.mods.SettingsTransfer.importInto(other, ex) == 1 && other.get(ModRegistry.STORE_KEY) != null,
+                                "settings export imports into another client");
+                check(net.plebmc.client.mods.SettingsTransfer.importInto(other, "hello") == -1, "random text is not an import");
+                // a PlebClient Studio code: only what it names changes
+                MapStore st3 = new MapStore();
+                st3.set(ModRegistry.STORE_KEY, reg.serialize());
+                String studio = "{\"plebclient-settings\":1,\"mods\":{\"crosshair\":{\"on\":true,\"opts\":{\"style\":3,\"color\":4}},"
+                                + "\"coordinates\":{\"on\":true,\"opts\":{\"label_x\":\"x \"}}},\"prefs\":{\"menuBackground\":2}}";
+                check(net.plebmc.client.mods.SettingsTransfer.importInto(st3, studio) == 2, "studio code imports");
+                reg.coordinates.setting("decimals").set(0);
+                reg.load(st3);
+                check(reg.crosshair.isEnabled() && reg.crosshair.style.get() == 3 && reg.crosshair.color.get() == 4
+                                && reg.coordinates.setting("label_x").text().equals("x ") && reg.coordinates.setting("decimals").get() == 0
+                                && reg.fps.isEnabled(), "studio code changes only what it names");
+                reg.crosshair.setEnabled(false);
+                reg.coordinates.resetSettings();
+                check(net.plebmc.client.mods.MoreMods.DayCounter.text(0, true).equals("Day 1  6:00")
+                                && net.plebmc.client.mods.MoreMods.DayCounter.text(24000L * 2 + 18000, true).equals("Day 3  0:00"),
+                                "day counter");
+                check(net.plebmc.client.mods.MoreMods.Server.strip("wss://eagler.plebmc.top/").equals("eagler.plebmc.top"), "server address");
+                check(net.plebmc.client.mods.MoreMods.SessionTimer.duration(3725).equals("1:02:05")
+                                && net.plebmc.client.mods.MoreMods.SessionTimer.duration(65).equals("1:05"), "session timer");
+                int[] p1 = reg.chat.place("hi"), p2 = reg.chat.place("hi"), p3 = reg.chat.place("yo");
+                check(p1[0] == p2[0] && p2[1] == 2 && p3[0] != p2[0] && p3[1] == 1, "chat stacks repeats on one line");
+                check(net.plebmc.client.mods.MoreMods.Chat.stamp(13, 5, 2).equals("1:05 PM")
+                                && net.plebmc.client.mods.MoreMods.Chat.stamp(9, 30, 1).equals("09:30"), "chat timestamps");
+                reg.speed.sample(0, 64, 0, 1000);
+                check(Math.abs(reg.speed.sample(2, 64, 0, 1500) - 4.0) < 1e-6, "speed in blocks per second");
+                check(reg.byId("crosshair") != null && reg.byId("scoreboard") != null && reg.byId("hurt-cam") != null, "visual mods registered");
+                reg.coordinates.resetSettings();
                 check(Mods.Coordinates.facing(0).startsWith("South") && Mods.Coordinates.facing(90).startsWith("West")
                                 && Mods.Coordinates.facing(-90).startsWith("East") && Mods.Coordinates.facing(44).startsWith("South"),
                                 "vanilla compass directions");
@@ -151,9 +231,89 @@ public class ClientModsTest {
                 HudBox keys = reg.keystrokes.layout(v, M);
                 check(keys.rects.get(0).argb == HudBox.BG_PRESSED && keys.rects.get(1).argb == HudBox.BG,
                                 "keystrokes: W pressed, A not");
-                check(keys.texts.get(4).text.equals("LMB 9") && keys.texts.get(4).argb == HudBox.TEXT_PRESSED, "LMB cell shows CPS");
+                check(keys.texts.get(4).text.equals("LMB") && keys.texts.get(5).text.equals("9")
+                                && keys.texts.get(5).argb == HudBox.TEXT_PRESSED && keys.texts.get(5).y > keys.texts.get(4).y,
+                                "LMB label above its CPS");
                 check(reg.armor.layout(v, M) == null && reg.armor.preview(v, M) != null,
                                 "armor hides with no armor but previews in the editor");
+                check(reg.armor.preview(v, M).items.size() == 5 && reg.armor.preview(v, M).items.get(0).id.equals("diamond_helmet"),
+                                "armor preview draws item icons, held item included");
+                reg.armor.setEnabled(true);
+                v.armor.set(0, new Gear(null, "iron_helmet", "Iron Helmet", 1, 30, 165));
+                v.armor.set(3, new Gear(null, "diamond_boots", "Diamond Boots", 1, 429, 429));
+                HudBox ab = reg.armor.layout(v, M);
+                check(ab.items.size() == 2 && ab.items.get(0).id.equals("iron_helmet") && ab.items.get(1).id.equals("diamond_boots"),
+                                "armor shows worn pieces as icons, head first, empty slots skipped");
+                check(ab.texts.get(0).text.equals("30") && ab.texts.get(0).argb == 0xFFFFAA00
+                                && ab.texts.get(1).argb == 0xFF55FF55, "durability colored by wear");
+                reg.armor.setting("durability").set(1);
+                check(reg.armor.layout(v, M).texts.get(0).text.equals("18%"), "durability as percent");
+                reg.armor.setting("durability").set(2);
+                check(reg.armor.layout(v, M).texts.isEmpty(), "durability text hidden");
+                reg.armor.setting("layout").set(1);
+                HudBox row = reg.armor.layout(v, M);
+                check(row.items.get(1).x > row.items.get(0).x && row.items.get(1).y == row.items.get(0).y, "horizontal armor row");
+                v.held = new Gear(null, "arrow", "Arrow", 32, 0, 0);
+                check(reg.armor.layout(v, M).items.size() == 3, "held item added");
+                reg.armor.resetSettings();
+                check(reg.armor.layout(v, M).texts.get(2).text.equals("32"), "held stack shows its count");
+
+                // PlebNite mods
+                check(Mod.PLEBNITE.equals(reg.compass.category()) && Mod.PLEBNITE.equals(reg.squadPing.category())
+                                && Mod.PLEBNITE.equals(reg.storm.category()) && Mod.PLEBNITE.equals(reg.squad.category())
+                                && Mod.PLEBNITE.equals(reg.supplies.category()) && Mod.PLEBNITE.equals(reg.lowHealth.category()),
+                                "PlebNite category holds the PlebNite mods");
+                check(reg.storm.layout(v, M) == null && reg.storm.preview(v, M) != null, "storm hidden without a border");
+                v.storm = new Storm(0, 0, 200, 100, 65_000, 42.7);
+                HudBox sb = reg.storm.layout(v, M);
+                check(sb.texts.get(0).text.equals("Storm 42m away") && sb.texts.get(1).text.equals("Closing  1:05"),
+                                "storm distance and closing timer: " + sb.texts.get(0).text);
+                v.storm = new Storm(0, 0, 200, 200, 0, -7.2);
+                sb = reg.storm.layout(v, M);
+                check(sb.texts.get(0).text.startsWith("IN THE STORM  8m") && sb.texts.get(0).argb == 0xFFFF5555
+                                && sb.texts.get(1).text.equals("Holding"), "outside the storm warns in red");
+                v.storm = new Storm(0, 0, Storm.NO_STORM * 30, Storm.NO_STORM * 30, 0, 1e6);
+                check(reg.storm.layout(v, M) == null, "vanilla default border is not a storm");
+                // compass points to the safe zone center
+                v.storm = new Storm(-12.34, 900, 200, 200, 0, 20); // due north of the player, who faces north
+                HudBox cb = reg.compass.layout(v, M);
+                boolean centerSquare = false;
+                for (HudBox.Rect r : cb.rects) {
+                        centerSquare |= r.argb == 0xFFFFFFFF && r.w == 5 && r.h == 1 && Math.abs(r.x + 2 - Mods.Compass.WIDTH / 2) <= 1;
+                }
+                check(centerSquare, "compass safe-zone square straight ahead");
+                v.storm = null;
+
+                check(reg.squad.layout(v, M) == null && reg.squad.preview(v, M) != null, "squad hidden without a team");
+                v.squad.add(new Mate("Bob", 0xFF55FFFF, 12, 10f, 20f, 0f));
+                v.squad.add(new Mate("Alice", 0xFFFF5555, -1, -1f, 20f, Float.NaN));
+                HudBox sq = reg.squad.layout(v, M);
+                check(sq.texts.size() == 3 && sq.texts.get(0).text.equals("Bob") && sq.texts.get(1).text.equals("12m")
+                                && sq.texts.get(2).text.equals("Alice"), "squad names and distance");
+                boolean halfBar = false;
+                for (HudBox.Rect r : sq.rects) {
+                        halfBar |= r.w == 14 && r.argb == 0xFFFFFF55;
+                }
+                check(halfBar, "squad health bar at half health is yellow");
+
+                reg.supplies.setEnabled(true);
+                check(reg.supplies.layout(v, M) == null, "supplies hidden when you carry none");
+                v.supplies.put("blocks", 64);
+                v.supplies.put("pearls", 2);
+                HudBox su = reg.supplies.layout(v, M);
+                check(su.items.size() == 2 && su.items.get(0).id.equals("planks") && su.texts.get(0).text.equals("64")
+                                && su.items.get(1).id.equals("ender_pearl"), "supplies count blocks and pearls");
+                reg.supplies.setting("empty").set(1);
+                check(reg.supplies.layout(v, M).items.size() == Mods.Supplies.GROUPS.length, "show empty supplies");
+
+                check(reg.lowHealth.intensity(20f, 0) == 0f && reg.lowHealth.intensity(4f, 0) > 0f
+                                && reg.lowHealth.intensity(0f, 0) == 0f, "low health warning only when low (and alive)");
+                reg.lowHealth.setting("pulse").set(0);
+                check(reg.lowHealth.intensity(1f, 0) > reg.lowHealth.intensity(7f, 0), "stronger the lower you are");
+                reg.lowHealth.resetSettings();
+                reg.armor.setEnabled(false);
+                reg.supplies.setEnabled(false);
+                reg.supplies.resetSettings();
 
                 // persistence (HUD editor storage layer)
                 Map<String, String> mem = new HashMap<>();
@@ -247,7 +407,74 @@ public class ClientModsTest {
                 check(cc.cps(0, 1599) == 12 && cc.cps(0, 2400) == 3 && cc.cps(1, 2400) == 1 && cc.cps(1, 2600) == 0,
                                 "click counter window: " + cc.cps(0, 1599) + "/" + cc.cps(0, 2400));
 
+                // HUD editor: reset position, prefs round trip
+                ModRegistry rr = new ModRegistry();
+                float dx = rr.fps.fx(), dy = rr.fps.fy();
+                rr.fps.setPosition(0.6f, 0.7f);
+                rr.fps.resetPosition();
+                check(rr.fps.fx() == dx && rr.fps.fy() == dy, "reset position");
+                net.plebmc.client.mods.ClientPrefs pr = net.plebmc.client.mods.ClientPrefs.get();
+                pr.shiftOpens = 2;
+                pr.accent = 3;
+                Map<String, String> kv = new HashMap<>();
+                SettingsStore st2 = new SettingsStore() {
+                        public String get(String k) { return kv.get(k); }
+                        public void set(String k, String v) { kv.put(k, v); }
+                };
+                pr.save(st2);
+                pr.reset();
+                check(pr.shiftOpens == 0 && pr.accent == 0, "prefs reset");
+                pr.load(st2);
+                check(pr.shiftOpens == 2 && pr.accent == 3 && pr.accentColor() == net.plebmc.client.mods.ClientPrefs.ACCENTS[3], "prefs saved and loaded");
+                kv.put("prefs", "{\"shiftOpens\":99,\"accent\":-4}");
+                pr.load(st2);
+                check(pr.shiftOpens == 3 && pr.accent == 0, "out-of-range prefs are clamped");
+                pr.reset();
+
+                // HUD colors, brackets and text style
+                check(net.plebmc.client.mods.Mod.colorAt(7) == pr.accentColor(), "Accent text color follows the accent");
+                check(net.plebmc.client.mods.Mod.colorAt(8) == net.plebmc.client.mods.Mod.CHROMA, "Chroma is its own marker");
+                int c0 = net.plebmc.client.mods.Mod.chroma(0, 0), c1 = net.plebmc.client.mods.Mod.chroma(0, 1000);
+                check((c0 >>> 24) == 0xFF && c0 != c1, "Chroma is opaque and moves over time");
+                check(net.plebmc.client.mods.Mod.hsv(0f, 1f, 1f) == 0xFFFF0000 && net.plebmc.client.mods.Mod.hsv(1f / 3f, 1f, 1f) == 0xFF00FF00,
+                                "hsv: red and green");
+                check("FPS".equals(pr.decorateHud("FPS")), "no brackets by default");
+                pr.hudBrackets = 1;
+                check("[FPS]".equals(pr.decorateHud("FPS")), "square brackets");
+                pr.hudTextStyle = 1;
+                check("\u00a7l[FPS\u00a7l]".equals(pr.decorateHud("FPS")), "bold brackets");
+                pr.reset();
+                check(pr.hudBrackets == 0 && pr.hudTextStyle == 0, "bracket and style reset");
+
+                // block outline, overlays, death coords
+                ModRegistry rx = new ModRegistry();
+                check(rx.blockOutline.lineArgb(0) == 0xC04FE3F0, "outline: cyan at 75%");
+                check(rx.blockOutline.fillArgb(0) == 0, "outline: no fill by default");
+                rx.blockOutline.color.set(0);
+                rx.blockOutline.fill.set(2);
+                check(rx.blockOutline.fillArgb(0) == 0x44000000, "outline: black fill");
+                check(rx.overlays.fireDrop() == 0.3f, "fire low by default");
+                rx.overlays.fire.set(2);
+                check(rx.overlays.fireDrop() < 0, "fire hidden");
+                check("You died at X -13, Y 64, Z 7 in the Nether".equals(rx.deathCoords.message(-12.5, 64.9, 7.2, -1)), "death message");
+                rx.deathCoords.dimension.set(0);
+                check("You died at X 0, Y 1, Z 2".equals(rx.deathCoords.message(0.1, 1.5, 2.9, 0)), "death message without dimension");
+
                 System.out.println("ClientModsTest: " + checks + " checks, failures=" + failures);
                 System.exit(failures > 0 ? 1 : 0);
+        }
+
+        static final class MapStore implements SettingsStore {
+                final Map<String, String> m = new HashMap<>();
+
+                @Override
+                public String get(String key) {
+                        return m.get(key);
+                }
+
+                @Override
+                public void set(String key, String value) {
+                        m.put(key, value);
+                }
         }
 }

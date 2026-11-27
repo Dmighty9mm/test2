@@ -34,9 +34,67 @@ public interface ClientView {
         /** Clicks per second over the last second for a button. */
         int cps(int button);
 
-        /** Worn armor, head first: "name durability/max" strings ("" = empty slot). */
-        List<String> armor();
+        /** Worn armor, head first; null for an empty slot. */
+        List<Gear> armor();
+
+        /** The item in the player's hand, or null. */
+        default Gear held() {
+                return null;
+        }
 
         /** Active effects as "Name II 0:45". */
         List<String> effects();
+
+        /** Own health (20 = ten hearts), max health and absorption; -1 health when not in a world. */
+        default float health() {
+                return -1f;
+        }
+
+        default float maxHealth() {
+                return 20f;
+        }
+
+        default float absorption() {
+                return 0f;
+        }
+
+        /** How many of each supply group the inventory holds (see {@link Mods.Supplies#GROUPS}). */
+        default int supply(String group) {
+                return 0;
+        }
+
+        /** The storm (world border), or null when this world has none. */
+        default Storm storm() {
+                return null;
+        }
+
+        /** Teammates the server listed, without yourself. */
+        default List<Mate> squad() {
+                return java.util.Collections.emptyList();
+        }
+
+        /** The world's time in ticks (day = time / 24000), or -1 outside a world. */
+        default long worldTime() {
+                return -1;
+        }
+
+        /** The biome you stand in, or null. */
+        default String biome() {
+                return null;
+        }
+
+        /** The server address, "Singleplayer", or null outside a world. */
+        default String server() {
+                return null;
+        }
+
+        /** The block light level where you stand (0-15), or -1. */
+        default int light() {
+                return -1;
+        }
+
+        /** True while you're in a world. */
+        default boolean inWorld() {
+                return health() >= 0;
+        }
 }

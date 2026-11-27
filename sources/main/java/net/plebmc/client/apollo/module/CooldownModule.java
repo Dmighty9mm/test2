@@ -86,6 +86,10 @@ public final class CooldownModule extends ApolloModule {
                 return new ArrayList<>(active.values());
         }
 
+        public int size() {
+                return active.size();
+        }
+
         @Override
         public void reset() {
                 active.clear();

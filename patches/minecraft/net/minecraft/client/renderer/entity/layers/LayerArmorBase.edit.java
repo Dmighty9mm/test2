@@ -1,6 +1,6 @@
 
 # Eagler Context Redacted Diff
-# Copyright (c) 2024 lax1dude. All rights reserved.
+# Copyright (c) 2026 lax1dude. All rights reserved.
 
 # Version: 1.0
 # Author: lax1dude
@@ -35,9 +35,11 @@
 
 ~ 			this.func_177179_a((T) modelbase, parInt1);
 
-> INSERT  2 : 3  @  2
+> CHANGE  1 : 4  @  1 : 2
 
-+ 			DeferredStateManager.setDefaultMaterialConstants();
+~ 			this.renderer.bindTexture(net.plebmc.client.itemrender.PlebItems.armorTexture(itemstack, flag,
+~ 					this.getArmorResource(itemarmor, flag)));
+~ 			DeferredStateManager.setDefaultMaterialConstants();
 
 > INSERT  1 : 18  @  1
 
