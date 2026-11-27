@@ -391,6 +391,38 @@ class PanelLogic(unittest.TestCase):
         self.assertEqual([d["kind"] for d in self.p.public_info()["downloads"]], ["offline", "forge-1.8.9"])
         self.assertEqual(self.p.public_info()["downloads"][0]["url"], "https://example.com/p.html")
 
+    def test_posts(self):
+        owner, admin = {"name": "Boss", "role": "owner"}, {"name": "Mod", "role": "admin"}
+        self.assertEqual(self.p.posts()["posts"], [])
+        for bad in ({"title": "", "body": "x"}, {"title": "x", "body": ""}, {"title": "x", "body": "y", "tag": "spam"},
+                    {"title": "x", "body": "y" * (app.MAX_POST + 1)}):
+            with self.assertRaises(app.ApiError):
+                self.p.save_post(owner, bad)
+        a = self.p.save_post(owner, {"title": "Server 1.2", "body": "## Fixed\n- lag", "tag": "server"})["post"]
+        self.clock.t += 100
+        b = self.p.save_post(owner, {"title": "Client 2.1", "body": "**new** <script>", "tag": "client"})["post"]
+        self.assertEqual([x["title"] for x in self.p.posts()["posts"]], ["Client 2.1", "Server 1.2"])
+        self.assertEqual([x["title"] for x in self.p.posts(tag="server")["posts"]], ["Server 1.2"])
+        self.assertEqual(self.p.post(b["id"])["body"], "**new** <script>")  # stored as written; the page never renders it as HTML
+        self.p.save_post(admin, {"id": a["id"], "title": "Server 1.2.1", "body": "edited", "tag": "server", "pinned": True})
+        got = self.p.posts()
+        self.assertEqual([(x["title"], x["pinned"], x["author"]) for x in got["posts"]], [("Server 1.2.1", True, "Boss"), ("Client 2.1", False, "Boss")])
+        self.assertEqual(self.p.public_info()["latestPosts"][0]["title"], "Server 1.2.1")
+        self.assertTrue(self.p.posts(limit=1)["more"])
+        self.p.delete_post(owner, b["id"])
+        self.assertEqual(self.p.posts()["total"], 1)
+        with self.assertRaises(app.ApiError):
+            self.p.post(b["id"])
+
+    def test_coin_gift_says_who_gets_it(self):
+        owner = {"name": "Boss", "role": "owner"}
+        for flag, args in ((True, [50, "client"]), (False, [50, "all"]), (None, [50])):
+            body = {"action": "coinsall", "amount": 50}
+            if flag is not None:
+                body["clientOnly"] = flag
+            cid = self.p.admin_command(owner, body)["id"]
+            self.assertEqual(json.loads(self.p.db.one("SELECT args FROM commands WHERE id=?", cid)["args"]), args)
+
     def test_site_content(self):
         owner = self.p.create_account("Owner", "password1", "owner")
         c = self.p.public_info()["content"]

@@ -663,7 +663,10 @@ public final class BungeeShop extends Plugin implements Listener {
 			} catch (NumberFormatException e) {
 				n = -1;
 			}
-			return n <= 0 ? "!bad amount" : "gave " + n + " to " + core.giveOnline(n) + " players online";
+			// the panel can say who gets this one gift: "client" (PlebMc client only) or "all" (everyone online)
+			String who = args.size() > 1 ? String.valueOf(args.get(1)) : "";
+			Boolean clientOnly = "all".equals(who) ? Boolean.FALSE : "client".equals(who) ? Boolean.TRUE : null;
+			return n <= 0 ? "!bad amount" : "gave " + n + " to " + core.giveOnline(n, clientOnly) + " players online";
 		}
 		case "rank": {
 			LuckPermsBridge lp = luckPerms();

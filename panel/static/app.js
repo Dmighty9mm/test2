@@ -242,7 +242,7 @@ function pager(container, load, render, opts = {}) {
 // ==================== shell ====================
 
 // [id, label, icon, needs: "me" (signed in), "admin" or "owner"]
-const NAV = [["home", "Home", "home"], ["downloads", "Download", "download"], ["stats", "Stats", "chart"], ["leaderboard", "Leaderboards", "trophy"], ["shop", "Shop", "bag"], ["vote", "Vote", "heart"]];
+const NAV = [["home", "Home", "home"], ["downloads", "Download", "download"], ["leaderboard", "Leaderboards", "trophy"], ["stats", "Stats", "chart"], ["shop", "Shop", "bag"], ["news", "News", "megaphone"], ["vote", "Vote", "heart"]];
 const ADMIN_NAV = [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["announce", "Announcements", "megaphone"],
   ["site", "Site content", "edit", "owner"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Updates", "refresh"], ["audit", "Admin log", "list"]];
 const ADMIN_VIEWS = new Set(["admin", "players", "player", "ranks", "rank", "announce", "site", "makers", "publish", "client", "audit"]);
@@ -253,6 +253,7 @@ const HEADS = {
   leaderboard: ["The", "leaderboards", "The best players on every game, with a top 10 for every stat."],
   shop: ["The", "shop", "Hats, cloaks, wings and trails everyone on PlebMc can see."],
   vote: ["Vote for", "PlebMc", "Vote every day on each site. It takes a few seconds."],
+  news: ["PlebMc", "news", "Updates, changelogs and events, newest first."],
   me: ["My", "account", ""],
 };
 
@@ -340,9 +341,174 @@ function drawFooter() {
       h("div", {}, h("a", { class: "brand", href: "#home" }, h("img", { src: siteLogo(), alt: "" }), info.site),
         h("p", {}, c.subtitle || "")),
       col("Play", [["Download PlebClient", "#downloads"], c.serverIp ? [c.serverIp, "#home"] : null, ["Shop", "#shop"]]),
-      col("Community", [c.discordUrl ? ["Discord", c.discordUrl, true] : null, voteLinks().length ? ["Vote", "#vote"] : null, ["Stats", "#stats"], ["Leaderboards", "#leaderboard"]]),
+      col("Community", [c.discordUrl ? ["Discord", c.discordUrl, true] : null, voteLinks().length ? ["Vote", "#vote"] : null, ["News", "#news"], ["Leaderboards", "#leaderboard"], ["Stats", "#stats"]]),
       col("Account", me ? [["My account", "#me"], isAdmin() ? ["Admin", "#admin"] : null] : [["Sign in", "#login"], ["Create account", "#register"]])),
     h("div", { class: "foot-bottom" }, h("span", {}, "© " + new Date().getFullYear() + " " + info.site), h("span", {}, c.footer || ""))));
+}
+
+// ==================== posts: news and changelogs ====================
+
+/** Inline markdown (bold, italic, strike, code, links) as DOM nodes. Text is never parsed as HTML. */
+function mdInline(text) {
+  const out = [];
+  const re = /(`[^`]+`)|\[([^\]]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s<>)\]]+)|\*\*([^*]+(?:\*(?!\*)[^*]*)*)\*\*|~~([^~]+)~~|\*([^*\s][^*]*)\*|(?<![A-Za-z0-9])_([^_\s][^_]*)_(?![A-Za-z0-9])/g;
+  const safe = (u) => (/^(https?:\/\/|#|mailto:)/i.test(u) ? u : null);
+  const link = (label, u) => (safe(u) ? h("a", u.startsWith("#") ? { href: u } : { href: u, target: "_blank", rel: "noopener nofollow" }, ...label) : label);
+  let last = 0;
+  let m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    if (m[1]) out.push(h("code", {}, m[1].slice(1, -1)));
+    else if (m[2]) out.push(...[].concat(link(mdInline(m[2]), m[3])));
+    else if (m[4]) { const u = m[4].replace(/[.,!?;:]+$/, ""); re.lastIndex -= m[4].length - u.length; out.push(h("a", { href: u, target: "_blank", rel: "noopener nofollow" }, u)); }
+    else if (m[5]) out.push(h("strong", {}, ...mdInline(m[5])));
+    else if (m[6]) out.push(h("s", {}, ...mdInline(m[6])));
+    else out.push(h("em", {}, ...mdInline(m[7] || m[8])));
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+/** Markdown as a DOM tree: headings, lists (one level of nesting), quotes, code blocks, rules and paragraphs. */
+function md(src) {
+  const root = h("div", { class: "md" });
+  const lines = String(src || "").replace(/\r\n?/g, "\n").split("\n");
+  const item = /^(\s*)([-*+]|\d{1,3}[.)])\s+(.*)$/;
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    let m;
+    if (!line.trim()) { i++; continue; }
+    if (/^```/.test(line)) {
+      const code = [];
+      for (i++; i < lines.length && !/^```/.test(lines[i]); i++) code.push(lines[i]);
+      i++;
+      root.append(h("pre", {}, h("code", {}, code.join("\n"))));
+    } else if ((m = /^(#{1,4})\s+(.*?)\s*#*$/.exec(line))) {
+      root.append(h("h" + (m[1].length + 1), {}, ...mdInline(m[2])));
+      i++;
+    } else if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
+      root.append(h("hr"));
+      i++;
+    } else if (/^>\s?/.test(line)) {
+      const q = [];
+      for (; i < lines.length && /^>\s?/.test(lines[i]); i++) q.push(lines[i].replace(/^>\s?/, ""));
+      root.append(h("blockquote", {}, ...md(q.join("\n")).childNodes));
+    } else if ((m = item.exec(line))) {
+      const ordered = (mm) => /\d/.test(mm[2]);
+      const list = h(ordered(m) ? "ol" : "ul");
+      const base = m[1].length;
+      let li = null;
+      let sub = null;
+      for (; i < lines.length; i++) {
+        const mm = item.exec(lines[i]);
+        if (mm && mm[1].length <= base + 1) { li = h("li", {}, ...mdInline(mm[3])); sub = null; list.append(li); }
+        else if (mm && li) { if (!sub) { sub = h(ordered(mm) ? "ol" : "ul"); li.append(sub); } sub.append(h("li", {}, ...mdInline(mm[3]))); }
+        else if (lines[i].trim() && /^\s{2,}/.test(lines[i]) && li) (sub ? sub.lastChild : li).append(" ", ...mdInline(lines[i].trim()));
+        else break;
+      }
+      root.append(list);
+    } else {
+      const para = [];
+      for (; i < lines.length && lines[i].trim() && !/^(```|#{1,4}\s|>\s?)/.test(lines[i]) && !item.test(lines[i]); i++) para.push(lines[i]);
+      const kids = [];
+      para.forEach((l, k) => { if (k) kids.push(/ {2}$/.test(para[k - 1]) ? h("br") : " "); kids.push(...mdInline(l.trim())); });
+      root.append(h("p", {}, ...kids));
+    }
+  }
+  return root;
+}
+
+const POST_KINDS = { news: "News", server: "Server update", client: "Client update", event: "Event" };
+const postDate = (t) => new Date(t * 1000).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+const kindPill = (tag) => h("span", { class: "kind k-" + tag }, POST_KINDS[tag] || "News");
+
+function postCard(p, opts = {}) {
+  const body = md(p.body);
+  const art = h("article", { class: "post" + (p.pinned ? " pinned" : ""), id: "post-" + p.id },
+    h("header", {}, kindPill(p.tag), p.pinned ? h("span", { class: "kind k-pin" }, "Pinned") : null,
+      h("span", { class: "when" }, postDate(p.at) + " · " + p.author + (p.editedAt > p.at + 60 ? " · edited" : "")),
+      isOwner() && !opts.preview ? h("a", { class: "btn small ghost", href: "#announce?post=" + p.id }, icon("edit"), "Edit") : null),
+    h("h2", {}, opts.preview || opts.full ? p.title : h("a", { href: "#news?post=" + p.id }, p.title)), body);
+  if (!opts.full && !opts.preview && p.body.length > 900) {
+    art.classList.add("clamp");
+    art.append(h("button", { class: "more-btn", onclick: (e) => { art.classList.remove("clamp"); e.target.remove(); } }, "Read the rest"));
+  }
+  return art;
+}
+
+async function newsView() {
+  const q = params();
+  if (q.post) {
+    const r = await api("posts/" + encodeURIComponent(q.post));
+    return h("div", { class: "posts" }, h("a", { class: "back", href: "#news" }, "← All posts"), postCard(r.post, { full: true }));
+  }
+  const list = h("div", { class: "posts" });
+  let tag = "";
+  const pg = pager(list, async (offset) => {
+    const r = await api("posts?offset=" + offset + "&limit=8" + (tag ? "&tag=" + tag : ""));
+    return { items: r.posts, more: r.more, total: r.total };
+  }, (p) => postCard(p), { empty: () => empty("megaphone", tag ? "No posts of this kind yet." : "No posts yet. Check back soon.") });
+  const tabs = h("div", { class: "ptabs" });
+  const drawTabs = () => tabs.replaceChildren(...[["", "Everything"], ...Object.entries(POST_KINDS)].map(([k, label]) =>
+    h("button", { class: "tab" + (k === tag ? " on" : ""), onclick: () => { tag = k; drawTabs(); pg.reset(); } }, label + (k && k !== "news" ? "s" : ""))));
+  drawTabs();
+  pg.next();
+  return h("div", {}, h("div", { class: "row", style: "margin-bottom:16px;flex-wrap:wrap;gap:10px" }, tabs, h("span", { class: "spacer" }),
+    isOwner() ? h("a", { class: "btn primary", href: "#announce" }, icon("edit"), "Write a post") : null), list, pg.more);
+}
+
+/** Owners: write, edit and delete posts, with a live preview. */
+async function postsEditor() {
+  const out = h("div");
+  const q = params();
+  let editing = null;
+  if (q.post) { try { editing = (await api("posts/" + encodeURIComponent(q.post))).post; } catch (e) { /* gone: start a new one */ } }
+  const title = h("input", { id: "p-title", maxlength: 120, placeholder: "PlebClient 2.1 is out", value: editing ? editing.title : "" });
+  const kind = select("p-kind", Object.entries(POST_KINDS), editing ? editing.tag : "news");
+  const pin = h("input", { type: "checkbox", id: "p-pin" });
+  pin.checked = !!(editing && editing.pinned);
+  const body = h("textarea", { id: "p-body", rows: 14, maxlength: 20000, spellcheck: "true", placeholder: "## What's new\n\n- Faster loading\n- **New cloaks** in the shop\n\nSee you in game!" });
+  body.value = editing ? editing.body : "";
+  const preview = h("div", { class: "post-preview" });
+  const draw = () => preview.replaceChildren(postCard({ id: 0, title: title.value || "Your title", tag: kind.value, pinned: pin.checked, body: body.value || "*Your post shows here as you type.*",
+    author: me.name, at: editing ? editing.at : Math.floor(Date.now() / 1000), editedAt: 0 }, { preview: true }));
+  [title, body].forEach((el) => el.addEventListener("input", draw));
+  [kind, pin].forEach((el) => el.addEventListener("change", draw));
+  draw();
+  const list = h("div", { class: "post-rows" });
+  const load = async () => {
+    const r = await api("posts?limit=30");
+    list.replaceChildren(...(r.posts.length ? r.posts.map((p) => h("div", { class: "post-row" }, kindPill(p.tag), h("a", { href: "#news?post=" + p.id }, p.title), h("span", { class: "spacer" }),
+      h("small", { class: "muted" }, postDate(p.at)),
+      h("a", { class: "btn small", href: "#announce?post=" + p.id }, icon("edit"), "Edit"),
+      h("button", { class: "small danger", onclick: async () => {
+        if (!confirm("Delete \"" + p.title + "\"? This can't be undone.")) return;
+        try { await api("admin/posts", { delete: true, id: p.id }); info = await api("info"); toast("Deleted."); load(); } catch (e) { toast(e.message, false); }
+      } }, icon("trash"), "Delete"))) : [empty("megaphone", "No posts yet.")]));
+  };
+  await load();
+  const save = h("button", { class: "primary", onclick: async () => {
+    save.disabled = true;
+    try {
+      const r = await api("admin/posts", { id: editing ? editing.id : undefined, title: title.value, tag: kind.value, pinned: pin.checked, body: body.value });
+      info = await api("info");
+      toast(editing ? "Saved." : "Posted.");
+      location.hash = "#news?post=" + r.post.id;
+    } catch (e) { message(out, e.message); }
+    save.disabled = false;
+  } }, icon("megaphone"), editing ? "Save changes" : "Publish");
+  return h("div", {},
+    card(editing ? "Edit post" : "Write a post",
+      h("p", { class: "muted" }, "Posts show on the News page: changelogs, events, anything. Write in markdown: ## heading, **bold**, *italic*, - lists, 1. numbered lists, > quotes, `code`, [links](https://…) and --- for a line."),
+      h("div", { class: "grid g2 post-edit" },
+        h("div", {}, h("label", { for: "p-title" }, "Title"), title,
+          h("div", { class: "row", style: "gap:16px;align-items:end;flex-wrap:wrap" }, h("div", { style: "flex:1;min-width:160px" }, h("label", { for: "p-kind" }, "Kind"), kind),
+            h("label", { class: "check", for: "p-pin" }, pin, " Pin to the top")),
+          h("label", { for: "p-body" }, "Post"), body,
+          h("div", { class: "row", style: "gap:8px;margin-top:12px" }, save, editing ? h("a", { class: "btn", href: "#announce" }, "Cancel") : null), out),
+        h("div", {}, h("label", {}, "Preview"), preview))),
+    card("Posts", list));
 }
 
 // ==================== voting ====================
@@ -456,6 +622,14 @@ async function homeView() {
       h("div", { class: "slot" }, h("b", {}, fmt(info.accounts)), h("span", {}, "Accounts")),
       h("div", { class: "slot" }, h("b", {}, "3"), h("span", {}, "Games")),
       h("div", { class: "slot" }, h("b", {}, cl.latest ? "v" + cl.latest : "Free"), h("span", {}, cl.latest ? "PlebClient" : "To play"))))));
+
+  // the newest posts
+  const news = info.latestPosts || [];
+  if (news.length) {
+    wrap.append(h("section", { class: "sec news-sec" }, h("div", { class: "wrap" },
+      h("div", { class: "news-head" }, h("h2", {}, "Latest ", h("em", {}, "news")), h("a", { class: "btn", href: "#news" }, "All posts", icon("arrow"))),
+      h("div", { class: "news-cards" }, ...news.map((p) => h("a", { class: "news-card", href: "#news?post=" + p.id }, kindPill(p.tag), h("b", {}, p.title), h("small", {}, postDate(p.at))))))));
+  }
 
   // features: picture and words, swapping sides
   const feats = c.features || [];
@@ -1054,15 +1228,18 @@ function giveAllCard() {
   const btn = h("button", { class: "primary", onclick: async () => {
     const n = Math.floor(Number(amount.value));
     if (!(n > 0)) return message(out, "Give a whole number above 0.");
-    if (!confirm("Give " + fmt(n) + " " + coinName() + " to everyone online right now?")) return;
+    if (!confirm("Give " + fmt(n) + " " + coinName() + " to " + (only.checked ? "everyone online on PlebClient" : "everyone online, on any client,") + " right now?")) return;
     btn.disabled = true;
     try {
-      await api("admin/command", { action: "coinsall", amount: n });
-      message(out, "Sent. Everyone online gets " + fmt(n) + " " + coinName() + " within a few seconds.", true);
+      await api("admin/command", { action: "coinsall", amount: n, clientOnly: only.checked });
+      message(out, "Sent. " + (only.checked ? "Everyone online on PlebClient gets " : "Everyone online gets ") + fmt(n) + " " + coinName() + " within a few seconds.", true);
     } catch (e) { message(out, e.message); }
     btn.disabled = false;
   } }, icon("coin"), "Give to everyone online");
-  return card("Give coins to everyone online", h("p", { class: "muted" }, "A gift for everyone playing right now (players on PlebClient when plebclient-only is on)."),
+  const only = h("input", { type: "checkbox", id: "giveall-only" });
+  only.checked = true;
+  return card("Give coins to everyone online", h("p", { class: "muted" }, "A gift for everyone playing right now. This switch is only for this gift: it doesn't change plebclient-only on the server."),
+    h("label", { class: "check", for: "giveall-only" }, only, " PlebClient players only (off: everyone online gets it)"),
     h("div", { class: "row" }, amount, btn), out);
 }
 
@@ -1422,8 +1599,9 @@ async function announceView() {
   const left = h("small", { class: "muted" }, "200 left");
   text.addEventListener("input", () => { left.textContent = 200 - text.value.length + " left"; });
   const cur = info.announcement;
-  return h("div", { class: "grid g2" },
-    card("Make an announcement",
+  const editor = isOwner() ? await postsEditor() : null;
+  return h("div", {}, ...[editor, h("div", { class: "grid g2" },
+    card("Quick announcement (banner and game chat)",
       h("label", { for: "atext" }, "Message"), text, left,
       h("label", { class: "check" }, site, "Show a banner on this website"),
       h("label", { class: "check" }, game, "Send it in game chat to everyone online"),
@@ -1440,7 +1618,7 @@ async function announceView() {
       h("p", { class: "muted" }, "By " + cur.by + ", " + ago(cur.at)),
       h("button", { class: "danger", onclick: async () => {
         try { await api("admin/announce", { clear: true }); info = await api("info"); toast("Banner removed."); route(); } catch (e) { toast(e.message, false); }
-      } }, icon("trash"), "Remove banner")) : empty("megaphone", "No banner right now.")));
+      } }, icon("trash"), "Remove banner")) : empty("megaphone", "No banner right now.")))].filter(Boolean));
 }
 
 // ==================== admin: publish to shop ====================
@@ -1871,6 +2049,7 @@ const VIEWS = {
   ranks: ["Ranks", ranksView, "admin"],
   rank: ["Rank", rankView, "admin"],
   announce: ["Announcements", announceView, "admin"],
+  news: ["News", newsView],
   site: ["Site content", siteView, "owner"],
   publish: ["Publish to shop", publishView, "admin"],
   client: ["Updates", clientView, "admin"],
@@ -1891,7 +2070,7 @@ function animate(root) {
     // once it has arrived, hand the element back so hover effects aren't slowed by the reveal
     setTimeout(() => { e.target.classList.remove("reveal", "in", "from-left", "from-right"); e.target.style.transitionDelay = ""; }, 1100);
   }), { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
-  root.querySelectorAll(".home .sec-title, .home .frow, .home .step3, .home .vote-strip, .home .qa details, .home .qa-foot, .home .tnt, .home .tnt-foot, .home .podium-wrap").forEach((el) => {
+  root.querySelectorAll(".home .sec-title, .home .news-card, .home .frow, .home .step3, .home .vote-strip, .home .qa details, .home .qa-foot, .home .tnt, .home .tnt-foot, .home .podium-wrap").forEach((el) => {
     const i = el.parentElement ? Array.prototype.indexOf.call(el.parentElement.children, el) : 0;
     el.classList.add("reveal");
     if (el.classList.contains("frow")) el.classList.add(i % 2 ? "from-right" : "from-left");
