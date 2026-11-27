@@ -219,6 +219,9 @@ def env(name, default=None):
     return v if v not in (None, "") else default
 
 
+POST_TAGS = ("news", "server", "client", "event")
+MAX_POST = 20000
+
 GAME_TITLES = {"plebmc": "PlebMc", "plebnite": "PlebNite", "plebrpg": "PlebRPG", "lobby": "Lobby"}
 GAME_ORDER = ["plebmc", "plebnite", "plebrpg"]
 # The boards PlebNite and PlebRPG show before their servers send anything (PlebMcBridge's default stats)
@@ -431,6 +434,16 @@ CREATE TABLE IF NOT EXISTS site_images (
   mime TEXT NOT NULL,
   data BLOB NOT NULL,
   created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  tag TEXT NOT NULL,
+  body TEXT NOT NULL,
+  pinned INTEGER NOT NULL DEFAULT 0,
+  author TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS client_seen (
   day INTEGER NOT NULL,
@@ -948,8 +961,10 @@ class Panel:
                 amount = -1
             if amount <= 0 or amount > 10 ** 9:
                 raise ApiError(400, "Give a whole number above 0.")
-            cid = self.queue(actor["name"], "*", "coinsall", [amount])
-            self.audit(actor["name"], "queue-coinsall", "%d to everyone online" % amount)
+            # who gets it: "client" = only players on PlebClient, "all" = everyone online, whatever plebclient-only says
+            who = "all" if body.get("clientOnly") is False else "client" if body.get("clientOnly") is True else ""
+            cid = self.queue(actor["name"], "*", "coinsall", [amount] + ([who] if who else []))
+            self.audit(actor["name"], "queue-coinsall", "%d to %s" % (amount, {"all": "everyone online", "client": "everyone online on PlebClient"}.get(who, "everyone online")))
             return {"ok": True, "id": cid}
         if name_problem(target):
             raise ApiError(400, "Pick a player.")
@@ -1291,7 +1306,8 @@ class Panel:
                 "server": {"connected": st["connected"], "online": st["online"], "currency": st["currency"]},
                 "client": self.client_release(), "announcement": self.db.get_kv("announcement", None),
                 "downloads": [d for d in self.downloads() if d["url"]], "content": self.site_content(),
-                "accounts": self.db.one("SELECT COUNT(*) n FROM accounts")["n"]}
+                "accounts": self.db.one("SELECT COUNT(*) n FROM accounts")["n"],
+                "latestPosts": self.db.all("SELECT id, title, tag, created_at AS at FROM posts ORDER BY pinned DESC, created_at DESC, id DESC LIMIT 3")}
 
     # ---------- downloads (links only) ----------
 
@@ -1474,6 +1490,54 @@ class Panel:
     def clear_announcement(self, actor):
         self.db.set_kv("announcement", None)
         self.audit(actor["name"], "announce", "cleared the website banner")
+
+    # ---------- posts: news and changelogs owners write in markdown ----------
+
+    def posts(self, offset=0, limit=10, tag=""):
+        try:
+            offset, limit = max(0, int(offset)), max(1, min(30, int(limit)))
+        except (TypeError, ValueError):
+            offset, limit = 0, 10
+        where, args = "1=1", []
+        if tag in POST_TAGS:
+            where, args = "tag=?", [tag]
+        rows = self.db.all("SELECT id, title, tag, body, pinned, author, created_at AS at, updated_at AS editedAt FROM posts WHERE " + where
+                           + " ORDER BY pinned DESC, created_at DESC, id DESC LIMIT ? OFFSET ?", *(args + [limit + 1, offset]))
+        total = self.db.one("SELECT COUNT(*) AS n FROM posts WHERE " + where, *args)["n"]
+        return {"ok": True, "posts": [dict(r, pinned=bool(r["pinned"])) for r in rows[:limit]], "more": len(rows) > limit, "total": total}
+
+    def post(self, pid):
+        r = self.db.one("SELECT id, title, tag, body, pinned, author, created_at AS at, updated_at AS editedAt FROM posts WHERE id=?", pid)
+        if not r:
+            raise ApiError(404, "That post is gone.")
+        return dict(r, pinned=bool(r["pinned"]))
+
+    def save_post(self, actor, body):
+        title = str(body.get("title") or "").strip()[:120]
+        text = str(body.get("body") or "").strip()
+        tag = str(body.get("tag") or "news")
+        if not title or not text:
+            raise ApiError(400, "A post needs a title and some text.")
+        if len(text) > MAX_POST:
+            raise ApiError(400, "That post is too long (%d characters at most)." % MAX_POST)
+        if tag not in POST_TAGS:
+            raise ApiError(400, "Pick a kind: " + ", ".join(POST_TAGS) + ".")
+        pinned, now = 1 if body.get("pinned") else 0, self.now()
+        if body.get("id"):
+            old = self.post(int(body["id"]))
+            self.db.run("UPDATE posts SET title=?, tag=?, body=?, pinned=?, updated_at=? WHERE id=?", title, tag, text, pinned, now, old["id"])
+            self.audit(actor["name"], "post", "edited: " + title)
+            return {"ok": True, "post": self.post(old["id"])}
+        pid = self.db.run("INSERT INTO posts(title, tag, body, pinned, author, created_at, updated_at) VALUES(?,?,?,?,?,?,?)",
+                          title, tag, text, pinned, actor["name"], now, now).lastrowid
+        self.audit(actor["name"], "post", "posted: " + title)
+        return {"ok": True, "post": self.post(pid)}
+
+    def delete_post(self, actor, pid):
+        old = self.post(pid)
+        self.db.run("DELETE FROM posts WHERE id=?", old["id"])
+        self.audit(actor["name"], "post", "deleted: " + old["title"])
+        return {"ok": True}
 
     # ---------- the panel updating itself ----------
 
@@ -2001,6 +2065,10 @@ class Handler(BaseHTTPRequestHandler):
         one = lambda k, d="": (q.get(k) or [d])[0]
         if method == "GET" and route == "info":
             return self.send_json(200, {"ok": True, **p.public_info()})
+        if method == "GET" and route == "posts":
+            return self.send_json(200, p.posts(one("offset", "0"), one("limit", "10"), one("tag")))
+        if method == "GET" and re.fullmatch(r"posts/\d{1,9}", route):
+            return self.send_json(200, {"ok": True, "post": p.post(int(route[6:]))})
         if method == "GET" and route == "leaderboard":
             return self.send_json(200, {"ok": True, **p.leaderboard(one("offset", "0"), one("limit", "10"), one("q"))})
         if method == "GET" and route == "stats/games":
@@ -2118,6 +2186,10 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 p.add_note(actor, str(b.get("name") or ""), b.get("text"))
             return self.send_json(200, {"ok": True, "notes": p.notes(str(b.get("name") or ""))})
+        if method == "POST" and route == "admin/posts":
+            actor = self.web_user(role="owner")
+            b = self.body(limit=128 * 1024)
+            return self.send_json(200, p.delete_post(actor, int(b.get("id") or 0)) if b.get("delete") else p.save_post(actor, b))
         if method == "POST" and route == "admin/announce":
             actor = self.web_user(role="admin")
             b = self.body()

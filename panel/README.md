@@ -309,3 +309,22 @@ sh plugins/PlebMcShop/test/run.sh                # PlebioAPI tests, incl. panel 
 Plebio, the mascot, stands around the site: by the homepage numbers, next to page headings, on the vote strip and reminder, on the TNT banner, on the sign-in card and sitting on the footer. Click him and he reacts. Owners can turn him off under Admin > Site content > Brand. His pictures live in `static/plebio/`.
 
 Pages animate as they load and homepage sections slide in as you scroll. Everything is transform and opacity only, and it all switches off (Plebio stands still too) for people whose device asks for reduced motion.
+
+### News posts
+
+The **News** page (`#news`) lists posts owners write: server and client changelogs, events, anything. Each post has a
+title, a kind (News, Server update, Client update, Event), an optional pin, and a body in markdown. The three newest
+also show on the homepage.
+
+- Owners write, edit and delete posts under **Admin > Announcements**, with a live preview. (The old banner and
+  game-chat announcement is on the same page as "Quick announcement".)
+- Markdown that works: `## headings`, `**bold**`, `*italic*`, `~~strike~~`, `- lists` (one level of nesting),
+  `1. numbered lists`, `> quotes`, `` `code` `` and fenced code blocks, `[links](https://…)`, bare links, and `---`.
+  Pictures are not supported. Posts are drawn as text, never as HTML, so nothing typed in a post can run on the page.
+- API: `GET /api/posts?offset=&limit=&tag=`, `GET /api/posts/<id>`, `POST /api/admin/posts` (owner).
+
+### Giving coins to everyone online
+
+The dashboard's gift has a **PlebClient players only** switch for that one gift. On: only players on PlebClient get
+it. Off: everyone online does. It doesn't change `plebclient-only` in PlebioAPI's config. PlebioAPI needs to be the
+build from this update or newer; an older one ignores the switch and follows `plebclient-only`.

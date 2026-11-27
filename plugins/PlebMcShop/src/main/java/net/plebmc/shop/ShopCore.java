@@ -1039,9 +1039,17 @@ final class ShopCore {
 	 * plebclient-only is on). Returns how many got them.
 	 */
 	synchronized int giveOnline(long n) {
+		return giveOnline(n, null);
+	}
+
+	/**
+	 * Gives coins to everyone online right now. clientOnly picks who for this one gift: true = only
+	 * players on the PlebMc client, false = everyone, null = whatever plebclient-only says.
+	 */
+	synchronized int giveOnline(long n, Boolean clientOnly) {
 		int got = 0;
 		for (UUID o : net.online()) {
-			if (!earns(o)) {
+			if (clientOnly == null ? !earns(o) : clientOnly && !clients.contains(o)) {
 				continue;
 			}
 			Store.Data d = store.get(o);
@@ -1485,11 +1493,12 @@ final class ShopCore {
 				} catch (NumberFormatException e) {
 					n = -1;
 				}
-				if (n <= 0 || n > 1_000_000_000L) {
-					s.reply(prefix + color("&cUsage: /" + label + " coins online <amount>"));
+				Boolean who = a.length < 4 ? null : "all".equalsIgnoreCase(a[3]) ? Boolean.FALSE : "client".equalsIgnoreCase(a[3]) ? Boolean.TRUE : null;
+				if (n <= 0 || n > 1_000_000_000L || (a.length >= 4 && who == null)) {
+					s.reply(prefix + color("&cUsage: /" + label + " coins online <amount> [all|client]"));
 					return;
 				}
-				s.reply(prefix + color("&aGave " + fmt(n) + " " + currency + " to " + giveOnline(n) + " players online."));
+				s.reply(prefix + color("&aGave " + fmt(n) + " " + currency + " to " + giveOnline(n, who) + " players online."));
 				return;
 			}
 			if (a.length < 4) {

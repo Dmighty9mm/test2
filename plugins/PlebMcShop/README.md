@@ -300,6 +300,13 @@ Hats: `tophat`, `crown`, `halo`, `partyhat`, `beanie`, `horns`, `cap`, `headphon
 Item and quest ids are what `players.yml` saves, so don't rename ones players already have.
 `hidden-in-worlds: [arena1, 'plebnite:arena2']` hides cosmetics in those worlds.
 
+## Gifts to everyone online
+
+`/pleb coins online <amount>` gives coins to everyone online who can earn (PlebMc client players when
+`plebclient-only` is on). Add `all` or `client` to pick who gets that one gift whatever `plebclient-only` says:
+`/pleb coins online 100 all` for everyone, `/pleb coins online 100 client` for PlebMc client players only. The
+panel's "Give coins to everyone online" has the same choice as a switch.
+
 ## Build and test
 
 Only a JDK is needed (the BungeeCord API is downloaded for compiling):
