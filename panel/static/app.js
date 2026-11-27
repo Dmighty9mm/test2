@@ -1604,7 +1604,8 @@ async function clientView() {
   const vbody = h("tbody", {}, r.versions.map((v) => h("tr", {}, h("td", {}, "PlebClient " + v.version), h("td", {}, v.platform), h("td", { class: "num" }, fmt(v.n)),
     h("td", {}, c.latest && olderVersion(v.version, c.latest) ? h("span", { class: "pill warn" }, "outdated") : h("span", { class: "pill good" }, "up to date")))));
   return h("div", { class: "grid g2" },
-    card("Update checker",
+    panelUpdateCard(upd, ro),
+    card("PlebClient update checker",
       h("p", { class: "muted" }, "Every PlebClient asks the panel when it starts. Older than Latest: it shows an Update screen with a Later button. Older than Oldest allowed: it can't be played until updated."),
       h("label", { for: "clatest" }, "Latest version"), latest,
       h("label", { for: "cmin" }, "Oldest allowed version (blocks older clients)"), minimum,
@@ -1621,7 +1622,7 @@ async function clientView() {
     card("Versions in use (last 7 days)", r.versions.length ? h("div", { class: "scroll" }, h("table", {},
       h("thead", {}, h("tr", {}, h("th", {}, "Version"), h("th", {}, "Platform"), h("th", { class: "num" }, "Starts"), h("th", {}, ""))), vbody))
       : empty("refresh", "No client has checked in yet.")),
-    downloadsCard(r.downloads, ro), panelUpdateCard(upd, ro));
+    downloadsCard(r.downloads, ro));
 }
 
 function downloadsCard(list, ro) {
