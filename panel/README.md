@@ -185,8 +185,11 @@ never reaches a backend server or the proxy's command log.
 ## Stats and leaderboards
 
 **Stats**: type a player's name to see their stats, one game at a time: PlebNite
-(first), PlebRPG and PlebMc (coins, cosmetics, daily streak). **Leaderboards**: a board
-for every stat of every game; click a name to open their stats.
+(first), PlebRPG and PlebMc (coins, cosmetics, daily streak). **Leaderboards**: pick a
+game and "All stats" shows the top 10 of every stat side by side (Kills, Wins, Deaths,
+Play time and so on, like the Discord bot); pick one stat for its top 100. PlebNite and
+PlebRPG show their boards (empty) before their servers send anything. Click a name to
+open their stats.
 
 The game servers send stats with **PlebMcBridge** (2.1+):
 
@@ -199,8 +202,8 @@ The game servers send stats with **PlebMcBridge** (2.1+):
 3. Restart, then run `/plebstats <player>` to check what is read and send it right away.
 
 Online players are sent every 5 minutes and when they leave, so boards fill up as people
-play. Anyone can read `GET /api/stats/games`, `/api/stats/top?game=&stat=` and
-`/api/stats/player?name=`.
+play. Anyone can read `GET /api/stats/games`, `/api/stats/top?game=&stat=`,
+`/api/stats/boards?game=` (every stat's top 10) and `/api/stats/player?name=`.
 
 ## Ranks with LuckPerms
 

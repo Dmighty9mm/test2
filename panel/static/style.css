@@ -146,6 +146,20 @@ button:focus-visible, .btn:focus-visible, a:focus-visible { outline: 2px solid v
 .toast.bad { border-color: rgba(255, 107, 107, .5); }
 @keyframes pop { from { transform: translateY(8px); opacity: 0; } }
 
+/* ---------- stat leaderboards ---------- */
+.boards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.board { background: var(--card2); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 14px 8px; min-width: 0; }
+.board-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.board-head svg { width: 16px; height: 16px; color: var(--gold); flex: none; }
+.board-head h3 { margin: 0; font-size: 14.5px; }
+.board ol { list-style: none; margin: 0; padding: 0; }
+.board li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.board li:first-child { border-top: 0; }
+.board li a { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); display: flex; align-items: center; gap: 8px; }
+.board li b { white-space: nowrap; }
+.board li.none { padding: 10px 0; }
+button.linkish { background: none; border: 0; padding: 0; color: var(--accent); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+button.linkish:hover { text-decoration: underline; }
 /* ---------- tables ---------- */
 .scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }

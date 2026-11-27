@@ -477,6 +477,12 @@ class PanelLogic(unittest.TestCase):
         self.assertEqual(len(self.p.audit_page(q="entry 11")["audit"]), 11)
 
     def test_game_stats_and_leaderboards(self):
+        # PlebNite and PlebRPG have their boards before their servers send anything
+        before = {g["id"]: [s["id"] for s in g["stats"]] for g in self.p.stat_games()}
+        self.assertEqual(list(before), ["plebmc", "plebnite", "plebrpg"])
+        self.assertIn("kills", before["plebnite"])
+        self.assertIn("mob_kills", before["plebrpg"])
+        self.assertEqual(self.p.stats_top("plebrpg", "level")["rows"], [])
         self.p.sync({"players": [{"uuid": "u1", "name": "Bob", "coins": 50, "owned": ["a", "b"], "streak": 3},
                                  {"uuid": "u2", "name": "Ann", "coins": 90, "owned": [], "streak": 1}]})
         r = self.p.put_stats({"game": "plebnite", "labels": {"normal_wins": "Wins"}, "players": [
@@ -485,7 +491,7 @@ class PanelLogic(unittest.TestCase):
             {"name": "not a name!", "stats": {"kills": 99}}]})
         self.assertEqual(r["saved"], 5)
         games = self.p.stat_games()
-        self.assertEqual([g["id"] for g in games], ["plebmc", "plebnite"])
+        self.assertEqual([g["id"] for g in games], ["plebmc", "plebnite", "plebrpg"])
         nite = games[1]
         self.assertEqual(nite["title"], "PlebNite")
         self.assertEqual([(s["id"], s["label"]) for s in nite["stats"]],
@@ -510,6 +516,14 @@ class PanelLogic(unittest.TestCase):
             self.p.put_stats({"game": "", "players": []})
         with self.assertRaises(app.ApiError):
             self.p.stats_top("nogame", "x")
+        # every stat's top 10 at once, like the Discord bot
+        boards = self.p.stats_boards("plebnite")
+        self.assertEqual([b["stat"]["id"] for b in boards["boards"]], ["kills", "normal_wins", "play_time"])
+        self.assertEqual([x["name"] for x in boards["boards"][0]["rows"]], ["bob", "Ann"])
+        self.assertEqual([b["stat"]["id"] for b in self.p.stats_boards("plebmc")["boards"]], ["coins", "items", "streak"])
+        self.assertEqual(len(self.p.stats_boards("plebmc", 1)["boards"][0]["rows"]), 1)
+        with self.assertRaises(app.ApiError):
+            self.p.stats_boards("nogame")
 
 
 class PanelHttp(unittest.TestCase):
@@ -677,6 +691,9 @@ class PanelHttp(unittest.TestCase):
             self.assertEqual((s, b["name"]), (200, "Cal"))
             s, b, _ = self.call("/api/stats/games")
             self.assertIn("plebrpg", [g["id"] for g in b["games"]])
+            s, b, _ = self.call("/api/stats/boards?game=plebrpg")
+            lv = next(x for x in b["boards"] if x["stat"]["id"] == "level")
+            self.assertEqual((s, lv["rows"][0]["name"]), (200, "Cal"))
         finally:
             self.p.cfg.stats_key = ""
 

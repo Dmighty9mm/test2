@@ -297,39 +297,66 @@ function statValue(st, v) {
   return Number.isInteger(v) ? fmt(v) : (Math.round(v * 100) / 100).toLocaleString();
 }
 
-/** Stats and leaderboards: PlebMc, PlebNite and PlebRPG, a board per stat, and any player's stats. */
+/** One stat's top 10 as a small card, like the Discord bot's leaderboard embeds. */
+function statBoard(game, b, open) {
+  const rows = b.rows.length ? b.rows.map((x) => h("li", {},
+    h("span", { class: "rank" + (x.place <= 3 ? " r" + x.place : "") }, x.place),
+    h("a", { href: "#stats?game=" + game.id + "&name=" + encodeURIComponent(x.name) }, initial(x.name), x.name),
+    h("b", {}, statValue(b.stat, x.value))))
+    : [h("li", { class: "muted none" }, "Nobody yet.")];
+  return h("div", { class: "board" },
+    h("div", { class: "board-head" }, icon("trophy"), h("h3", {}, b.stat.label), h("span", { class: "spacer" }),
+      b.rows.length ? h("button", { class: "linkish", onclick: () => open(b.stat.id) }, "Full board →") : null),
+    h("ol", {}, ...rows));
+}
+
+/** Stats and leaderboards: PlebMc, PlebNite and PlebRPG. "All stats" shows every stat's top 10 at once, or pick one stat for its top 100. */
 async function leaderboardView() {
   const games = (await api("stats/games")).games;
   const p = params();
   let game = games.find((g) => g.id === p.game) || games[0];
-  let stat = (game.stats.find((s) => s.id === p.stat) || game.stats[0] || {}).id;
+  let stat = (game.stats.find((s) => s.id === p.stat) || {}).id || "";
   const gameChips = h("div", { class: "chips" });
   const statChips = h("div", { class: "chips" });
+  const out = h("div", {});
   const body = h("tbody");
   const head = h("h2", {});
-  const keep = () => history.replaceState(null, "", "#leaderboard?" + new URLSearchParams({ game: game.id, stat: stat || "" }).toString());
+  const keep = () => history.replaceState(null, "", "#leaderboard?" + new URLSearchParams({ game: game.id, stat }).toString());
   const pg = pager(body, async (offset) => {
-    const r = await api("stats/top?game=" + encodeURIComponent(game.id) + "&stat=" + encodeURIComponent(stat || "") + "&offset=" + offset + "&limit=25");
+    const r = await api("stats/top?game=" + encodeURIComponent(game.id) + "&stat=" + encodeURIComponent(stat) + "&offset=" + offset + "&limit=25");
     return { items: r.rows.map((x) => ({ ...x, st: r.stat })), total: r.total, more: offset + r.rows.length < r.total };
   }, (x) => h("tr", {}, h("td", { style: "width:40px" }, h("span", { class: "rank" + (x.place <= 3 ? " r" + x.place : "") }, x.place)),
     h("td", {}, h("a", { href: "#stats?game=" + game.id + "&name=" + encodeURIComponent(x.name) }, initial(x.name), x.name)),
     h("td", { class: "num" }, h("b", {}, statValue(x.st, x.value)))),
   { empty: () => h("tr", {}, h("td", { class: "muted" }, "Nobody is on this board yet. Stats show up after people play.")) });
+  const single = h("div", {}, head, h("div", { class: "scroll" }, h("table", {}, body)), pg.more);
+  let ask = 0;
+  const showAll = () => {
+    const mine = ++ask;
+    out.replaceChildren(h("p", { class: "muted" }, "Loading…"));
+    api("stats/boards?game=" + encodeURIComponent(game.id)).then((r) => {
+      if (mine !== ask) return;
+      out.replaceChildren(h("div", { class: "boards" }, ...r.boards.map((b) => statBoard(r.game, b, pick))));
+    }).catch((e) => { if (mine === ask) out.replaceChildren(h("p", { class: "muted" }, e.message)); });
+  };
+  const show = () => {
+    draw();
+    keep();
+    if (stat) { ask++; out.replaceChildren(single); pg.reset(); } else showAll();
+  };
+  const pick = (id) => { stat = id; show(); window.scrollTo({ top: 0 }); };
   const draw = () => {
     gameChips.replaceChildren(...games.map((g) => h("button", { class: "chip", "aria-pressed": String(g.id === game.id), onclick: () => {
-      game = g; stat = (g.stats[0] || {}).id; draw(); keep(); pg.reset();
+      game = g; stat = ""; show();
     } }, g.title)));
-    statChips.replaceChildren(...game.stats.map((s) => h("button", { class: "chip", "aria-pressed": String(s.id === stat), onclick: () => {
-      stat = s.id; draw(); keep(); pg.reset();
-    } }, s.label)));
+    statChips.replaceChildren(h("button", { class: "chip", "aria-pressed": String(!stat), onclick: () => pick("") }, "All stats"),
+      ...game.stats.map((s) => h("button", { class: "chip", "aria-pressed": String(s.id === stat), onclick: () => pick(s.id) }, s.label)));
     const st = game.stats.find((s) => s.id === stat);
     head.textContent = game.title + (st ? " · " + st.label : "");
   };
-  draw();
-  pg.reset();
-  return card(h("h2", {}, "Leaderboards"), h("p", { class: "muted" }, "Pick a game and a stat. Click a name to see their stats."),
-    gameChips, h("div", { style: "height:8px" }), statChips, h("div", { style: "height:14px" }), head,
-    h("div", { class: "scroll" }, h("table", {}, body)), pg.more);
+  show();
+  return card(h("h2", {}, "Leaderboards"), h("p", { class: "muted" }, "The top 10 for every stat. Pick a stat for its top 100, or click a name to see their stats."),
+    gameChips, h("div", { style: "height:8px" }), statChips, h("div", { style: "height:16px" }), out);
 }
 
 /** Stats: type a player and see their stats, one game at a time (PlebNite first). */
