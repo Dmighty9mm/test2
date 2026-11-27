@@ -212,6 +212,13 @@ def env(name, default=None):
 
 GAME_TITLES = {"plebmc": "PlebMc", "plebnite": "PlebNite", "plebrpg": "PlebRPG", "lobby": "Lobby"}
 GAME_ORDER = ["plebmc", "plebnite", "plebrpg"]
+# The boards PlebNite and PlebRPG show before their servers send anything (PlebMcBridge's default stats)
+DEFAULT_GAME_STATS = {
+    "plebnite": [("kills", "Kills"), ("normal_wins", "Wins"), ("plunder_wins", "Plunder wins"), ("deaths", "Deaths"),
+                 ("games_played", "Games played"), ("player_exp", "Exp"), ("play_time", "Play time")],
+    "plebrpg": [("level", "Level"), ("mob_kills", "Mobs killed"), ("player_kills", "Players killed"),
+                ("deaths", "Deaths"), ("play_time", "Play time")],
+}
 
 
 class Config:
@@ -1130,10 +1137,29 @@ class Panel:
             {"id": "coins", "label": self.server_status()["currency"] or "Coins"},
             {"id": "items", "label": "Cosmetics owned"}, {"id": "streak", "label": "Daily streak"}]
             + [st for st in (games.get("plebmc") or {}).get("stats", [])]}]
+        for gid, stats in DEFAULT_GAME_STATS.items():
+            if gid not in games:
+                games[gid] = {"title": GAME_TITLES[gid], "stats": [
+                    {"id": sid, "label": label, **({"kind": "time"} if sid.endswith("time") else {})} for sid, label in stats]}
         for gid in sorted(games, key=lambda g: (GAME_ORDER.index(g) if g in GAME_ORDER else 99, g)):
             if gid != "plebmc":
                 out.append({"id": gid, "title": games[gid].get("title") or gid, "stats": games[gid].get("stats", [])})
         return out
+
+    def stats_boards(self, game, limit=10):
+        """Every stat's top players for one game at once, like the Discord bot's leaderboards."""
+        try:
+            limit = max(1, min(10, int(limit)))
+        except (TypeError, ValueError):
+            limit = 10
+        g = next((x for x in self.stat_games() if x["id"] == game), None)
+        if not g:
+            raise ApiError(404, "No stats for that game yet.")
+        boards = []
+        for st in g["stats"]:
+            top = self.stats_top(g["id"], st["id"], 0, limit)
+            boards.append({"stat": st, "total": top["total"], "rows": top["rows"]})
+        return {"game": {"id": g["id"], "title": g["title"]}, "boards": boards}
 
     def put_stats(self, body):
         """One game server's stats for some players: {game, title?, labels?, players: [{name, stats: {id: number}}]}."""
@@ -1929,6 +1955,8 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET" and route == "stats/top":
             return self.send_json(200, {"ok": True, **p.stats_top(one("game", "plebmc"), one("stat"), one("offset", "0"),
                                                                    one("limit", "10"))})
+        if method == "GET" and route == "stats/boards":
+            return self.send_json(200, {"ok": True, **p.stats_boards(one("game", "plebmc"), one("limit", "10"))})
         if method == "GET" and route == "stats/player":
             return self.send_json(200, {"ok": True, **p.player_stats(one("name"))})
         if method == "GET" and route == "shop":
