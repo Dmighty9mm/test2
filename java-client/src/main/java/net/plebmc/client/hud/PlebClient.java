@@ -474,6 +474,15 @@ public final class PlebClient {
 	}
 
 	/** FontRenderer: Apollo nick hider swaps the player's own name in drawn text. */
+	/** Own Nametag mod: your name over your own head (the caller checks the camera is in third person). */
+	public static boolean showOwnName() {
+		try {
+			return mods != null && mods.ownNametag.isActive();
+		} catch (Throwable t) {
+			return false;
+		}
+	}
+
 	public static String filterText(String text) {
 		if (text == null || mc == null || mc.thePlayer == null) {
 			return text;

@@ -805,7 +805,7 @@ public final class Cosmetics {
 		if (pleb.signedIn && !was) {
 			toasts.show("Signed in", "PlebMc account: " + pleb.name);
 		} else if (!wasKnown && pleb.checked && pleb.enabled && pleb.exists && !pleb.signedIn && token == null && !pleb.locked) {
-			toasts.show("Sign in to your account", "Right Shift > Sign in, or /account login");
+			toasts.show("Sign in to your account", "Right Shift > Sign in");
 		}
 	}
 

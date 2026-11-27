@@ -514,30 +514,6 @@ public final class BungeeShop extends Plugin implements Listener {
 		signin.joined(e.getPlayer().getUniqueId(), e.getPlayer().getName());
 	}
 
-	/**
-	 * /account (alias /acc). Handled here, before BungeeCord would dispatch
-	 * (and maybe log) the command, so passwords typed after it never reach a
-	 * backend server or the proxy log. Runs after login plugins (they may block
-	 * commands until /login).
-	 */
-	@EventHandler(priority = net.md_5.bungee.event.EventPriority.LOW)
-	@SuppressWarnings("deprecation")
-	public void onAccountCommand(ChatEvent e) {
-		if (e.isCancelled() || !e.isCommand() || !(e.getSender() instanceof ProxiedPlayer)) {
-			return;
-		}
-		String msg = e.getMessage().trim();
-		String[] parts = msg.substring(1).split("\\s+");
-		String label = parts[0].toLowerCase(java.util.Locale.ROOT);
-		if (!label.equals("account") && !label.equals("acc")) {
-			return;
-		}
-		e.setCancelled(true);
-		ProxiedPlayer p = (ProxiedPlayer) e.getSender();
-		String[] args = java.util.Arrays.copyOfRange(parts, 1, parts.length);
-		signin.command(p.getUniqueId(), args, line -> p.sendMessage(TextComponent.fromLegacyText(line)));
-	}
-
 	/** LuckPerms on the proxy, or null (found once, after every plugin enabled). */
 	private Object luckPerms;
 	private boolean luckPermsTried;

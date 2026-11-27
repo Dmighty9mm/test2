@@ -26,7 +26,7 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 		this.renderer = renderer;
 	}
 
-	/** Per player: last ageInTicks, flap time, speed, amount. */
+	/** Per player: last draw time (ms), flap time (ticks), speed, amount. */
 	private static final java.util.Map<Integer, float[]> flaps = new java.util.HashMap<>();
 
 	@Override
@@ -46,21 +46,24 @@ public final class CosmeticLayer implements LayerRenderer<AbstractClientPlayer> 
 				renderer.getMainModel().bipedBody.postRender(0.0625F);
 				GlStateManager.scale(0.0625F, 0.0625F, 0.0625F);
 				// flap faster while flying or falling, slowly while standing; the beat keeps
-				// going smoothly when that changes (ageInTicks already counts partial ticks)
+				// going smoothly when that changes. Timed by the clock, not ageInTicks: the
+				// shop preview draws the same player again in a frame with another partial
+				// tick, which made the wings flap faster while it was open.
 				boolean air = !player.onGround;
 				float[] st = flaps.get(player.getEntityId());
+				float nowMs = (float) (System.currentTimeMillis() % 86_400_000L);
 				if (st == null) {
 					if (flaps.size() > 256) {
 						flaps.clear();
 					}
-					st = new float[] { ageInTicks, 0f, 1f, 1f };
+					st = new float[] { nowMs, 0f, 1f, 1f };
 					flaps.put(player.getEntityId(), st);
 				}
-				float dt = ageInTicks - st[0];
+				float dt = (nowMs - st[0]) / 50f;
 				if (dt < 0f || dt > 20f) {
 					dt = 0f;
 				}
-				st[0] = ageInTicks;
+				st[0] = nowMs;
 				float k = Math.min(1f, dt * 0.12f);
 				st[2] += ((air ? 2.4f : 1f) - st[2]) * k;
 				st[3] += ((air ? 1.6f : 1f) - st[3]) * k;

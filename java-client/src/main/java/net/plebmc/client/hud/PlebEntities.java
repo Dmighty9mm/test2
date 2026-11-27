@@ -99,8 +99,10 @@ public final class PlebEntities {
 	}
 
 	/**
-	 * Draws the Pleb head left of a player's nametag (in the label's own pixels,
-	 * {@code half} is half the text width) when they play on PlebClient.
+	 * Draws the Pleb head right after a player's nametag, on the same see-through
+	 * background (in the label's own pixels; {@code half} is half the text width,
+	 * so the vanilla background ends at half + 1) when they play on PlebClient.
+	 * The tab list puts it after the name too.
 	 */
 	public static void nametagBadge(Entity e, String label, int half, int y) {
 		if (!(e instanceof net.minecraft.entity.player.EntityPlayer) || label == null
@@ -108,7 +110,8 @@ public final class PlebEntities {
 			return;
 		}
 		try {
-			Ui.mascot(-half - 11, y - 1, 9, 1f);
+			Ui.rect(half + 1, y - 1, 11, 9, 0x40000000);
+			Ui.mascot(half + 2, y, 8, 1f);
 		} catch (Throwable t) {
 			// the texture isn't ready: just the name
 		}

@@ -440,6 +440,13 @@ public final class MoreMods {
 		}
 	}
 
+	public static final class OwnNametag extends Mod {
+		public OwnNametag() {
+			super("own-nametag", "Own Nametag", "See your own name above your head in third person", false, 0f, 0f);
+			category(VISUAL);
+		}
+	}
+
 	public static final class DeathCoords extends Mod {
 		public DeathCoords() {
 			super("death-coords", "Death Coordinates", "Puts where you died in chat so you can go back for your stuff", true, 0f, 0f);

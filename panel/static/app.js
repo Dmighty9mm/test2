@@ -531,8 +531,8 @@ function registerView() {
   h("div", { class: "center" }, h("img", { src: "/static/logo.png", alt: "", style: "width:64px;height:64px;image-rendering:pixelated" })),
   h("h1", { class: "center" }, "Create your account"),
   info.openRegistration ? h("p", { class: "muted center" }, "Pick the name you play as, then sign in with it on the PlebClient start screen.") :
-    h("div", {}, h("p", { class: "muted" }, "Your account belongs to the name you play with. To prove it's you:"),
-      h("ol", { class: "muted" }, h("li", {}, "Join the server with your name"), h("li", {}, "Type ", h("code", {}, "/account code"), " in chat"), h("li", {}, "Type the code here"))),
+    h("div", {}, h("p", { class: "muted" }, "Sign-ups need a code on this site right now:"),
+      h("ol", { class: "muted" }, h("li", {}, "Ask an admin for a sign-up code"), h("li", {}, "Type the code here"))),
   field("Minecraft name", { id: "name", name: "name", required: true, maxlength: 16, value: p.name || "", autocomplete: "username" }),
   info.openRegistration ? null : field("Code from the game", { id: "code", name: "code", required: true, value: p.code || "", placeholder: "ABCD-1234", autocomplete: "off" }),
   field("Password (8+ characters)", { id: "password", name: "password", type: "password", required: true, minlength: 8, autocomplete: "new-password" }),

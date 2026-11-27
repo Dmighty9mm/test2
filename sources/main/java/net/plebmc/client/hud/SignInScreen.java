@@ -9,7 +9,7 @@ import net.plebmc.client.cosmetics.PlebAccount;
 /**
  * Right Shift > Sign in: the PlebMc account that owns your name. On a cracked
  * server anyone can type your name, so the server only lets you spend coins,
- * buy or equip after you sign in here (or with /account login). "Remember me"
+ * buy or equip after you sign in here. "Remember me"
  * keeps a sign-in token in this browser so next time it happens by itself.
  */
 public final class SignInScreen extends PlebScreen {
@@ -94,7 +94,7 @@ public final class SignInScreen extends PlebScreen {
 			if (!a.panel.isEmpty()) {
 				Button site = button(reg ? "Make it on the website" : "Forgot password?", x, by, 130, 18,
 						() -> EagRuntime.openLink(a.panel));
-				site.icon("link").tip = reg ? "Type /account code in chat for a code, then open " + a.panel
+				site.icon("link").tip = reg ? "Make your account on " + a.panel
 						: "An admin can reset it on " + a.panel;
 			}
 			break;

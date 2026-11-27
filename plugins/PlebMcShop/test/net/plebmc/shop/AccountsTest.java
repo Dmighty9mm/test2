@@ -185,7 +185,7 @@ public class AccountsTest {
         Map<?, ?> st = lastSignin(owner);
         check(st != null && Boolean.TRUE.equals(st.get("enabled")) && Boolean.FALSE.equals(st.get("exists"))
                 && Boolean.FALSE.equals(st.get("signedIn")) && "https://panel.example".equals(st.get("panel")), "join: no account yet " + st);
-        check(chatHas(owner, "/account register"), "told how to make an account");
+        check(chatHas(owner, "sign up on PlebClient"), "told how to make an account");
         core.command(new ShopCore.Sender() {
             public void reply(String l) { }
             public boolean hasPermission(String p) { return true; }
@@ -193,7 +193,7 @@ public class AccountsTest {
         int before = owner.got.size();
         core.fromClient(owner.id, "{\"type\":\"buy\",\"id\":\"tophat\"}");
         Map<?, ?> n = owner.last("notify");
-        check(n != null && String.valueOf(n.get("message")).contains("/account login"), "buying needs a signed-in account: " + n);
+        check(n != null && String.valueOf(n.get("message")).contains("Sign in"), "buying needs a signed-in account: " + n);
         check(owner.coins() == 5000, "no coins spent");
 
         // ---- make it in game ----

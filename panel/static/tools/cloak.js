@@ -321,7 +321,14 @@
         if (out.length > 1) { S.source = 'frames'; S.art = out; S.artMs = ms; }
         else { S.source = 'still'; S.art = out; S.artMs = []; }
       } else if (files.length === 1) {
-        const im = await loadImage(files[0]), ready = asCapeTexture(im);
+        const im = await loadImage(files[0]), stacked = asCapeSheet(im), ready = stacked ? null : asCapeTexture(im);
+        if (stacked) {
+          // an animated cloak PNG (like one downloaded from here): its frames, as they are
+          S.source = 'sheet'; S.sheet = stacked; S.art = []; S.artMs = [];
+          markEffects(); syncMotion(); rebuild();
+          toast(`That image is an animated cape texture (${stacked.length} frames), so it is used as it is.`, 'ok');
+          return;
+        }
         if (ready) {
           // already a cape texture (front, back and edges laid out): use it as it is instead of squeezing it onto the back
           S.source = 'sheet'; S.sheet = [ready]; S.art = []; S.artMs = [];
@@ -343,6 +350,27 @@
    * elytra part (46x22 and its multiples), or just the cape part (22x17, or any size that shape).
    * Otherwise null.
    */
+  /**
+   * The frames of an animated cape texture: 2:1 frames stacked top to bottom (what this page
+   * downloads and publishes), told apart from a tall picture by the cape layout leaving the
+   * right part of each frame empty. Otherwise null.
+   */
+  function asCapeSheet(im) {
+    const w = im.width, h = im.height, fh = w / 2;
+    if (w < 64 || fh % 1 !== 0 || h <= fh || h % fh !== 0 || h / fh > MAX_FRAMES) return null;
+    const c = document.createElement('canvas'); c.width = w; c.height = fh;
+    const g = c.getContext('2d'); g.drawImage(im, 0, 0, w, fh, 0, 0, w, fh);
+    const x0 = Math.ceil(w * 23 / 64), d = g.getImageData(x0, 0, w - x0, fh).data;
+    let clear = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] < 16) clear++;
+    if (clear < (d.length / 4) * 0.9) return null;
+    const out = [];
+    for (let i = 0; i < h / fh; i++) {
+      const f = document.createElement('canvas'); f.width = w; f.height = fh;
+      f.getContext('2d').drawImage(im, 0, i * fh, w, fh, 0, 0, w, fh); out.push(f);
+    }
+    return out;
+  }
   function asCapeTexture(im) {
     const w = im.width, h = im.height, near = (r) => Math.abs(w / h - r) / r < 0.03;
     // the sheet is copied onto a 64 * u by 32 * u canvas, scaled when its size isn't already that

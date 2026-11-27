@@ -281,7 +281,7 @@ public final class ShopScreen extends PlebScreen {
 			} else {
 				// the hat itself, turning while you point at it
 				float spin = hover > 0.05f || sel ? (System.currentTimeMillis() % 7200L) / 20f : 0f;
-				CosmeticLayer.thumb(it, x + w / 2f, y + 11f, 1.8f, 35f + spin, System.currentTimeMillis() / 50f);
+				CosmeticLayer.thumb(it, x + w / 2f, y + 11f, 1.8f, 35f + spin, (System.currentTimeMillis() % 3_600_000L) / 50f);
 			}
 			Cosmetics.Collection col = Cosmetics.collection(it.collection);
 			if (col != null && Cosmetics.collections().indexOf(col) > 0) {

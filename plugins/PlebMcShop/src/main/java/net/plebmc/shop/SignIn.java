@@ -153,12 +153,12 @@ final class SignIn {
 			sendStatus(s.id, null, true);
 			if (s.exists && !s.signedIn) {
 				net.chat(s.id, prefix + ShopCore.color(s.locked ? "&cThis account is locked. Ask an admin."
-						: "&eThis name has a PlebMc account. Sign in: &f/account login <password>"
+						: "&eThis name has a PlebMc account. Sign in on PlebClient"
 								+ (signInMs > 0 ? " &e(within " + signInMs / 1000 + " seconds)" : "")
-								+ " &7or Right Shift > Sign in on the PlebMc client."));
+								+ "&e: Right Shift > Sign in."));
 			} else if (!s.exists) {
 				net.chat(s.id, prefix + ShopCore.color("&7Make a PlebMc account so nobody else can spend your coins: "
-						+ "&f/account register <password> <password>"));
+						+ "&fsign up on PlebClient or " + publicUrl));
 			}
 		});
 	}
@@ -186,7 +186,7 @@ final class SignIn {
 				} else if (left <= signInMs / 2 && !s.warned) {
 					s.warned = true;
 					net.chat(s.id, prefix + ShopCore.color("&eSign in within " + Math.max(1, left / 1000)
-							+ " seconds or you'll be kicked: &f/account login <password>"));
+							+ " seconds or you'll be kicked: &fRight Shift > Sign in on PlebClient"));
 				}
 			}
 		}
@@ -195,8 +195,7 @@ final class SignIn {
 		}
 		for (Session s : kick) {
 			log.info("PlebMc accounts: kicked " + s.name + " (didn't sign in)");
-			net.kick(s.id, "§cThis name has a PlebMc account and you didn't sign in.\n§7Use §f/account login <password>"
-					+ "§7 right after joining, or the Sign in screen on the PlebMc client.");
+			net.kick(s.id, "§cThis name has a PlebMc account and you didn't sign in.\n§7Sign in on PlebClient (Right Shift > Sign in).");
 		}
 	}
 
@@ -275,7 +274,7 @@ final class SignIn {
 			if (!ok) {
 				String why = str(r.get("error"), "Wrong password.");
 				if (Boolean.FALSE.equals(r.get("exists"))) {
-					why = "This name has no PlebMc account yet: /account register <password> <password>";
+					why = "This name has no PlebMc account yet. Make one on PlebClient or " + publicUrl;
 				}
 				Map<String, Object> extra = new LinkedHashMap<>();
 				if (token != null) {
@@ -338,7 +337,7 @@ final class SignIn {
 		}
 		for (UUID id : hit) {
 			signOut(id, null, "You were signed out from the panel. Sign in again.");
-			net.chat(id, prefix + ShopCore.color("&eYou were signed out of your PlebMc account. Sign in again: &f/account login <password>"));
+			net.chat(id, prefix + ShopCore.color("&eYou were signed out of your PlebMc account. Sign in again on PlebClient: &fRight Shift > Sign in"));
 			Session s = session(id);
 			if (s != null) {
 				lookup(s);

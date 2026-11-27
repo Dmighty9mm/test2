@@ -54,6 +54,7 @@ public final class ModRegistry {
         public final MoreMods.ClearWeather clearWeather = add(new MoreMods.ClearWeather());
         public final MoreMods.Overlays overlays = add(new MoreMods.Overlays());
         public final MoreMods.DeathCoords deathCoords = add(new MoreMods.DeathCoords());
+        public final MoreMods.OwnNametag ownNametag = add(new MoreMods.OwnNametag());
 
         private <T extends Mod> T add(T m) {
                 mods.add(m);

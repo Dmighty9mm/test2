@@ -49,6 +49,21 @@ public abstract class MixinRendererLivingEntity<T extends EntityLivingBase> exte
 		}
 	}
 
+	/** Own Nametag mod: your own name in third person (not in the inventory or shop previews). */
+	@Inject(method = "canRenderName(Lnet/minecraft/entity/EntityLivingBase;)Z", at = @At("RETURN"), cancellable = true)
+	private void plebmc$ownName(T entity, org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Boolean> cir) {
+		try {
+			net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getMinecraft();
+			if (!cir.getReturnValueZ() && entity == mc.thePlayer && entity == this.renderManager.livingPlayer
+					&& net.minecraft.client.Minecraft.isGuiEnabled() && mc.gameSettings.thirdPersonView != 0
+					&& this.renderManager.isRenderShadow() && net.plebmc.client.hud.PlebClient.showOwnName()) {
+				cir.setReturnValue(true);
+			}
+		} catch (Throwable t) {
+			// vanilla
+		}
+	}
+
 	/** Holograms from newer servers whose armor stand lost its invisible flag: draw only the text. */
 	@Inject(method = "renderModel", at = @At("HEAD"), cancellable = true)
 	private void plebmc$hologramStand(T entity, float a, float b, float c, float d, float e, float f, CallbackInfo ci) {

@@ -581,7 +581,7 @@ class Panel:
         row = self.db.one("SELECT * FROM claim_codes WHERE name_key=? AND expires_at>?", name.lower(), self.now())
         if not row or not hmac.compare_digest(row["code"], norm_code(code)):
             self.code_throttle.fail("ip:" + str(address))
-            raise ApiError(400, "That code is wrong or expired. Type /account code in game for a new one.")
+            raise ApiError(400, "That code is wrong or expired. Ask an admin for a new one.")
         # the spelling used in game wins (it is the player's UUID)
         name = row["name"]
         return self.create_account(name, password)

@@ -46,7 +46,8 @@ public final class SecretMods {
 
 	/**
 	 * Drawn over every menu (title screen, inventory, chat, PlebClient screens...).
-	 * {@code chat}: the chat screen is open, so the hotbar is still showing.
+	 * {@code chat}: the chat screen is open (kept for the hooks; in any world screen the
+	 * hotbar shows).
 	 */
 	public static void gui(int w, int h, boolean chat) {
 		ClientPrefs p = ClientPrefs.get();
@@ -62,15 +63,17 @@ public final class SecretMods {
 		GlStateManager.enableBlend();
 		GlStateManager.pushMatrix();
 		GlStateManager.translate(0f, 0f, 400f);
-		// in chat the hotbar is still there, so everything stays where the HUD has it
-		chat = chat && mc.thePlayer != null;
+		// in a world the hotbar is still there under the menu (inventory, chat...), so the
+		// snow pile and Plebio stay where the HUD has them; on the title screen menus
+		// Plebio sits in the corner
+		boolean world = mc.thePlayer != null && mc.theWorld != null;
 		if (p.snowMod) {
-			snow(w, h, now, chat);
+			snow(w, h, now, world);
 		}
 		// the title screen has its own Plebio when Title buddy is on
 		boolean titleBuddy = mc.currentScreen instanceof net.minecraft.client.gui.GuiMainMenu && p.titleBuddy;
 		if (p.buddyMod && !titleBuddy) {
-			buddy(w, h, now, mc.thePlayer, chat ? w / 2 + 91 + 6 : w - 18 - 6);
+			buddy(w, h, now, mc.thePlayer, world ? w / 2 + 91 + 6 : w - 18 - 6);
 		}
 		GlStateManager.popMatrix();
 		GlStateManager.color(1f, 1f, 1f, 1f);

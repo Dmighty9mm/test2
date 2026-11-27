@@ -509,7 +509,8 @@ public final class TitleMenu {
 			net.plebmc.client.cosmetics.Cosmetics.Item hat, net.plebmc.client.cosmetics.Cosmetics.Item wings) {
 		drawWings = wings;
 		try {
-			drawPlayer(x, foot, scale, yaw, 0f, 0f, System.currentTimeMillis() / 1000f, 1f, cloak, hat, 0f);
+			// seconds within the hour: the whole clock in a float is too coarse to move anything
+			drawPlayer(x, foot, scale, yaw, 0f, 0f, (System.currentTimeMillis() % 3_600_000L) / 1000f, 1f, cloak, hat, 0f);
 		} finally {
 			drawWings = null;
 		}

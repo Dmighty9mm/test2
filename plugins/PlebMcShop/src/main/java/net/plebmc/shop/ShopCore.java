@@ -421,7 +421,7 @@ final class ShopCore {
 		if (CHANGES.contains(type) && !net.authenticated(p)) {
 			// joined with this name but hasn't proved it's theirs yet: could be anyone
 			boolean accounts = signin != null && signin.enabled();
-			String why = accounts ? msg("sign-in-first-message", "Sign in to your PlebMc account first (/account login <password>)")
+			String why = accounts ? msg("sign-in-first-message", "Sign in to your PlebMc account first (Right Shift > Sign in on PlebClient)")
 					: msg("login-first-message", "Log in first (/login <password>)");
 			notify(p, accounts ? msg("sign-in-first-title", "&cNot signed in") : msg("login-first-title", "&cNot logged in"), why);
 			if ("admin".equals(type)) {

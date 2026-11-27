@@ -529,6 +529,12 @@ public abstract class RendererLivingEntity<T extends EntityLivingBase> extends R
 			}
 		}
 
+		if (entitylivingbase == entityplayersp && entitylivingbase == this.renderManager.livingPlayer
+				&& Minecraft.isGuiEnabled() && Minecraft.getMinecraft().gameSettings.thirdPersonView != 0
+				&& this.renderManager.isRenderShadow() && net.plebmc.client.hud.PlebClient.showOwnName()) {
+			// Own Nametag mod (not in the inventory or shop previews, which turn shadows off)
+			return true;
+		}
 		return Minecraft.isGuiEnabled() && entitylivingbase != this.renderManager.livingPlayer
 				&& !entitylivingbase.isInvisibleToPlayer(entityplayersp) && entitylivingbase.riddenByEntity == null;
 	}

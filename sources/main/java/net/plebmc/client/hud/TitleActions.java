@@ -39,7 +39,8 @@ final class TitleActions {
 			{ "-" },
 			{ "vote", "Vote", "nav_vote", "Vote for PlebMc every day: +100 coins" },
 			{ "discord", "Discord", "nav_discord", "Join the PlebMc Discord" },
-			{ "language", "Language", "nav_language", "Change the game language" } };
+			{ "language", "Language", "nav_language", "Change the game language" },
+			{ "logout", "Log out", "nav_logout", "Sign out of your PlebMc account on this client" } };
 
 	static void run(GuiScreen menu, String id) {
 		Minecraft mc = Minecraft.getMinecraft();
@@ -79,6 +80,10 @@ final class TitleActions {
 			break;
 		case "vote":
 			EagRuntime.openLink(net.plebmc.client.cosmetics.Cosmetics.voteUrl());
+			break;
+		case "logout":
+			net.plebmc.client.cosmetics.ClientSession.signOut();
+			mc.displayGuiScreen(new LoginGateScreen(new net.minecraft.client.gui.GuiMainMenu()));
 			break;
 		case "language":
 			mc.displayGuiScreen(new GuiLanguage(menu, mc.gameSettings, mc.getLanguageManager()));
