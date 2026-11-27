@@ -218,13 +218,13 @@ const NAV = [["home", "Home", "home"], ["downloads", "Download", "download"], ["
 const ADMIN_NAV = [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["announce", "Announcements", "megaphone"],
   ["site", "Site content", "edit", "owner"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Client updates", "refresh"], ["audit", "Admin log", "list"]];
 const ADMIN_VIEWS = new Set(["admin", "players", "player", "ranks", "rank", "announce", "site", "makers", "publish", "client", "audit"]);
-// eyebrow numbers and headings for the pages (Astra-style "02 — STATS")
+// page headings: [first word, second word (in color), a line under it]
 const HEADS = {
-  downloads: ["01", "Get", "PlebClient", "Pick how you want to play. The first time you start it, make your PlebMc account on the start screen."],
-  stats: ["02", "Player", "stats", "Type a name and pick PlebNite, PlebRPG or PlebMc."],
-  leaderboard: ["03", "Leader", "boards", "The best players on every game, one board per stat."],
-  shop: ["04", "The", "shop", "Hats, cloaks, wings and trails everyone on PlebMc can see."],
-  me: ["", "My", "account", ""],
+  downloads: ["Get", "PlebClient", "Pick how you want to play. The first time you start it, make your PlebMc account on the start screen."],
+  stats: ["Player", "stats", "Type a name and pick PlebNite, PlebRPG or PlebMc."],
+  leaderboard: ["The", "leaderboards", "The best players on every game, one board per stat."],
+  shop: ["The", "shop", "Hats, cloaks, wings and trails everyone on PlebMc can see."],
+  me: ["My", "account", ""],
 };
 
 const content = () => info.content || {};
@@ -235,9 +235,16 @@ const footer = document.getElementById("footer");
 
 function applyTheme() {
   const c = content();
-  if (/^#[0-9a-f]{6}$/i.test(c.accent || "")) document.documentElement.style.setProperty("--accent", c.accent);
+  if (/^#[0-9a-f]{6}$/i.test(c.accent || "")) setAccent(c.accent);
   document.getElementById("site").textContent = info.site;
   document.getElementById("brand-logo").src = siteLogo();
+}
+/** The site color, with dark or white writing on it, whichever reads better. */
+function setAccent(hex) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const root = document.documentElement.style;
+  root.setProperty("--accent", hex);
+  root.setProperty("--accent-ink", (r * 299 + g * 587 + b * 114) / 1000 > 140 ? "#04162a" : "#ffffff");
 }
 
 function setNav(view) {
@@ -313,105 +320,99 @@ async function homeView() {
   const c = content();
   const wrap = h("div", { class: "home" });
   const dl = (info.downloads || []).length ? "#downloads" : "#register";
+  const title = (a, b) => h("div", { class: "sec-title" }, h("h2", {}, ...a), b ? h("p", {}, b) : null);
 
-  // hero
-  const bg = h("div", { class: "bg" });
-  if (c.heroImage) bg.style.backgroundImage = "url(\"" + c.heroImage + "\")";
+  // hero: the art, then the name, tagline and buttons on the fade under it
+  const art = h("div", { class: "hero-art" });
+  if (c.heroImage) art.style.backgroundImage = "url(\"" + c.heroImage + "\")";
   const ann = announcementBanner();
-  wrap.append(h("section", { class: "home-hero" }, bg, h("div", { class: "wrap" },
-    ann ? h("div", { style: "max-width:760px;margin:0 auto 24px" }, ann) : null,
-    h("div", { class: "hero-in" },
-      c.badge ? h("a", { class: "badge", href: "#downloads" }, h("b", {}, "New"), c.badge, " →") : null,
-      h("img", { class: "hero-logo", src: siteLogo(), alt: info.site + " logo" }),
-      h("h1", { class: "display" }, h("span", {}, c.title1 || ""), h("span", { class: "grad" }, c.title2 || "")),
-      h("p", { class: "lead" }, c.subtitle || ""),
-      h("div", { class: "hero-cta" },
-        h("a", { class: "btn primary big", href: dl }, icon("download"), "Download PlebClient"),
-        c.serverIp ? h("button", { class: "btn glass big", onclick: () => copyIp(c.serverIp), title: "Copy the server address" }, icon("copy"), h("span", { class: "ip" }, c.serverIp)) : null),
-      h("div", { class: "hero-meta" },
-        h("span", {}, h("span", { class: "dot" + (s.connected ? " on" : "") }), s.connected ? fmt(s.online) + " playing now" : "Server status unavailable"),
-        h("span", {}, icon("globe"), "Plays in your browser"),
-        h("span", {}, icon("refresh"), cl.latest ? "PlebClient v" + cl.latest : "Free to play"))),
-    h("div", { class: "showcase" },
-      h("div", { class: "bar" }, h("i"), h("i"), h("i"), h("span", {}, "PlebClient")),
-      h("img", { src: c.showcase || c.heroImage || "/static/home/hero.jpg", alt: "PlebClient", loading: "lazy" }),
-      h("div", { class: "float f1" }, icon("sparkle"), h("div", {}, h("b", {}, "30+ mods"), h("small", {}, "HUD, zoom, keystrokes"))),
-      h("div", { class: "float f2" }, icon("coin"), h("div", {}, h("b", {}, coinName()), h("small", {}, "Earn them by playing")))),
-    h("div", { class: "hero-foot" }, h("span", {}, icon("gamepad"), "Minecraft 1.8.8"), h("span", {}, icon("users"), fmt(info.accounts) + " accounts"),
-      h("span", {}, icon("globe"), "Browser, Windows and Forge")))));
+  const ping = h("span", { class: "ping" + (s.connected ? " on" : ""), "aria-hidden": "true" }, h("i"), h("i"), h("i"), h("i"), h("i"));
+  wrap.append(h("section", {}, art, h("div", { class: "wrap hero-body" },
+    c.badge ? h("a", { class: "news", href: "#downloads" }, h("b", {}, "New"), c.badge) : null,
+    c.wordmark ? h("h1", { style: "margin:0" }, h("img", { class: "wordmark-img", src: c.wordmark, alt: info.site }))
+      : h("h1", { class: "wordmark" }, info.site),
+    h("p", { class: "tagline" }, c.title1 || "", " ", h("em", {}, c.title2 || "")),
+    h("p", { class: "lead" }, c.subtitle || ""),
+    h("div", { class: "hero-cta" },
+      h("a", { class: "btn primary big", href: dl }, icon("download"), "Download PlebClient"),
+      c.serverIp ? h("button", { class: "server", onclick: () => copyIp(c.serverIp), title: "Copy the server address" },
+        h("img", { src: siteLogo(), alt: "" }),
+        h("span", {}, h("b", {}, c.serverIp), h("small", {}, s.connected ? fmt(s.online) + " playing now · click to copy" : "Click to copy the address")), ping) : null),
+    ann ? h("div", { style: "width:100%;max-width:760px;margin-top:10px;text-align:left" }, ann) : null,
+    h("div", { class: "hotbar" },
+      h("div", { class: "slot" }, h("b", {}, s.connected ? fmt(s.online) : "–"), h("span", {}, "Playing now")),
+      h("div", { class: "slot" }, h("b", {}, fmt(info.accounts)), h("span", {}, "Accounts")),
+      h("div", { class: "slot" }, h("b", {}, "3"), h("span", {}, "Games")),
+      h("div", { class: "slot" }, h("b", {}, cl.latest ? "v" + cl.latest : "Free"), h("span", {}, cl.latest ? "PlebClient" : "To play"))))));
 
-  // marquee
-  const words = String(c.marquee || "").split(",").map((x) => x.trim()).filter(Boolean);
-  if (words.length) {
-    const track = h("div", { class: "track", "aria-hidden": "true" });
-    for (let i = 0; i < 2; i++) for (let j = 0; j < Math.max(1, Math.ceil(8 / words.length)); j++) words.forEach((w) => track.append(h("span", {}, w)));
-    wrap.append(h("div", { class: "marquee" }, track, h("span", { class: "hidden" }, words.join(", "))));
-  }
-
-  // live numbers
-  wrap.append(h("section", { class: "section" }, h("div", { class: "wrap" },
-    h("div", { class: "sec-head" }, h("div", {}, h("span", { class: "eyebrow" }, h("b", {}, "01"), "— Live"), h("h2", { class: "display" }, "The ", h("span", { class: "grad" }, info.site), " network")),
-      h("p", {}, "Live from the server. Every player, every game, every coin.")),
-    h("div", { class: "numbers" },
-      h("div", {}, h("b", { class: "acc" }, s.connected ? fmt(s.online) : "–"), h("span", {}, "Playing now"), h("small", {}, s.connected ? "On " + (c.serverIp || info.site) : "Server status unavailable")),
-      h("div", {}, h("b", {}, fmt(info.accounts)), h("span", {}, "Accounts"), h("small", {}, "Players with a " + info.site + " account")),
-      h("div", {}, h("b", {}, "3"), h("span", {}, "Games"), h("small", {}, "PlebNite, PlebRPG and PlebMc")),
-      h("div", {}, h("b", {}, cl.latest ? "v" + cl.latest : "–"), h("span", {}, "PlebClient"), h("small", {}, "The latest release"))))));
-
-  // features
+  // features: picture and words, swapping sides
   const feats = c.features || [];
   if (feats.length) {
-    wrap.append(h("section", { class: "section", id: "features" }, h("div", { class: "wrap" },
-      h("div", { class: "sec-head" }, h("div", {}, h("span", { class: "eyebrow" }, h("b", {}, "02"), "— Features"), h("h2", { class: "display" }, c.featuresTitle || "")),
-        h("p", {}, c.featuresText || "")),
-      h("div", { class: "features" }, ...feats.map((f, i) => h("article", { class: "feature" },
-        f.image ? h("div", { class: "shot" }, h("img", { src: f.image, alt: "", loading: "lazy" }), h("span", { class: "num" }, String(i + 1).padStart(2, "0"))) : null,
-        h("div", { class: "txt" }, h("span", { class: "tag" }, info.site), h("h3", {}, f.title), h("p", {}, f.text))))))));
+    wrap.append(h("section", { class: "sec", id: "features" }, h("div", { class: "wrap" },
+      title([c.featuresTitle || ""], c.featuresText),
+      h("div", { class: "rows" }, ...feats.map((f, i) => h("article", { class: "frow" + (f.image ? "" : " noshot") },
+        f.image ? h("div", { class: "shot" }, h("img", { src: f.image, alt: "", loading: "lazy" })) : null,
+        h("div", {}, h("span", { class: "n" }, i + 1), h("h3", {}, f.title), h("p", {}, f.text))))))));
   }
 
-  // leaderboards
-  const boards = h("div", { class: "boards" });
-  wrap.append(h("section", { class: "section" }, h("div", { class: "wrap" },
-    h("div", { class: "sec-head" }, h("div", {}, h("span", { class: "eyebrow" }, h("b", {}, "03"), "— Leaderboards"), h("h2", { class: "display" }, "Who's on ", h("span", { class: "grad" }, "top"), "?")),
-      h("p", {}, "The best players on PlebNite, PlebRPG and PlebMc. Look up anyone's stats on the Stats page.")),
-    boards)));
-  api("stats/games").then(async (r) => {
+  // leaderboards: pick a game, see its podium
+  const tabs = h("div", { class: "tabs" });
+  const stage = h("div", { class: "podium-wrap" });
+  wrap.append(h("section", { class: "sec alt" }, h("div", { class: "wrap" },
+    title(["Who's on ", h("em", {}, "top"), "?"], "The best players right now. Click a name to see all of their stats."), tabs, stage)));
+  const hue = (name) => { let x = 0; for (const ch of String(name)) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return "hsl(" + (x % 360) + " 45% 40%)"; };
+  const showBoard = (games, g) => {
+    tabs.replaceChildren(...games.map((x) => h("button", { "aria-pressed": String(x.id === g.id), onclick: () => showBoard(games, x) }, x.title)));
+    const st = g.stats[0];
+    if (!st) { stage.replaceChildren(empty("trophy", "No " + g.title + " stats yet. They show up after people play.")); return; }
+    stage.replaceChildren(h("div", { class: "skeleton" }));
+    api("stats/top?game=" + encodeURIComponent(g.id) + "&stat=" + encodeURIComponent(st.id) + "&limit=5").then((t) => {
+      if (!t.rows.length) { stage.replaceChildren(empty("trophy", "Nobody is on the " + g.title + " board yet. Be the first.")); return; }
+      const link = (x) => h("a", { href: "#stats?game=" + g.id + "&name=" + encodeURIComponent(x.name) }, x.name);
+      const pod = (x, n) => {
+        if (!x) return h("div", {});
+        const head = h("div", { class: "head", "aria-hidden": "true" }, x.name.charAt(0).toUpperCase());
+        head.style.background = hue(x.name);
+        return h("div", { class: "pod p" + n }, head, link(x), h("span", { class: "val" }, statValue(t.stat, x.value) + " " + st.label.toLowerCase()), h("div", { class: "block" }, n));
+      };
+      stage.replaceChildren(h("div", { class: "podium" }, pod(t.rows[1], 2), pod(t.rows[0], 1), pod(t.rows[2], 3)),
+        h("ol", { class: "runners" }, ...t.rows.slice(3).map((x) => h("li", {}, h("span", { class: "place" }, x.place), link(x), h("b", {}, statValue(t.stat, x.value))))),
+        h("div", { class: "board-foot" }, h("span", {}, g.title + " · " + st.label), h("a", { class: "btn", href: "#leaderboard?game=" + g.id }, icon("trophy"), "Full leaderboards")));
+    }).catch(() => stage.replaceChildren(empty("trophy", "Couldn't load this board.")));
+  };
+  api("stats/games").then((r) => {
     const order = ["plebnite", "plebrpg", "plebmc"];
-    const games = order.map((id) => r.games.find((g) => g.id === id)).filter(Boolean).concat(r.games.filter((g) => !order.includes(g.id))).slice(0, 3);
-    for (const g of games) {
-      const st = g.stats[0];
-      const list = h("ol");
-      boards.append(h("div", { class: "board" }, h("header", {}, h("h3", {}, g.title), h("small", {}, st ? st.label : "")), list,
-        h("a", { class: "more-link", href: "#leaderboard?game=" + g.id }, "Full leaderboard →")));
-      if (!st) { list.append(h("li", { class: "muted" }, "No stats yet.")); continue; }
-      api("stats/top?game=" + encodeURIComponent(g.id) + "&stat=" + encodeURIComponent(st.id) + "&limit=5").then((t) => {
-        if (!t.rows.length) list.append(h("li", { class: "muted" }, "Nobody yet. Be the first."));
-        for (const x of t.rows) list.append(h("li", {}, h("span", { class: "rank" + (x.place <= 3 ? " r" + x.place : "") }, x.place),
-          h("a", { href: "#stats?game=" + g.id + "&name=" + encodeURIComponent(x.name) }, x.name), h("b", {}, statValue(t.stat, x.value))));
-      }).catch(() => list.append(h("li", { class: "muted" }, "Couldn't load this board.")));
-    }
-  }).catch(() => boards.append(h("p", { class: "muted" }, "Leaderboards are unavailable right now.")));
+    const games = order.map((id) => r.games.find((g) => g.id === id)).filter(Boolean).concat(r.games.filter((g) => !order.includes(g.id)));
+    if (games.length) showBoard(games, games[0]);
+    else stage.replaceChildren(empty("trophy", "No stats yet."));
+  }).catch(() => stage.replaceChildren(empty("trophy", "Leaderboards are unavailable right now.")));
+
+  // how to join
+  wrap.append(h("section", { class: "sec" }, h("div", { class: "wrap" },
+    title(["Playing in ", h("em", {}, "3 steps")], "No launcher, no payment. It runs in your browser."),
+    h("div", { class: "steps3" },
+      h("div", { class: "step3" }, h("h3", {}, "Get PlebClient"), h("p", {}, "Play in your browser, or grab the Forge 1.8.9 version."),
+        h("a", { class: "btn", href: dl }, icon("download"), "Downloads")),
+      h("div", { class: "step3" }, h("h3", {}, "Make your account"), h("p", {}, "Pick your name and a password on the client's start screen. It keeps your coins and cosmetics yours."),
+        me ? h("a", { class: "btn", href: "#me" }, icon("user"), "My account") : h("a", { class: "btn", href: "#register" }, icon("plus"), "Create account")),
+      h("div", { class: "step3" }, h("h3", {}, "Join the server"), h("p", {}, c.serverIp ? "Add " + c.serverIp + " to your server list and hop in." : "Pick PlebMc in your server list and hop in."),
+        c.serverIp ? h("button", { onclick: () => copyIp(c.serverIp) }, icon("copy"), "Copy address") : null)))));
 
   // FAQ
   const faq = c.faq || [];
   if (faq.length) {
-    wrap.append(h("section", { class: "section", id: "faq" }, h("div", { class: "wrap faq" },
-      h("aside", {}, h("span", { class: "eyebrow" }, h("b", {}, "04"), "— FAQ"), h("h2", { class: "display" }, "Common ", h("span", { class: "grad" }, "questions")),
-        h("p", {}, "Still stuck? ", c.discordUrl ? h("a", { href: c.discordUrl, target: "_blank", rel: "noopener" }, "Ask on our Discord.") : "Ask a staff member in game.")),
-      h("div", { class: "qa" }, ...faq.map((f, i) => h("details", { open: i === 0 }, h("summary", {}, f.q), h("p", {}, f.a)))))));
+    wrap.append(h("section", { class: "sec alt", id: "faq" }, h("div", { class: "wrap" },
+      title(["Questions? ", h("em", {}, "Answers.")]),
+      h("div", { class: "qa" }, ...faq.map((f, i) => h("details", { open: i === 0 }, h("summary", {}, f.q), h("p", {}, f.a)))),
+      h("p", { class: "qa-foot" }, "Still stuck? ", c.discordUrl ? h("a", { href: c.discordUrl, target: "_blank", rel: "noopener" }, "Ask on our Discord.") : "Ask a staff member in game."))));
   }
 
-  // call to action
-  const go = (href, ic, title, sub, ext) => h("a", { class: "go", href, ...(ext ? { target: "_blank", rel: "noopener" } : {}) },
-    h("div", {}, h("b", {}, title), h("small", {}, sub)), icon(ic));
-  wrap.append(h("section", { class: "section" }, h("div", { class: "wrap" }, h("div", { class: "cta" },
-    h("div", { class: "left" }, h("span", { class: "eyebrow", style: "color:rgba(255,255,255,.7)" }, "05 — Get it"), h("h2", { class: "display" }, c.ctaTitle || ""),
-      h("p", {}, c.ctaText || ""), h("a", { class: "btn big", href: dl }, icon("download"), "Download now"), h("img", { src: siteLogo(), alt: "" })),
-    h("div", { class: "right" },
-      go("#downloads", "download", "Download PlebClient", "Browser · WASM · Forge 1.8.9"),
-      c.discordUrl ? go(c.discordUrl, "discord", "Join the Discord", "Community · Support · Updates", true) : null,
-      me ? go("#me", "user", "My account", "Coins · Cosmetics · Password") : go("#register", "plus", "Create an account", "Protect your name and coins"),
-      go("#shop", "bag", "Browse the shop", "Hats · Cloaks · Wings · Trails"))))));
+  // the last banner: a TNT block
+  wrap.append(h("section", { class: "sec" }, h("div", { class: "wrap" },
+    h("div", { class: "tnt" }, h("div", { class: "label" }, h("h2", {}, c.ctaTitle || ""))),
+    h("div", { class: "tnt-foot" }, h("p", {}, c.ctaText || ""),
+      h("div", { class: "hero-cta" }, h("a", { class: "btn primary big", href: dl }, icon("download"), "Download PlebClient"),
+        c.discordUrl ? h("a", { class: "btn big", href: c.discordUrl, target: "_blank", rel: "noopener" }, icon("discord"), "Join the Discord") : h("a", { class: "btn big", href: "#shop" }, icon("bag"), "Browse the shop"))))));
   return wrap;
 }
 
@@ -1499,19 +1500,18 @@ async function siteView() {
     return { key, el: [h("label", { for: "s-" + key }, label), input], get: () => input.value.trim() };
   };
   const fields = [
-    text("badge", "Badge above the headline (empty hides it)"), text("title1", "Headline, first line", { max: 40 }), text("title2", "Headline, second line (in color)", { max: 40 }),
-    text("subtitle", "Text under the headline", { rows: 3 }), text("serverIp", "Server address", { placeholder: "play.plebmc.top" }),
+    text("badge", "News tag above the name (empty hides it)"), text("title1", "Tagline, first part", { max: 40 }), text("title2", "Tagline, second part (in color)", { max: 40 }),
+    text("subtitle", "Text under the tagline", { rows: 3 }), text("serverIp", "Server address", { placeholder: "play.plebmc.top" }),
     text("discordUrl", "Discord invite link (empty hides Discord)", { type: "url", max: 200, placeholder: "https://discord.gg/…" }),
-    text("marquee", "Scrolling strip (separate with commas, empty hides it)", { rows: 2, max: 400 }),
     text("featuresTitle", "Features heading"), text("featuresText", "Features text", { rows: 2 }),
     text("ctaTitle", "Bottom banner heading"), text("ctaText", "Bottom banner text", { rows: 2 }), text("footer", "Footer note", { max: 200 }),
   ];
   const F = Object.fromEntries(fields.map((f) => [f.key, f]));
-  const accent = h("input", { type: "color", id: "s-accent", value: c.accent || "#8b5cf6" });
-  accent.addEventListener("input", () => document.documentElement.style.setProperty("--accent", accent.value));
+  const accent = h("input", { type: "color", id: "s-accent", value: c.accent || "#2ea8ff" });
+  accent.addEventListener("input", () => setAccent(accent.value));
   const logo = imagePicker("Logo", c.logo === "/static/logo.png" ? "" : c.logo, "/static/logo.png", "Square PNG with a see-through background looks best.");
-  const hero = imagePicker("Hero background", c.heroImage === "/static/home/hero.jpg" ? "" : c.heroImage, "/static/home/hero.jpg", "A wide picture, at least 1600 px across. It's dimmed behind the headline.");
-  const show = imagePicker("Big screenshot under the headline", c.showcase === "/static/home/hero.jpg" ? "" : c.showcase, "/static/home/hero.jpg", "16:9 works best.");
+  const hero = imagePicker("Big picture at the top", c.heroImage === "/static/home/wallpaper.jpg" ? "" : c.heroImage, "/static/home/wallpaper.jpg", "A wide picture, at least 1600 px across.");
+  const show = imagePicker("Name logo (your blocky PLEBMC art)", c.wordmark, "", "A wide PNG with a see-through background. Without one, the site name is drawn in pixel letters.");
 
   // features and FAQ: lists with add and remove
   const feats = (c.features || []).map((f) => ({ ...f }));
@@ -1549,7 +1549,7 @@ async function siteView() {
   const saveBtn = h("button", { class: "primary", onclick: async () => {
     featPickers.forEach(([f, pk]) => { f.image = pk.get(); });
     const body = Object.fromEntries(fields.map((f) => [f.key, f.get()]));
-    Object.assign(body, { accent: accent.value, logo: logo.get(), heroImage: hero.get(), showcase: show.get(),
+    Object.assign(body, { accent: accent.value, logo: logo.get(), heroImage: hero.get(), wordmark: show.get(),
       features: feats.map((f) => ({ title: (f.title || "").trim(), text: (f.text || "").trim(), image: f.image || "" })),
       faq: faqs.map((f) => ({ q: (f.q || "").trim(), a: (f.a || "").trim() })).filter((f) => f.q && f.a) });
     saveBtn.disabled = true;
@@ -1567,11 +1567,11 @@ async function siteView() {
     h("p", { class: "muted", style: "margin:0" }, "Change the homepage's words, pictures and color. Everyone sees the changes as soon as you press Save."),
     h("div", { class: "grid g2" },
       card("Brand", logo.el, h("label", { for: "s-accent" }, "Accent color"), h("div", { class: "row" }, accent,
-        h("button", { type: "button", class: "ghost small", onclick: () => { accent.value = "#8b5cf6"; accent.dispatchEvent(new Event("input")); } }, "Default purple"),
-        h("button", { type: "button", class: "ghost small", onclick: () => { accent.value = "#22b8e6"; accent.dispatchEvent(new Event("input")); } }, "PlebMc blue")),
+        ...[["PlebMc blue", "#2ea8ff"], ["Client cyan", "#3fd8e6"], ["TNT red", "#db3f2b"], ["Gold", "#f5c542"]].map(([n, v]) =>
+          h("button", { type: "button", class: "ghost small", onclick: () => { accent.value = v; setAccent(v); } }, n))),
       ...F.serverIp.el, ...F.discordUrl.el, ...F.footer.el),
-      card("Top of the page", ...F.badge.el, ...F.title1.el, ...F.title2.el, ...F.subtitle.el)),
-    h("div", { class: "grid g2" }, card("Pictures", hero.el, show.el), card("Strip and bottom banner", ...F.marquee.el, ...F.ctaTitle.el, ...F.ctaText.el)),
+      card("Under the big picture", ...F.badge.el, ...F.title1.el, ...F.title2.el, ...F.subtitle.el)),
+    h("div", { class: "grid g2" }, card("Pictures", hero.el, show.el), card("TNT banner at the bottom", ...F.ctaTitle.el, ...F.ctaText.el)),
     card("Feature cards", ...F.featuresTitle.el, ...F.featuresText.el, h("div", { style: "height:14px" }), featBox),
     card("FAQ", faqBox),
     out,
@@ -1609,13 +1609,11 @@ const VIEWS = {
 /** Every page but the homepage sits in the page frame: a big heading, then the view. */
 function framed(view, title, el) {
   const head = HEADS[view];
-  const admin = ADMIN_VIEWS.has(view);
   const narrow = view === "login" || view === "register";
-  const top = head
-    ? h("div", { class: "page-head" }, head[0] ? h("span", { class: "eyebrow" }, h("b", {}, head[0]), "— " + title) : null,
-      h("h1", {}, head[1] + " ", h("span", {}, head[2])), head[3] ? h("p", {}, head[3]) : null)
-    : narrow ? null
-      : h("div", { class: "page-head" }, h("span", { class: "eyebrow" }, h("b", {}, admin ? "Admin" : info.site), "— " + title), h("h1", {}, title));
+  const top = narrow ? null : h("div", { class: "page-head" },
+    ADMIN_VIEWS.has(view) ? h("span", { class: "crumb" }, h("b", {}, "Admin"), " / " + title) : null,
+    head ? h("h1", {}, head[0] + " ", h("span", {}, head[1])) : h("h1", {}, title),
+    head && head[2] ? h("p", {}, head[2]) : null);
   return h("div", { class: "wrap page" + (narrow ? " narrow-page" : "") }, top, el);
 }
 

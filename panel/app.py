@@ -147,12 +147,12 @@ DESIGN_KINDS = ("hat", "cloak", "wings")
 # An image is a path under /static/ (the built-in ones) or an uploaded picture at /api/site/img/<id>.
 MAX_SITE_IMAGE = 5 * 1024 * 1024
 SITE_IMAGE_RE = re.compile(r"^(/static/[A-Za-z0-9_./-]{1,120}|/api/site/img/[0-9a-f]{16})$")
-SITE_IMAGES = ("logo", "heroImage", "showcase")
+SITE_IMAGES = ("logo", "heroImage", "wordmark")
 SITE_DEFAULTS = {
-    "accent": "#8b5cf6",
+    "accent": "#2ea8ff",
     "logo": "/static/logo.png",
-    "heroImage": "/static/home/hero.jpg",
-    "showcase": "/static/home/hero.jpg",
+    "heroImage": "/static/home/wallpaper.jpg",
+    "wordmark": "",  # a picture of the name (the blocky PLEBMC logo); empty draws the site name in pixel letters
     "badge": "PlebClient is out now",
     "title1": "Minecraft, but",
     "title2": "way more pleb.",
@@ -160,8 +160,7 @@ SITE_DEFAULTS = {
                 "Windows, earn PlebMc Coins and show off your cosmetics.",
     "serverIp": "play.plebmc.top",
     "discordUrl": "",
-    "marquee": "PlebNite, PlebRPG, PlebMc PvP, Free to play, Plays in your browser, Hats, cloaks and wings, Weekly leaderboards",
-    "featuresTitle": "Three games. One account.",
+    "featuresTitle": "Three games, one account",
     "featuresText": "Everything you earn follows you: your coins, cosmetics and stats work on every PlebMc game and every PlebClient.",
     "features": [
         {"title": "PlebClient", "text": "Our own client with 30+ mods, a HUD editor, keystrokes, zoom and more. Plays in your browser, "
@@ -184,8 +183,7 @@ SITE_DEFAULTS = {
     "ctaText": "Grab PlebClient, make your account on the start screen and see you on play.plebmc.top.",
     "footer": "Not affiliated with Mojang or Microsoft.",
 }
-SITE_TEXT_LIMITS = {"badge": 60, "title1": 40, "title2": 40, "subtitle": 300, "serverIp": 60, "marquee": 400,
-                    "featuresTitle": 60, "featuresText": 300, "ctaTitle": 60, "ctaText": 300, "footer": 200}
+SITE_TEXT_LIMITS = {"badge": 60, "title1": 40, "title2": 40, "subtitle": 300, "serverIp": 60,                     "featuresTitle": 60, "featuresText": 300, "ctaTitle": 60, "ctaText": 300, "footer": 200}
 
 
 def sniff_image(data):
@@ -1320,7 +1318,7 @@ class Panel:
             out[k] = str(body.get(k) if body.get(k) is not None else SITE_DEFAULTS[k]).strip()[:n]
         accent = str(body.get("accent") or SITE_DEFAULTS["accent"]).strip()
         if not re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
-            raise ApiError(400, "The accent color must look like #8b5cf6.")
+            raise ApiError(400, "The accent color must look like #2ea8ff.")
         out["accent"] = accent.lower()
         for k in SITE_IMAGES:
             out[k] = self._site_image(body.get(k), SITE_DEFAULTS[k])

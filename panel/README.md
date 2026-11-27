@@ -20,16 +20,17 @@ sign in to the account that owns their name. Names with an account must sign in 
 
 ### The homepage and Site content
 
-The panel is also the PlebMc homepage: a hero with the logo and headline, a big PlebClient
-screenshot, live numbers (playing now, accounts, games, latest PlebClient), feature cards,
-the top 5 of each game's leaderboard, an FAQ, a download banner and a footer. The other pages
+The panel is also the PlebMc homepage, in PlebMc's own look (blue, blocky, the TNT art):
+the big picture with the name in pixel letters, the server address drawn like a server-list
+row (click to copy), live numbers in a hotbar, feature rows with screenshots, a podium for
+each game's top players, "Playing in 3 steps", an FAQ and a TNT banner. The other pages
 (Download, Stats, Leaderboards, Shop, My account, Admin) share the same look.
 
-Owners change it on **Admin > Site content** without touching code: the logo, hero
-background, big screenshot, accent color, headline, text, server address, Discord link,
-scrolling strip, feature cards (with pictures), FAQ, bottom banner and footer. Pictures
-(PNG, JPEG, GIF or WebP, up to 5 MB) are uploaded to the panel and kept in its database.
-**Reset to defaults** puts everything back.
+Owners change it on **Admin > Site content** without touching code: the logo, the big
+picture, a name logo (your blocky PLEBMC art, shown instead of the pixel letters), the
+accent color, tagline, text, server address, Discord link, feature rows (with pictures),
+FAQ, the TNT banner and footer. Pictures (PNG, JPEG, GIF or WebP, up to 5 MB) are uploaded
+to the panel and kept in its database. **Reset to defaults** puts everything back.
 
 ### Client updates
 
