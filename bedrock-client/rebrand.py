@@ -107,6 +107,49 @@ edit("src/Utils/CrashTelemetry.cpp",
 edit("src/Utils/APIUtils.cpp", 'std::string users = get("https://api.flarial.xyz/vips");', 'std::string users; // PlebClient: no Flarial API')
 edit("src/Utils/APIUtils.cpp", 'std::string users = get("https://api.flarial.xyz/allOnlineUsers");', 'std::string users; // PlebClient: no Flarial API')
 
+
+# ---------- dependencies that moved ----------
+# EclipseMenu's rift and discord-presence are no longer on GitHub: Discord presence comes
+# from a fork, and the expression formatter (rift) is replaced by a small built-in one.
+# Branch-tracking dependencies are pinned so builds don't change under us.
+edit("CMakeLists.txt", "GIT_REPOSITORY https://github.com/EclipseMenu/discord-presence.git\n        GIT_TAG main",
+     "GIT_REPOSITORY https://github.com/X-rays5-forks/discord-presence.git\n        GIT_TAG c568a61cc05baac4e45f0392442cd932f901f19e")
+edit("CMakeLists.txt", "GIT_REPOSITORY https://github.com/fmtlib/fmt.git\n        GIT_TAG        master",
+     "GIT_REPOSITORY https://github.com/fmtlib/fmt.git\n        GIT_TAG        4968433a6abecbbf7e72e97188926586a7fd0662")
+edit("CMakeLists.txt", "GIT_REPOSITORY https://github.com/Neargye/magic_enum.git\n        GIT_TAG        master",
+     "GIT_REPOSITORY https://github.com/Neargye/magic_enum.git\n        GIT_TAG        7d87efb4a3dddbbe8caa9ca14eff05ede1102ab8")
+edit("CMakeLists.txt", "GIT_REPOSITORY https://github.com/kunitoki/LuaBridge3.git\n        GIT_TAG        master",
+     "GIT_REPOSITORY https://github.com/kunitoki/LuaBridge3.git\n        GIT_TAG        d6ff443436eeba6ee9840d22d89f8fbdda08580b")
+edit("CMakeLists.txt", "GIT_REPOSITORY https://github.com/cursey/safetyhook.git\n        GIT_TAG main",
+     "GIT_REPOSITORY https://github.com/cursey/safetyhook.git\n        GIT_TAG 755a4a08aa7d0d7143331dc854235ebc2d1570f9")
+edit("CMakeLists.txt", "GIT_REPOSITORY https://github.com/DisabledMallis/NuvolaEventSystem.git\n        GIT_TAG        main",
+     "GIT_REPOSITORY https://github.com/DisabledMallis/NuvolaEventSystem.git\n        GIT_TAG        a7b288004925916c2368ea8acee2cfc962c3c6b9")
+edit("CMakeLists.txt", "GIT_REPOSITORY https://github.com/EquinoxHouse/jsoncpp.git\n       GIT_TAG mcbe",
+     "GIT_REPOSITORY https://github.com/EquinoxHouse/jsoncpp.git\n       GIT_TAG 3000d0b3ee1a9c3dbe0c37129f3602442c1ccf97")
+edit("CMakeLists.txt", """FetchContent_Declare(
+        rift
+        GIT_REPOSITORY https://github.com/EclipseMenu/rift.git
+        GIT_TAG v2.0.2
+)
+""", "")
+edit("CMakeLists.txt", "jsoncpp discord-rpc rift)", "jsoncpp discord-rpc)")
+edit("CMakeLists.txt", "runtimeobject discord-rpc rift)", "runtimeobject discord-rpc)")
+ef = "src/Client/GUI/Engine/ExpressionFormat.hpp"
+edit(ef, "#include <rift.hpp>", "#include <cctype>\n#include <cstring>\n#include <vector>")
+p = os.path.join(ROOT, ef)
+with open(p, encoding="utf-8") as f:
+    s = f.read()
+a = s.find("    /**\n     * @brief Initialize the expression system")
+b = s.find("    /**\n     * @brief Check if a format string contains any expressions")
+if a < 0 or b < a:
+    problems.append(ef + ": couldn't find the rift functions to replace")
+else:
+    with open(os.path.join(HERE, "ExpressionEval.inc"), encoding="utf-8") as f:
+        s = s[:a] + f.read() + s[b:]
+    s = s.replace("(powered by rift)", "").replace("(rift syntax)", "")
+    with open(p, "w", encoding="utf-8", newline="") as f:
+        f.write(s)
+
 # ---------- the DLL is PlebClient.dll ----------
 cm = os.path.join(ROOT, "CMakeLists.txt")
 with open(cm, encoding="utf-8") as f:
