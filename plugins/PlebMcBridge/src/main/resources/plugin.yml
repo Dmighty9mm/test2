@@ -1,12 +1,15 @@
 name: PlebMcBridge
-version: 2.0.0
+version: 2.1.0
 main: net.plebmc.bridge.PlebMcBridge
 api-version: '1.13'
-description: Sends quest events (kills, matches, /plebquest) to PlebMcShop on the BungeeCord proxy
+description: Sends quest events to PlebMcShop on the proxy, and game stats to the PlebMc Panel
 commands:
   plebquest:
     description: Count PlebMc quest progress for a player
     usage: /plebquest <player> <type> [amount]
+  plebstats:
+    description: Show and send a player's game stats to the PlebMc Panel
+    usage: /plebstats <player>
 permissions:
   plebshop.admin:
     description: Use /plebquest

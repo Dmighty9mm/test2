@@ -155,12 +155,18 @@ def env(name, default=None):
     return v if v not in (None, "") else default
 
 
+GAME_TITLES = {"plebmc": "PlebMc", "plebnite": "PlebNite", "plebrpg": "PlebRPG", "lobby": "Lobby"}
+GAME_ORDER = ["plebmc", "plebnite", "plebrpg"]
+
+
 class Config:
     def __init__(self):
         self.db = env("PANEL_DB", os.path.join(HERE, "data", "panel.db"))
         self.host = env("PANEL_HOST", "0.0.0.0")
         self.port = int(env("PANEL_PORT", "8080"))
         self.server_key = env("PANEL_SERVER_KEY", "")
+        # PlebMcBridge on the game servers sends game stats with this key; it can do nothing else
+        self.stats_key = env("PANEL_STATS_KEY", "")
         self.public_url = env("PANEL_PUBLIC_URL", "http://localhost:8080").rstrip("/")
         self.site_name = env("PANEL_SITE_NAME", "PlebMc")
         self.trust_proxy = env("PANEL_TRUST_PROXY", "0") == "1"
@@ -339,6 +345,16 @@ CREATE TABLE IF NOT EXISTS assets (
   data BLOB NOT NULL,
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS stats (
+  game TEXT NOT NULL,
+  name_key TEXT NOT NULL,
+  name TEXT NOT NULL,
+  stat TEXT NOT NULL,
+  value REAL NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (game, name_key, stat)
+);
+CREATE INDEX IF NOT EXISTS stats_top ON stats(game, stat, value);
 CREATE TABLE IF NOT EXISTS client_seen (
   day INTEGER NOT NULL,
   version TEXT NOT NULL,
@@ -1044,6 +1060,135 @@ class Panel:
                           "items": len(json.loads(r["owned"] or "[]"))} for r in rows],
                 "total": total, "offset": offset, "more": False}
 
+    # ---------- game stats ----------
+
+    def stat_games(self):
+        """Every game with stats: PlebMc (coins and cosmetics, from the proxy) and the ones game servers send."""
+        games = self.db.get_kv("stat_games", {})
+        out = [{"id": "plebmc", "title": "PlebMc", "stats": [
+            {"id": "coins", "label": self.server_status()["currency"] or "Coins"},
+            {"id": "items", "label": "Cosmetics owned"}, {"id": "streak", "label": "Daily streak"}]
+            + [st for st in (games.get("plebmc") or {}).get("stats", [])]}]
+        for gid in sorted(games, key=lambda g: (GAME_ORDER.index(g) if g in GAME_ORDER else 99, g)):
+            if gid != "plebmc":
+                out.append({"id": gid, "title": games[gid].get("title") or gid, "stats": games[gid].get("stats", [])})
+        return out
+
+    def put_stats(self, body):
+        """One game server's stats for some players: {game, title?, labels?, players: [{name, stats: {id: number}}]}."""
+        gid = re.sub(r"[^a-z0-9-]", "", str(body.get("game") or "").lower())[:24]
+        if not gid:
+            raise ApiError(400, "Say which game these stats are for.")
+        players = body.get("players")
+        if not isinstance(players, list):
+            raise ApiError(400, "No players.")
+        games = self.db.get_kv("stat_games", {})
+        if gid not in games and len(games) >= 12:
+            raise ApiError(400, "Too many games.")
+        g = games.get(gid) or {"title": GAME_TITLES.get(gid, gid.replace("-", " ").title()), "stats": []}
+        if body.get("title"):
+            g["title"] = str(body["title"])[:32]
+        labels = body.get("labels") if isinstance(body.get("labels"), dict) else {}
+        known = {st["id"]: st for st in g["stats"]}
+        now = self.now()
+        rows = []
+        for pl in players[:500]:
+            if not isinstance(pl, dict) or not isinstance(pl.get("stats"), dict):
+                continue
+            name = str(pl.get("name") or "")
+            if name_problem(name):
+                continue
+            for k, v in list(pl["stats"].items())[:40]:
+                sid = re.sub(r"[^a-z0-9_]", "", str(k).lower())[:32]
+                if not sid or isinstance(v, bool):
+                    continue
+                try:
+                    v = float(v)
+                except (TypeError, ValueError):
+                    continue
+                if v != v or abs(v) > 1e15:
+                    continue
+                if sid not in known:
+                    if len(known) >= 30:
+                        continue
+                    known[sid] = {"id": sid}
+                    g["stats"].append(known[sid])
+                rows.append((gid, name.lower(), name, sid, v, now))
+        for st in g["stats"]:
+            lab = labels.get(st["id"])
+            st["label"] = str(lab)[:32] if lab else st.get("label") or st["id"].replace("_", " ").title()
+            if st["id"].endswith("time") or st["id"].endswith("playtime"):
+                st["kind"] = "time"
+        g["updated"] = now
+        games[gid] = g
+        with self.db.tx() as c:
+            c.executemany("INSERT INTO stats(game,name_key,name,stat,value,updated_at) VALUES(?,?,?,?,?,?) "
+                          "ON CONFLICT(game,name_key,stat) DO UPDATE SET name=excluded.name, value=excluded.value, "
+                          "updated_at=excluded.updated_at", rows)
+        self.db.set_kv("stat_games", games)
+        return {"ok": True, "saved": len(rows)}
+
+    def _plebmc_rows(self):
+        return ("SELECT MAX(name) name, name_key, MAX(coins) coins, MAX(streak) streak, "
+                "MAX(json_array_length(owned)) items FROM players GROUP BY name_key")
+
+    def stats_top(self, game, stat, offset=0, limit=10):
+        """One stat's leaderboard (the top 100)."""
+        try:
+            offset = max(0, min(100, int(offset)))
+            limit = max(1, min(50, int(limit)))
+        except (TypeError, ValueError):
+            offset, limit = 0, 10
+        g = next((x for x in self.stat_games() if x["id"] == game), None)
+        if not g:
+            raise ApiError(404, "No stats for that game yet.")
+        st = next((x for x in g["stats"] if x["id"] == stat), None) or (g["stats"][0] if g["stats"] else None)
+        if not st:
+            return {"game": g, "stat": None, "rows": [], "total": 0, "offset": offset}
+        if game == "plebmc" and st["id"] in ("coins", "items", "streak"):
+            base = "SELECT name, name_key, %s value FROM (%s)" % (st["id"], self._plebmc_rows())
+            args = ()
+        else:
+            base = "SELECT name, name_key, value FROM stats WHERE game=? AND stat=?"
+            args = (game, st["id"])
+        total = self.db.one("SELECT COUNT(*) n FROM (" + base + ") WHERE value > 0", *args)["n"]
+        rows = self.db.all("SELECT name, value FROM (" + base + ") WHERE value > 0 ORDER BY value DESC, name_key "
+                           "LIMIT ? OFFSET ?", *args, limit, offset)
+        return {"game": {"id": g["id"], "title": g["title"]}, "stat": st, "total": min(total, 100), "offset": offset,
+                "rows": [{"place": offset + i + 1, "name": r["name"], "value": r["value"]} for i, r in enumerate(rows)]}
+
+    def player_stats(self, name):
+        """Everything one player has done across the network, with where they place on each stat."""
+        key = str(name or "").strip().lower()[:16]
+        if not key:
+            raise ApiError(400, "Type a name.")
+        games = []
+        found = None
+        me = self.db.one("SELECT * FROM (" + self._plebmc_rows() + ") WHERE name_key=?", key)
+        for g in self.stat_games():
+            out = []
+            for st in g["stats"]:
+                if g["id"] == "plebmc" and st["id"] in ("coins", "items", "streak"):
+                    if not me:
+                        continue
+                    v = me[st["id"]] or 0
+                    found = found or me["name"]
+                    place = self.db.one("SELECT COUNT(*) n FROM (" + self._plebmc_rows() + ") WHERE %s > ?" % st["id"], v)["n"] + 1
+                else:
+                    r = self.db.one("SELECT name, value FROM stats WHERE game=? AND stat=? AND name_key=?", g["id"], st["id"], key)
+                    if not r:
+                        continue
+                    v = r["value"]
+                    found = found or r["name"]
+                    place = self.db.one("SELECT COUNT(*) n FROM stats WHERE game=? AND stat=? AND value > ?",
+                                        g["id"], st["id"], v)["n"] + 1
+                out.append({**st, "value": v, "place": place if v > 0 else None})
+            if out:
+                games.append({"id": g["id"], "title": g["title"], "stats": out})
+        if not found:
+            raise ApiError(404, "No stats for that player yet.")
+        return {"name": found, "rank": self.rank_of(found), "games": games}
+
     def public_info(self):
         st = self.server_status()
         return {"site": self.cfg.site_name, "openRegistration": self.cfg.open_registration,
@@ -1543,6 +1688,15 @@ class Handler(BaseHTTPRequestHandler):
         if not key or not hmac.compare_digest(got.encode("utf-8"), key.encode("utf-8")):
             raise ApiError(401, "Bad server key.")
 
+    def stats_auth(self):
+        """The stats key (or the server key) for POST /api/server/stats."""
+        got = self.headers.get("Authorization", "")
+        got = got[7:] if got.startswith("Bearer ") else self.headers.get("X-API-Key", "")
+        for key in (self.panel.cfg.stats_key, self.panel.cfg.server_key):
+            if key and hmac.compare_digest(got.encode("utf-8"), key.encode("utf-8")):
+                return True
+        raise ApiError(401, "Bad stats key.")
+
     def same_origin(self):
         # browsers send this on fetch(); a form or image on another site can't set it
         if self.headers.get("X-Requested-With") != "PlebPanel":
@@ -1567,6 +1721,8 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path)
         path = url.path
         try:
+            if path == "/api/server/stats" and method == "POST" and self.stats_auth():
+                return self.send_json(200, self.panel.put_stats(self.body(limit=1024 * 1024)))
             if path.startswith("/api/server/"):
                 self.server_auth()
                 return self.server_api(method, path[len("/api/server/"):], url)
@@ -1620,6 +1776,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, {"ok": True, **p.public_info()})
         if method == "GET" and route == "leaderboard":
             return self.send_json(200, {"ok": True, **p.leaderboard(one("offset", "0"), one("limit", "10"), one("q"))})
+        if method == "GET" and route == "stats/games":
+            return self.send_json(200, {"ok": True, "games": p.stat_games()})
+        if method == "GET" and route == "stats/top":
+            return self.send_json(200, {"ok": True, **p.stats_top(one("game", "plebmc"), one("stat"), one("offset", "0"),
+                                                                   one("limit", "10"))})
+        if method == "GET" and route == "stats/player":
+            return self.send_json(200, {"ok": True, **p.player_stats(one("name"))})
         if method == "GET" and route == "shop":
             return self.send_json(200, {"ok": True, "catalog": p.catalog(), "currency": p.server_status()["currency"]})
         if method == "GET" and route.startswith("dl/"):

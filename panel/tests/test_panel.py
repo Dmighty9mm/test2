@@ -476,6 +476,41 @@ class PanelLogic(unittest.TestCase):
         self.assertEqual(b["audit"][0]["detail"], "entry 69")
         self.assertEqual(len(self.p.audit_page(q="entry 11")["audit"]), 11)
 
+    def test_game_stats_and_leaderboards(self):
+        self.p.sync({"players": [{"uuid": "u1", "name": "Bob", "coins": 50, "owned": ["a", "b"], "streak": 3},
+                                 {"uuid": "u2", "name": "Ann", "coins": 90, "owned": [], "streak": 1}]})
+        r = self.p.put_stats({"game": "plebnite", "labels": {"normal_wins": "Wins"}, "players": [
+            {"name": "Bob", "stats": {"kills": 12, "normal_wins": 2, "play_time": 3600, "bad": "x", "flag": True}},
+            {"name": "Ann", "stats": {"kills": 30, "normal_wins": 0}},
+            {"name": "not a name!", "stats": {"kills": 99}}]})
+        self.assertEqual(r["saved"], 5)
+        games = self.p.stat_games()
+        self.assertEqual([g["id"] for g in games], ["plebmc", "plebnite"])
+        nite = games[1]
+        self.assertEqual(nite["title"], "PlebNite")
+        self.assertEqual([(s["id"], s["label"]) for s in nite["stats"]],
+                         [("kills", "Kills"), ("normal_wins", "Wins"), ("play_time", "Play Time")])
+        self.assertEqual(nite["stats"][2]["kind"], "time")
+        top = self.p.stats_top("plebnite", "kills")
+        self.assertEqual([(x["place"], x["name"], x["value"]) for x in top["rows"]], [(1, "Ann", 30), (2, "Bob", 12)])
+        # zeroes are left off a leaderboard
+        self.assertEqual([x["name"] for x in self.p.stats_top("plebnite", "normal_wins")["rows"]], ["Bob"])
+        self.assertEqual([x["name"] for x in self.p.stats_top("plebmc", "items")["rows"]], ["Bob"])
+        self.assertEqual(self.p.stats_top("plebmc", "coins")["rows"][0]["name"], "Ann")
+        # a newer push replaces a value
+        self.p.put_stats({"game": "plebnite", "players": [{"name": "bob", "stats": {"kills": 40}}]})
+        self.assertEqual(self.p.stats_top("plebnite", "kills")["rows"][0]["value"], 40)
+        me = self.p.player_stats("BOB")
+        by = {g["id"]: {s["id"]: (s["value"], s["place"]) for s in g["stats"]} for g in me["games"]}
+        self.assertEqual(by["plebmc"]["coins"], (50, 2))
+        self.assertEqual(by["plebnite"]["kills"], (40, 1))
+        with self.assertRaises(app.ApiError):
+            self.p.player_stats("Nobody")
+        with self.assertRaises(app.ApiError):
+            self.p.put_stats({"game": "", "players": []})
+        with self.assertRaises(app.ApiError):
+            self.p.stats_top("nogame", "x")
+
 
 class PanelHttp(unittest.TestCase):
     @classmethod
@@ -622,6 +657,28 @@ class PanelHttp(unittest.TestCase):
             self.assertEqual(r.headers["X-Frame-Options"], "DENY")
         s, _, _ = self.call("/static/../app.py")
         self.assertEqual(s, 404)
+
+
+    def test_stats_key_only_sends_stats(self):
+        self.p.cfg.stats_key = "s" * 40
+        try:
+            auth = {"Authorization": "Bearer " + "s" * 40}
+            s, b, _ = self.call("/api/server/stats", {"game": "plebrpg", "players": [{"name": "Cal", "stats": {"level": 7}}]},
+                                headers=auth)
+            self.assertEqual((s, b["saved"]), (200, 1))
+            s, _, _ = self.call("/api/server/sync", {"players": []}, headers=auth)
+            self.assertEqual(s, 401)
+            s, _, _ = self.call("/api/server/stats", {"game": "plebrpg", "players": []},
+                                headers={"Authorization": "Bearer nope"})
+            self.assertEqual(s, 401)
+            s, b, _ = self.call("/api/stats/top?game=plebrpg&stat=level")
+            self.assertEqual((s, b["rows"][0]["name"], b["stat"]["label"]), (200, "Cal", "Level"))
+            s, b, _ = self.call("/api/stats/player?name=cal")
+            self.assertEqual((s, b["name"]), (200, "Cal"))
+            s, b, _ = self.call("/api/stats/games")
+            self.assertIn("plebrpg", [g["id"] for g in b["games"]])
+        finally:
+            self.p.cfg.stats_key = ""
 
 
 if __name__ == "__main__":

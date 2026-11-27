@@ -182,6 +182,26 @@ players on other clients (who also don't earn coins, see `plebclient-only`).
 `/account` is handled by the proxy before BungeeCord sees it as a command, so the password
 never reaches a backend server or the proxy's command log.
 
+## Stats and leaderboards
+
+The **Stats & leaderboards** page shows every player's PlebMc stats (coins, cosmetics,
+daily streak) plus whatever the game servers send, with a leaderboard for each stat.
+Search a name to see all of that player's stats and where they place.
+
+The game servers send stats with **PlebMcBridge** (2.1+):
+
+1. Put `PANEL_STATS_KEY=` (make one with `openssl rand -hex 32`) in `.env`, then
+   `docker compose up -d`. This key can only send stats.
+2. On PlebNite and PlebRPG, put PlebMcBridge.jar in `plugins/`, start once, and edit
+   `plugins/PlebMcBridge/config.yml`: `stats.enabled: true`, `game:` (`plebnite` or
+   `plebrpg`), `key:` the stats key, and the `values:` to send (PlaceholderAPI
+   placeholders or `statistic:NAME`; the file has examples for both servers).
+3. Restart, then run `/plebstats <player>` to check what is read and send it right away.
+
+Online players are sent every 5 minutes and when they leave, so boards fill up as people
+play. Anyone can read `GET /api/stats/games`, `/api/stats/top?game=&stat=` and
+`/api/stats/player?name=`.
+
 ## Ranks with LuckPerms
 
 Put LuckPerms on the BungeeCord proxy (and keep it on your backends), with every

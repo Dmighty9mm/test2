@@ -1,0 +1,36 @@
+# PlebMcBridge
+#
+# stats: send this server's game stats to the PlebMc Panel, which shows each
+# player's stats and a leaderboard for every stat.
+#   game:      plebnite, plebrpg, or another short name (one per server)
+#   panel-url: the panel's address, like https://client.plebmc.top
+#   key:       the panel's PANEL_STATS_KEY (it can only send stats)
+#   values:    stat id: where its number comes from
+#              '%placeholder%'        a PlaceholderAPI placeholder
+#              'statistic:MOB_KILLS'  a vanilla statistic
+#              add ' / 20' to divide (PLAY_ONE_MINUTE is in ticks: / 20 gives seconds)
+#              Stats whose id ends in "time" are shown as hours on the panel.
+#              Use {value: '...', label: 'Name on the panel'} to name a stat.
+# /plebstats <player> shows what a player's stats read as, and sends them.
+stats:
+  enabled: false
+  game: plebnite
+  panel-url: https://client.plebmc.top
+  key: ''
+  every-seconds: 300
+  values:
+    kills: {value: '%battleroyalex_kills%', label: Kills}
+    normal_wins: {value: '%battleroyalex_normal_wins%', label: Wins}
+    plunder_wins: {value: '%battleroyalex_plunder_wins%', label: Plunder wins}
+    deaths: {value: '%battleroyalex_deaths%', label: Deaths}
+    games_played: {value: '%battleroyalex_games_played%', label: Games played}
+    player_exp: {value: '%battleroyalex_player_exp%', label: Exp}
+    play_time: {value: '%battleroyalex_play_time%', label: Play time}
+# For PlebRPG, for example:
+#  game: plebrpg
+#  values:
+#    level: {value: '%mmocore_level%', label: Level}
+#    mob_kills: {value: 'statistic:MOB_KILLS', label: Mobs killed}
+#    player_kills: {value: 'statistic:PLAYER_KILLS', label: Players killed}
+#    deaths: {value: 'statistic:DEATHS', label: Deaths}
+#    play_time: {value: 'statistic:PLAY_ONE_MINUTE / 20', label: Play time}

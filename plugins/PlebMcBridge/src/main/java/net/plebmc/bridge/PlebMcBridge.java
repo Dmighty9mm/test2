@@ -18,6 +18,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -32,15 +33,54 @@ public final class PlebMcBridge extends JavaPlugin implements Listener {
 
 	static final String SUBCHANNEL = "PlebMcBridge";
 
+	private Stats stats;
+
 	@Override
 	public void onEnable() {
+		saveDefaultConfig();
 		Bukkit.getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
 		Bukkit.getPluginManager().registerEvents(this, this);
+		stats = new Stats(this, getConfig().getConfigurationSection("stats"));
+		stats.start();
 	}
 
 	@Override
 	public void onDisable() {
 		Bukkit.getMessenger().unregisterOutgoingPluginChannel(this);
+	}
+
+	@EventHandler(priority = EventPriority.MONITOR)
+	public void onQuit(PlayerQuitEvent e) {
+		if (stats != null && stats.enabled) {
+			stats.collect(e.getPlayer());
+			stats.flush();
+		}
+	}
+
+	/** /plebstats [player]: what this server sends to the panel for a player, and sends it now. */
+	private boolean statsCommand(CommandSender s, String[] a) {
+		if (stats == null || stats.values.isEmpty()) {
+			s.sendMessage("§cNo stats are set up. See stats: in PlebMcBridge's config.yml.");
+			return true;
+		}
+		Player p = a.length > 0 ? Bukkit.getPlayerExact(a[0]) : (s instanceof Player ? (Player) s : null);
+		if (p == null) {
+			s.sendMessage("§7Usage: /plebstats <online player>");
+			return true;
+		}
+		java.util.Map<String, Double> got = stats.read(p);
+		s.sendMessage("§b" + (stats.game.isEmpty() ? "(no game set)" : stats.game) + " stats for " + p.getName()
+				+ (stats.enabled ? "" : " §c(sending is off)"));
+		for (String id : stats.values.keySet()) {
+			Double v = got.get(id);
+			s.sendMessage(" §7" + id + ": " + (v == null ? "§cnothing (check " + stats.values.get(id) + ")" : "§f" + v));
+		}
+		if (stats.enabled) {
+			stats.collect(p);
+			stats.flush();
+			s.sendMessage("§aSent to the panel.");
+		}
+		return true;
 	}
 
 	/** Sends one event for {@code p} through {@code p}'s own connection. */
@@ -101,6 +141,9 @@ public final class PlebMcBridge extends JavaPlugin implements Listener {
 		if (!s.hasPermission("plebshop.admin")) {
 			s.sendMessage("§cYou don't have permission.");
 			return true;
+		}
+		if (c.getName().equalsIgnoreCase("plebstats")) {
+			return statsCommand(s, a);
 		}
 		if (a.length < 2) {
 			s.sendMessage("§7Usage: /" + label + " <player> <type> [amount]  (types: win, parkour, kill, match, ...)");

@@ -207,7 +207,7 @@ function pager(container, load, render, opts = {}) {
 // ==================== shell ====================
 
 const NAV = [
-  ["General", [["home", "Home", "home"], ["downloads", "Downloads", "download"], ["leaderboard", "Leaderboard", "trophy"], ["shop", "Shop", "bag"]]],
+  ["General", [["home", "Home", "home"], ["downloads", "Downloads", "download"], ["leaderboard", "Stats & leaderboards", "trophy"], ["shop", "Shop", "bag"]]],
   ["You", [["me", "My account", "user", true]]],
   ["Admin", [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["announce", "Announcements", "megaphone"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Client updates", "refresh"], ["audit", "Admin log", "list"]], "admin"],
 ];
@@ -288,31 +288,66 @@ function leaderRow(p) {
     h("td", { class: "num muted" }, fmt(p.items) + " items"), h("td", { class: "num muted" }, fmt(p.streak) + " day streak"));
 }
 
+function statValue(st, v) {
+  if (st && st.kind === "time") {
+    const hrs = v / 3600;
+    return hrs >= 1 ? (Math.round(hrs * 10) / 10).toLocaleString() + " h" : Math.round(v / 60) + " min";
+  }
+  return Number.isInteger(v) ? fmt(v) : (Math.round(v * 100) / 100).toLocaleString();
+}
+
+/** Stats and leaderboards: PlebMc, PlebNite and PlebRPG, a board per stat, and any player's stats. */
 async function leaderboardView() {
-  const top = h("tbody");
-  const found = h("tbody");
+  const games = (await api("stats/games")).games;
+  const p = params();
+  let game = games.find((g) => g.id === p.game) || games[0];
+  let stat = (game.stats.find((s) => s.id === p.stat) || game.stats[0] || {}).id;
+  const gameChips = h("div", { class: "chips" });
+  const statChips = h("div", { class: "chips" });
+  const body = h("tbody");
+  const head = h("h2", {});
+  const keep = () => history.replaceState(null, "", "#leaderboard?" + new URLSearchParams({ game: game.id, stat: stat || "" }).toString());
+  const pg = pager(body, async (offset) => {
+    const r = await api("stats/top?game=" + encodeURIComponent(game.id) + "&stat=" + encodeURIComponent(stat || "") + "&offset=" + offset + "&limit=25");
+    return { items: r.rows.map((x) => ({ ...x, st: r.stat })), total: r.total, more: offset + r.rows.length < r.total };
+  }, (x) => h("tr", {}, h("td", { style: "width:40px" }, h("span", { class: "rank" + (x.place <= 3 ? " r" + x.place : "") }, x.place)),
+    h("td", {}, h("a", { href: "#leaderboard?game=" + game.id + "&stat=" + (stat || "") + "&name=" + encodeURIComponent(x.name), onclick: (e) => { e.preventDefault(); show(x.name); } }, initial(x.name), x.name)),
+    h("td", { class: "num" }, h("b", {}, statValue(x.st, x.value)))),
+  { empty: () => h("tr", {}, h("td", { class: "muted" }, "Nobody is on this board yet. Stats show up after people play.")) });
+  const draw = () => {
+    gameChips.replaceChildren(...games.map((g) => h("button", { class: "chip", "aria-pressed": String(g.id === game.id), onclick: () => {
+      game = g; stat = (g.stats[0] || {}).id; draw(); keep(); pg.reset();
+    } }, g.title)));
+    statChips.replaceChildren(...game.stats.map((s) => h("button", { class: "chip", "aria-pressed": String(s.id === stat), onclick: () => {
+      stat = s.id; draw(); keep(); pg.reset();
+    } }, s.label)));
+    const st = game.stats.find((s) => s.id === stat);
+    head.textContent = game.title + (st ? " · " + st.label : "");
+  };
+  // one player's stats in every game
   const q = h("input", { type: "search", placeholder: "Find a player", "aria-label": "Find a player", maxlength: 16, spellcheck: "false" });
-  const foundCard = card("Search", h("div", { class: "scroll" }, h("table", {}, found)));
-  foundCard.hidden = true;
-  const fill = (body, rows, none) => {
-    body.replaceChildren(...(rows.length ? rows.map(leaderRow) : [h("tr", {}, h("td", { class: "muted" }, none))]));
+  const mine = h("div", {});
+  const show = (name) => {
+    q.value = name;
+    mine.replaceChildren(card("Stats", h("p", { class: "muted" }, "Loading…")));
+    api("stats/player?name=" + encodeURIComponent(name)).then((r) => {
+      mine.replaceChildren(card(h("div", { class: "row", style: "width:100%" }, initial(r.name), h("h2", {}, r.name), r.rank ? h("span", { class: "pill" }, r.rank) : null),
+        ...r.games.map((g) => h("div", {}, h("h3", {}, g.title),
+          h("div", { class: "tiles" }, ...g.stats.map((s) => tile("trophy", s.label, statValue(s, s.value), s.place ? "#" + fmt(s.place) : null)))))));
+      mine.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }).catch((e) => mine.replaceChildren(card("Stats", h("p", { class: "muted" }, e.message))));
   };
-  api("leaderboard?limit=10").then((r) => fill(top, r.rows, "Nobody has coins yet.")).catch((e) => fill(top, [], e.message));
-  let timer;
-  const search = () => {
-    const v = q.value.trim();
-    if (!v) { foundCard.hidden = true; return; }
-    api("leaderboard?q=" + encodeURIComponent(v) + "&limit=25").then((r) => {
-      if (q.value.trim() !== v) return;
-      foundCard.hidden = false;
-      fill(found, r.rows, "No player called " + v + ".");
-    }).catch((e) => { foundCard.hidden = false; fill(found, [], e.message); });
-  };
-  q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(search, 250); });
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter" && q.value.trim()) show(q.value.trim()); });
+  draw();
+  pg.reset();
+  if (p.name) show(p.name);
+  else if (me) show(me.name);
   return h("div", {},
-    card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "Top 10"), h("span", { class: "spacer" }), h("label", { class: "searchbox" }, icon("search"), q)),
-      h("p", { class: "muted" }, "The richest players by " + coinName() + ". Search to see anyone's rank."), h("div", { class: "scroll" }, h("table", {}, top))),
-    h("div", { style: "height:18px" }), foundCard);
+    card(h("div", { class: "row", style: "width:100%" }, h("h2", {}, "Leaderboards"), h("span", { class: "spacer" }), h("label", { class: "searchbox" }, icon("search"), q)),
+      h("p", { class: "muted" }, "Pick a game and a stat. Search a name and press Enter to see all of their stats."),
+      gameChips, h("div", { style: "height:8px" }), statChips, h("div", { style: "height:14px" }), head,
+      h("div", { class: "scroll" }, h("table", {}, body)), pg.more),
+    h("div", { style: "height:18px" }), mine);
 }
 
 const scriptLoads = {};
@@ -1264,7 +1299,7 @@ async function auditView() {
 const VIEWS = {
   home: ["Home", homeView],
   downloads: ["Downloads", downloadsView],
-  leaderboard: ["Leaderboard", leaderboardView],
+  leaderboard: ["Stats & leaderboards", leaderboardView],
   shop: ["Shop", shopView],
   makers: ["Cosmetic makers", makersView, "admin"],
   login: ["Sign in", loginView],
