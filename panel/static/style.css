@@ -425,3 +425,11 @@ button, .btn { border-width: 2px; }
 .tag { justify-self: start; display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--accent2); background: var(--accent-soft); border: 1px solid var(--accent-line); padding: 2px 8px; }
 .foot .brand { font-size: 28px; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+/* stat leaderboards, in the blocky look */
+.boards { gap: 16px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.board { background: var(--bg2); border: 2px solid var(--line); border-radius: 4px; padding: 0 0 6px; overflow: hidden; }
+.board-head { margin: 0; padding: 10px 14px; background: var(--card2); border-bottom: 2px solid var(--line); }
+.board-head h3 { font: 400 24px/1 var(--display); letter-spacing: .5px; flex: 1; }
+.board ol { padding: 2px 14px; }
+.board li.none { padding: 14px 0; }
+button.linkish { color: var(--accent2); box-shadow: none; }

@@ -222,7 +222,7 @@ const ADMIN_VIEWS = new Set(["admin", "players", "player", "ranks", "rank", "ann
 const HEADS = {
   downloads: ["Get", "PlebClient", "Pick how you want to play. The first time you start it, make your PlebMc account on the start screen."],
   stats: ["Player", "stats", "Type a name and pick PlebNite, PlebRPG or PlebMc."],
-  leaderboard: ["The", "leaderboards", "The best players on every game, one board per stat."],
+  leaderboard: ["The", "leaderboards", "The best players on every game, with a top 10 for every stat."],
   shop: ["The", "shop", "Hats, cloaks, wings and trails everyone on PlebMc can see."],
   me: ["My", "account", ""],
 };
@@ -488,7 +488,7 @@ async function leaderboardView() {
     head.textContent = game.title + (st ? " · " + st.label : "");
   };
   show();
-  return card(h("h2", {}, "Leaderboards"), h("p", { class: "muted" }, "The top 10 for every stat. Pick a stat for its top 100, or click a name to see their stats."),
+  return card(null, h("p", { class: "muted" }, "The top 10 for every stat. Pick a stat for its top 100, or click a name to see their stats."),
     gameChips, h("div", { style: "height:8px" }), statChips, h("div", { style: "height:16px" }), out);
 }
 
