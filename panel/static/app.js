@@ -1473,7 +1473,7 @@ async function playersView() {
     return { items: r.players, total: r.total, more: r.more };
   }, (p) => h("tr", { class: "click", tabindex: "0", onclick: () => { location.hash = "#player?name=" + encodeURIComponent(p.name); },
     onkeydown: (e) => { if (e.key === "Enter") location.hash = "#player?name=" + encodeURIComponent(p.name); } },
-  h("td", { class: "lead" }, initial(p.name), p.online ? h("span", { class: "dot on", title: "Online" }) : null, p.name, " ", rolePill(p.role)),
+  h("td", { class: "cr-lead" }, initial(p.name), p.online ? h("span", { class: "dot on", title: "Online" }) : null, p.name, " ", rolePill(p.role)),
   h("td", { class: "num", "data-label": coinName() }, fmt(p.coins)), h("td", { class: "num", "data-label": "Items" }, fmt(p.items)),
   h("td", { "data-label": "Account" }, p.locked ? h("span", { class: "pill locked" }, "locked") : p.account ? h("span", { class: "pill good" }, "yes") : h("span", { class: "muted" }, "none")),
   h("td", { class: "muted", "data-label": "Last seen" }, ago(p.lastSeen))), { empty: () => h("tr", {}, h("td", { class: "muted", colspan: "5" }, "Nobody found.")) });
@@ -1486,7 +1486,7 @@ async function playersView() {
   sortSel.addEventListener("change", () => { state.sort = sortSel.value; keep(); pg.reset(); });
   pg.reset();
   return h("div", {}, card("Players", status, h("div", { class: "row" }, search, sortSel), h("div", { style: "height:10px" }), chips, h("div", { style: "height:10px" }),
-    h("div", { class: "scroll" }, h("table", { class: "stack" }, h("thead", {}, h("tr", {}, h("th", {}, "Player"), h("th", { class: "num" }, coinName()), h("th", { class: "num" }, "Items"), h("th", {}, "Account"), h("th", {}, "Last seen"))), body)), pg.more),
+    h("div", { class: "scroll" }, h("table", { class: "cardrows" }, h("thead", {}, h("tr", {}, h("th", {}, "Player"), h("th", { class: "num" }, coinName()), h("th", { class: "num" }, "Items"), h("th", {}, "Account"), h("th", {}, "Last seen"))), body)), pg.more),
   createCard(() => pg.reset()));
 }
 
@@ -2243,8 +2243,8 @@ async function punishmentsView() {
     const st = PUNISH_STATUS[x.status];
     const lifted = x.status === "removed" ? "Removed by " + (x.removedBy || "staff") + (x.removedReason ? ": " + x.removedReason : "") : "";
     return h("tr", { class: "pun s-" + (x.status || "none") },
-      h("td", { class: "lead" }, h("span", { class: "pill " + kcls }, klabel), x.ipBan ? h("span", { class: "pill", title: "This one is on the IP address too" }, "IP") : null),
-      h("td", { class: "lead" }, person(x.name, x.ipBan ? "An IP address" : "Unknown player", true)),
+      h("td", { class: "cr-lead" }, h("span", { class: "pill " + kcls }, klabel), x.ipBan ? h("span", { class: "pill", title: "This one is on the IP address too" }, "IP") : null),
+      h("td", { class: "cr-lead" }, person(x.name, x.ipBan ? "An IP address" : "Unknown player", true)),
       h("td", { "data-label": "By" }, person(x.staff, "Unknown", false)),
       h("td", { class: "wrap", "data-label": "Reason" }, h("div", {}, x.reason || h("span", { class: "faint" }, "No reason given"),
         x.server && x.server !== "*" ? h("small", { class: "faint" }, " · on " + x.server) : null,
@@ -2279,7 +2279,7 @@ async function punishmentsView() {
   statusSel.addEventListener("change", () => { state.status = statusSel.value; keep(); pg.reset(); });
   pg.reset();
   return h("div", {}, tiles, card("Punishments", status, h("div", { class: "row" }, search, statusSel), h("div", { style: "height:10px" }), chips, h("div", { style: "height:10px" }),
-    h("div", { class: "scroll" }, h("table", { class: "pun-table stack" }, h("thead", {}, h("tr", {}, h("th", {}, "Type"), h("th", {}, "Player"), h("th", {}, "By"), h("th", {}, "Reason"),
+    h("div", { class: "scroll" }, h("table", { class: "pun-table cardrows" }, h("thead", {}, h("tr", {}, h("th", {}, "Type"), h("th", {}, "Player"), h("th", {}, "By"), h("th", {}, "Reason"),
       h("th", {}, "When"), h("th", {}, "Expires"), h("th", {}, "Status"))), body)), pg.more));
 }
 
@@ -2300,7 +2300,7 @@ async function auditView() {
   q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => pg.reset(), 300); });
   pg.reset();
   return card("Admin log", h("p", { class: "muted" }, "Everything admins did on the panel, newest first."), h("div", { class: "row" }, q), h("div", { style: "height:10px" }),
-    h("div", { class: "scroll" }, h("table", { class: "stack" }, h("thead", {}, h("tr", {}, h("th", {}, "When"), h("th", {}, "Who"), h("th", {}, "What"), h("th", {}, "Detail"))), body)), pg.more);
+    h("div", { class: "scroll" }, h("table", { class: "cardrows" }, h("thead", {}, h("tr", {}, h("th", {}, "When"), h("th", {}, "Who"), h("th", {}, "What"), h("th", {}, "Detail"))), body)), pg.more);
 }
 
 // ==================== owner: site content ====================
