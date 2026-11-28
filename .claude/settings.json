@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(java:*)",
+      "Bash(/usr/lib/jvm/**)",
+      "Bash(./gradlew:*)",
+      "Bash(sh:*)",
+      "Bash(python3:*)"
+    ]
+  }
+}
