@@ -373,6 +373,21 @@ function announcementBanner() {
   return h("div", { class: "banner" }, icon("megaphone"), h("span", {}, a.text), h("small", {}, ago(a.at)));
 }
 
+/** "New post" on the homepage for a week after a post goes up. Hiding it lasts until the next post. */
+function newsNotice() {
+  const p = info.newPost;
+  if (!p) return null;
+  try { if (localStorage.getItem("news-notice-hidden") === String(p.id)) return null; } catch (e) { /* show it */ }
+  const bar = h("div", { class: "news-notice" }, h("div", { class: "wrap" }, kindPill(p.tag),
+    h("a", { href: "#news?post=" + p.id }, h("b", {}, p.title), h("span", { class: "go" }, "Read it", icon("arrow"))),
+    h("small", {}, ago(p.at)),
+    h("button", { class: "x", title: "Hide this", "aria-label": "Hide this notice", onclick: () => {
+      try { localStorage.setItem("news-notice-hidden", String(p.id)); } catch (e) { /* hidden for this visit */ }
+      bar.remove();
+    } }, "×")));
+  return bar;
+}
+
 function copyIp(ip) {
   const done = () => toast("Copied " + ip + ". Add it as a server in PlebClient.");
   if (navigator.clipboard) navigator.clipboard.writeText(ip).then(done, () => toast(ip));
@@ -745,6 +760,9 @@ async function homeView() {
   const art = h("div", { class: "hero-art" });
   if (c.heroImage) art.style.backgroundImage = "url(\"" + c.heroImage + "\")";
   const ann = announcementBanner();
+  // a new post this week: a strip across the top, before anything else
+  const notice = newsNotice();
+  if (notice) wrap.append(notice);
   const ping = h("span", { class: "ping" + (s.connected ? " on" : ""), "aria-hidden": "true" }, h("i"), h("i"), h("i"), h("i"), h("i"));
   wrap.append(h("section", {}, art, h("div", { class: "wrap hero-body" },
     c.badge ? h("a", { class: "news", href: "#downloads" }, h("b", {}, "New"), c.badge) : null,

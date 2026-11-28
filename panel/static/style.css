@@ -733,3 +733,17 @@ button.dl-top-pic { padding: 0; border: 0; background: none; box-shadow: none; c
 .pun-table td.wrap { overflow-wrap: anywhere; }
 .pun-lifted { display: block; color: var(--good); margin-top: 2px; }
 tr.pun.s-expired td, tr.pun.s-removed td { opacity: .72; }
+
+/* ==================== "new post" notice on the homepage ==================== */
+.news-notice { background: linear-gradient(90deg, var(--accent-soft), rgba(255, 255, 255, .02)); border-bottom: 1px solid var(--accent-line); }
+.news-notice .wrap { display: flex; align-items: center; gap: 12px; padding-top: 9px; padding-bottom: 9px; }
+.news-notice a { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; flex: 1; color: var(--fg); }
+.news-notice a:hover { text-decoration: none; } .news-notice a:hover .go { text-decoration: underline; }
+.news-notice a b { overflow-wrap: anywhere; }
+.news-notice .go { color: var(--accent2); font-size: 13px; font-weight: 600; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.news-notice .go svg { width: 14px; height: 14px; }
+.news-notice .kind { flex: none; }
+.news-notice small { color: var(--muted); white-space: nowrap; }
+.news-notice .x { flex: none; background: none; border: 0; box-shadow: none; padding: 2px 6px; font-size: 20px; line-height: 1; color: var(--muted); cursor: pointer; }
+.news-notice .x:hover { color: var(--fg); }
+@media (max-width: 560px) { .news-notice small { display: none; } }

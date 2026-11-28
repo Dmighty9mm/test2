@@ -339,6 +339,7 @@ IDEA_SECTIONS = ("PlebMc", "PlebNite", "PlebRPG", "Other")
 IDEA_PRIORITIES = ("urgent", "high", "medium", "low")
 IDEA_STATUSES = ("idea", "planned", "doing", "done", "dropped")
 MAX_IDEA = 4000
+NEWS_NOTICE_DAYS = 7           # the homepage points at a news post this many days after it went up
 # LiteBans punishments, sent by PlebioAPI on the proxy
 PUNISH_KINDS = ("ban", "mute", "warn", "kick")
 PUNISH_STATUSES = ("active", "expired", "removed")
@@ -1507,7 +1508,10 @@ class Panel:
                 "client": self.client_release(), "announcement": self.db.get_kv("announcement", None),
                 "downloads": [d for d in self.downloads() if d["url"]], "content": self.site_content(),
                 "accounts": self.db.one("SELECT COUNT(*) n FROM accounts")["n"],
-                "latestPosts": self.db.all("SELECT id, title, tag, created_at AS at FROM posts ORDER BY pinned DESC, created_at DESC, id DESC LIMIT 3")}
+                "latestPosts": self.db.all("SELECT id, title, tag, created_at AS at FROM posts ORDER BY pinned DESC, created_at DESC, id DESC LIMIT 3"),
+                # the newest post of the last week, for the homepage's "new post" notice
+                "newPost": self.db.one("SELECT id, title, tag, created_at AS at FROM posts WHERE created_at > ? "
+                                       "ORDER BY created_at DESC, id DESC LIMIT 1", self.now() - NEWS_NOTICE_DAYS * 86400)}
 
     # ---------- downloads (links only) ----------
 

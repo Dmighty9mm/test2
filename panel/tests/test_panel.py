@@ -408,6 +408,13 @@ class PanelLogic(unittest.TestCase):
         got = self.p.posts()
         self.assertEqual([(x["title"], x["pinned"], x["author"]) for x in got["posts"]], [("Server 1.2.1", True, "Boss"), ("Client 2.1", False, "Boss")])
         self.assertEqual(self.p.public_info()["latestPosts"][0]["title"], "Server 1.2.1")
+        # the homepage's notice points at the newest post (not the pinned one) for a week
+        self.assertIsNone(make_panel()[0].public_info()["newPost"])
+        self.assertEqual(self.p.public_info()["newPost"]["title"], "Client 2.1")
+        self.clock.t += app.NEWS_NOTICE_DAYS * 86400 - 50
+        self.assertEqual(self.p.public_info()["newPost"]["id"], b["id"])
+        self.clock.t += 100
+        self.assertIsNone(self.p.public_info()["newPost"])
         self.assertTrue(self.p.posts(limit=1)["more"])
         self.p.delete_post(owner, b["id"])
         self.assertEqual(self.p.posts()["total"], 1)

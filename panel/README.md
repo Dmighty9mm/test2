@@ -374,6 +374,8 @@ also show on the homepage.
   `1. numbered lists`, `> quotes`, `` `code` `` and fenced code blocks, `[links](https://…)`, bare links, and `---`.
   Pictures: `![what it shows](https://…/picture.png)`, from an https address or one uploaded to the site (the
   **Image** button asks for the address). Posts are drawn as text, never as HTML, so nothing typed in a post can run on the page.
+- For 7 days after a post goes up, the homepage shows a strip across the top with its title and a link to it.
+  A visitor can hide it with the ×; it stays hidden for them until a newer post is published.
 - API: `GET /api/posts?offset=&limit=&tag=`, `GET /api/posts/<id>`, `POST /api/admin/posts` (owner).
 
 ### Giving coins to everyone online
