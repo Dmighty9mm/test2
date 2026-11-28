@@ -40,6 +40,12 @@ public abstract class MixinFontRenderer {
 	@Shadow
 	protected abstract void renderStringAtPos(String text, boolean shadow);
 
+	/** Container titles are dark gray, which can't be read on the Pleb container look. */
+	@ModifyVariable(method = "renderString", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private int plebmc$containerText(int color) {
+		return net.plebmc.client.hud.PlebTheme.containerText(color);
+	}
+
 	@ModifyVariable(method = "renderString", at = @At("HEAD"), argsOnly = true, ordinal = 0)
 	private String plebmc$nickDraw(String text) {
 		return net.plebmc.client.text.ModernText.fold(PlebClient.filterText(text));

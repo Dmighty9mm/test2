@@ -13,6 +13,7 @@
     "MixinGuiButton",
     "MixinGuiIngame",
     "MixinGuiMainMenu",
+    "MixinGuiMultiplayer",
     "MixinGuiOptionSlider",
     "MixinGuiPlayerTabOverlay",
     "MixinGuiScreen",
@@ -30,6 +31,7 @@
     "MixinRenderTNTPrimed",
     "MixinRendererLivingEntity",
     "MixinS3FPacketCustomPayload",
+    "MixinTextureManager",
     "MixinTileEntityRendererDispatcher"
   ]
 }

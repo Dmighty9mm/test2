@@ -20,7 +20,7 @@ public final class PlebMenu {
 	public static final String SERVER_NAME = "PlebMc";
 	/** Java Edition address of the PlebMc network. */
 	public static final String SERVER_ADDRESS = "play.plebmc.top";
-	public static final String DISCORD = "https://discord.gg/bR89zXFH9h";
+	public static final String DISCORD = "https://discord.plebmc.top";
 
 	public static final int ID_JOIN = 0x504C01;
 	private static final int ID_DISCORD = 0x504C02;
@@ -72,6 +72,9 @@ public final class PlebMenu {
 
 	public static void joinServer(GuiScreen from) {
 		Minecraft mc = Minecraft.getMinecraft();
-		mc.displayGuiScreen(new GuiConnecting(from, mc, new ServerData(SERVER_NAME, SERVER_ADDRESS, false)));
+		ServerData server = new ServerData(SERVER_NAME, SERVER_ADDRESS, false);
+		// PlebMc asks before it loads its resource pack
+		server.setResourceMode(ServerData.ServerResourceMode.PROMPT);
+		mc.displayGuiScreen(new GuiConnecting(from, mc, server));
 	}
 }

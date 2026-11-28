@@ -203,17 +203,13 @@ public class WASMGCClientConfigAdapter implements IClientConfigAdapter {
 
 	@Override
 	public List<DefaultServer> getDefaultServerList() {
-		// PlebMc: the PlebMc server is always first in the list (it's a default entry, so it can't be removed)
-		boolean has = false;
-		for (int i = 0, l = defaultServers.size(); i < l; ++i) {
+		// PlebMc: the PlebMc server isn't an entry of the list: it has its own starred card above it
+		// (net.plebmc.client.hud.FeaturedServer), so it is taken out of the default servers
+		for (int i = defaultServers.size() - 1; i >= 0; --i) {
 			String a = defaultServers.get(i).addr;
-			if (a != null && a.toLowerCase().contains("eagler.plebmc.top")) {
-				has = true;
-				break;
+			if (a != null && (a.toLowerCase().contains("eagler.plebmc.top") || a.toLowerCase().contains("play.plebmc.top"))) {
+				defaultServers.remove(i);
 			}
-		}
-		if (!has) {
-			defaultServers.add(0, new DefaultServer("PlebMc", "wss://eagler.plebmc.top", false));
 		}
 		return defaultServers;
 	}

@@ -549,7 +549,7 @@ public final class PlebClient {
 					: mc.gameSettings.fovSetting;
 			ApolloOverlay.INSTANCE.render(guiW, guiH, now, have, ex, ey, ez, yaw, pitch, fov, mc.displayWidth,
 					mc.displayHeight, partialTicks);
-			if (!(mc.currentScreen instanceof HudEditorScreen) && !(mc.currentScreen instanceof LauncherScreen)
+			if (!(mc.currentScreen instanceof HudEditorScreen)
 					&& !mc.gameSettings.showDebugInfo) {
 				lowHealth(guiW, guiH);
 				for (Mod m : mods.all()) {

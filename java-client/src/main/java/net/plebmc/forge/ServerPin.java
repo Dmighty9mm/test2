@@ -5,7 +5,7 @@ import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.ServerList;
 import net.plebmc.client.hud.PlebMenu;
 
-/** Keeps PlebMc first in the multiplayer server list. */
+/** Takes the PlebMc entry older builds pinned out of the server list: it has its own card above the list now. */
 final class ServerPin {
 	private ServerPin() {
 	}
@@ -14,25 +14,18 @@ final class ServerPin {
 		try {
 			ServerList list = new ServerList(mc);
 			list.loadServerList();
-			int found = -1;
-			for (int i = 0; i < list.countServers(); i++) {
-				String ip = list.getServerData(i).serverIP;
-				if (ip != null && ip.toLowerCase().contains("plebmc.top")) {
-					found = i;
-					break;
+			boolean changed = false;
+			for (int i = list.countServers() - 1; i >= 0; i--) {
+				ServerData d = list.getServerData(i);
+				// the entry this client used to pin: PlebMc has its own card above the list now
+				if (d.serverIP != null && d.serverIP.equalsIgnoreCase(PlebMenu.SERVER_ADDRESS) && PlebMenu.SERVER_NAME.equals(d.serverName)) {
+					list.removeServerData(i);
+					changed = true;
 				}
 			}
-			if (found == 0) {
-				return;
+			if (changed) {
+				list.saveServerList();
 			}
-			if (found < 0) {
-				list.addServerData(new ServerData(PlebMenu.SERVER_NAME, PlebMenu.SERVER_ADDRESS, false));
-				found = list.countServers() - 1;
-			}
-			for (int i = found; i > 0; i--) {
-				list.swapServers(i, i - 1);
-			}
-			list.saveServerList();
 		} catch (Throwable t) {
 			// a broken servers.dat must not stop the game
 		}

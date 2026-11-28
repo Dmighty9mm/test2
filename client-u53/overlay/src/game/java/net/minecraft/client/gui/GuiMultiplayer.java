@@ -57,6 +57,7 @@ public class GuiMultiplayer extends GuiScreen implements GuiYesNoCallback {
 	private boolean deletingServer;
 	private boolean addingServer;
 	private boolean editingServer;
+	private static final int PLEB_CARD_TOP = 24;
 	private boolean directConnect;
 	private String hoveringText;
 
@@ -94,15 +95,18 @@ public class GuiMultiplayer extends GuiScreen implements GuiYesNoCallback {
 			this.initialized = true;
 			this.savedServerList = ServerList.getServerList();
 			this.savedServerList.loadServerList();
-			this.serverListSelector = new ServerSelectionList(this, this.mc, this.width, this.height, 32,
-					this.height - 64, 36);
+			// PlebClient: PlebMc has its own starred card between the title and the list
+			this.serverListSelector = new ServerSelectionList(this, this.mc, this.width, this.height,
+					PLEB_CARD_TOP + net.plebmc.client.hud.FeaturedServer.HEIGHT, this.height - 64, 36);
+			net.plebmc.client.hud.FeaturedServer.refresh();
 			this.serverListSelector.func_148195_a(this.savedServerList);
 			if (lanServerList == null) {
 				lanServerList = new LANServerList();
 			}
 			lanServerList.forceRefresh();
 		} else {
-			this.serverListSelector.setDimensions(this.width, this.height, 32, this.height - 64);
+			this.serverListSelector.setDimensions(this.width, this.height, PLEB_CARD_TOP + net.plebmc.client.hud.FeaturedServer.HEIGHT,
+					this.height - 64);
 		}
 
 		this.createButtons();
@@ -145,6 +149,7 @@ public class GuiMultiplayer extends GuiScreen implements GuiYesNoCallback {
 	public void updateScreen() {
 		super.updateScreen();
 		this.savedServerList.updateServerPing();
+		net.plebmc.client.hud.FeaturedServer.update();
 		if (lanServerList.update()) {
 			this.selectServer(-1);
 		}
@@ -204,6 +209,7 @@ public class GuiMultiplayer extends GuiScreen implements GuiYesNoCallback {
 				long millis = EagRuntime.steadyTimeMillis();
 				if (millis - lastRefreshCommit > 700l) {
 					lastRefreshCommit = millis;
+					net.plebmc.client.hud.FeaturedServer.refresh();
 					this.refreshServerList();
 				}
 			}
@@ -342,7 +348,8 @@ public class GuiMultiplayer extends GuiScreen implements GuiYesNoCallback {
 		this.drawDefaultBackground();
 		this.serverListSelector.drawScreen(i, j, f);
 		this.drawCenteredString(this.fontRendererObj, I18n.format("multiplayer.title", new Object[0]), this.width / 2,
-				20, 16777215);
+				9, 16777215);
+		net.plebmc.client.hud.FeaturedServer.draw(this, PLEB_CARD_TOP, i, j);
 		super.drawScreen(i, j, f);
 		relaysButton.drawScreen(i, j);
 		if (this.hoveringText != null) {
@@ -405,6 +412,9 @@ public class GuiMultiplayer extends GuiScreen implements GuiYesNoCallback {
 	 * clickedButton
 	 */
 	protected void mouseClicked(int parInt1, int parInt2, int parInt3) {
+		if (net.plebmc.client.hud.FeaturedServer.click(this, PLEB_CARD_TOP, parInt1, parInt2, parInt3)) {
+			return;
+		}
 		relaysButton.mouseClicked(parInt1, parInt2, parInt3);
 		super.mouseClicked(parInt1, parInt2, parInt3);
 		this.serverListSelector.mouseClicked(parInt1, parInt2, parInt3);

@@ -141,7 +141,8 @@ def clean_ranks(r):
     return {"connected": bool(r.get("ok")), "reason": s(r.get("reason"), 200), "groups": groups, "tracks": tracks,
             "at": int(time.time())}
 ITEM_ID_RE = re.compile(r"^[a-z0-9_]{2,32}$")
-VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+){0,3}$")
+# 1.0, 1.10.2, and pre-releases of a version: 1.1-alpha2, 1.1-beta1, 1.1-rc1
+VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+){0,3}(-[A-Za-z]{1,12}[0-9]{0,4})?$")
 PAGE = 50
 MAX_DESIGNS = 30
 # a design's data: hat projects are small JSON; cloaks are a PNG (base64) up to 8 MB
@@ -165,7 +166,7 @@ SITE_DEFAULTS = {
     "subtitle": "One network, three games and our own client. Play PlebMc PvP, PlebNite and PlebRPG in your browser or on "
                 "Windows, earn PlebMc Coins and show off your cosmetics.",
     "serverIp": "play.plebmc.top",
-    "discordUrl": "https://discord.gg/bR89zXFH9h",
+    "discordUrl": "https://discord.plebmc.top",
     "featuresTitle": "Three games, one account",
     "featuresText": "Everything you earn follows you: your coins, cosmetics and stats work on every PlebMc game and every PlebClient.",
     "features": [
@@ -186,7 +187,7 @@ SITE_DEFAULTS = {
          "Leaderboards page has the top players for every stat."},
     ],
     # voting: the server lists players vote on (PlebioAPI pays the reward when a vote comes in over Votifier)
-    "voteLinks": [{"name": "Eaglercraft Servers", "url": "https://vote.plebmc.top/"}],
+    "voteLinks": [{"name": "Eaglercraft Servers", "url": "https://eaglercraftservers.com/server/plebmc"}],
     "voteReward": 100,
     "mascot": True,
     "mojangSkins": True,
@@ -211,10 +212,20 @@ def sniff_image(data):
     return None
 
 
+PRE_RELEASES = {"alpha": 0, "a": 0, "beta": 1, "b": 1, "pre": 2, "rc": 2}
+
+
 def version_key(v):
-    """'1.10.2' -> (1, 10, 2, 0) so versions compare like numbers."""
-    parts = [int(x) for x in str(v or "0").split(".") if x.isdigit()][:4]
-    return tuple(parts + [0] * (4 - len(parts)))
+    """'1.10.2' -> (1, 10, 2, 0, 3, 0) so versions compare like numbers. A pre-release sorts below its version:
+    1.1-alpha1 < 1.1-beta1 < 1.1-beta2 < 1.1-rc1 < 1.1."""
+    num, _, tag = str(v or "0").partition("-")
+    parts = [int(x) for x in num.split(".") if x.isdigit()][:4]
+    stage, n = 3, 0
+    m = re.match(r"^([A-Za-z]+)([0-9]*)$", tag)
+    if m:
+        stage = PRE_RELEASES.get(m.group(1).lower(), 1)
+        n = int(m.group(2) or 0)
+    return tuple(parts + [0] * (4 - len(parts)) + [stage, n])
 
 
 def env(name, default=None):

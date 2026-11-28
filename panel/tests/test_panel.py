@@ -449,7 +449,7 @@ class PanelLogic(unittest.TestCase):
         # voting: defaults, then the owner's own list
         d = app.SITE_DEFAULTS
         self.assertEqual(c["voteLinks"], d["voteLinks"])  # left out = the default
-        self.assertEqual(d["voteLinks"][0]["url"], "https://vote.plebmc.top/")
+        self.assertEqual(d["voteLinks"][0]["url"], "https://eaglercraftservers.com/server/plebmc")
         for bad in ({"voteLinks": [{"name": "X", "url": "http://plain.example"}]}, {"voteLinks": [{"name": "", "url": "https://a.example"}]},
                     {"voteReward": "lots"}):
             with self.assertRaises(app.ApiError):
@@ -480,6 +480,18 @@ class PanelLogic(unittest.TestCase):
         # only once: a later 2.x setting of the owner's own is left alone
         p2.set_client_release(owner, {"latest": "2.5"})
         self.assertEqual(app.Panel(self.p.db, self.p.cfg, self.p.clock).client_release()["latest"], "2.5")
+
+    def test_pre_release_versions_sort_below_their_version(self):
+        k = app.version_key
+        self.assertTrue(k("1.0") < k("1.1-alpha1") < k("1.1-beta1") < k("1.1-beta2") < k("1.1-rc1") < k("1.1") < k("1.1.1"))
+        owner = self.p.create_account("Owner", "password1", "owner")
+        self.p.set_client_release(owner, {"latest": "1.1", "minimum": "1.1-beta1"})
+        r = self.p.client_version("1.1-beta1", "wasm")
+        self.assertTrue(r["outdated"])
+        self.assertFalse(r["required"])
+        self.assertTrue(self.p.client_version("1.0", "wasm")["required"])
+        self.assertFalse(self.p.client_version("1.1", "wasm")["outdated"])
+        self.assertEqual([x["version"] for x in self.p.client_versions()], ["1.1", "1.1-beta1", "1.0"])
 
     def test_client_update_checker(self):
         owner = self.p.create_account("Owner", "password1", "owner")
