@@ -39,6 +39,7 @@ const ICONS = {
   user: "M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0",
   grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
   users: "M9 11a4 4 0 100-8 4 4 0 000 8zM2 21a7 7 0 0114 0M16 3.5a4 4 0 010 7.5M18 14a7 7 0 014 7",
+  clock: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2",
   bulb: "M9 18h6M10 21h4M12 3a6 6 0 00-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0012 3z",
   megaphone: "M3 11v2a1 1 0 001 1h2l5 4V6L6 10H4a1 1 0 00-1 1zM15 8a5 5 0 010 8M18 5a9 9 0 010 14",
   upload: "M12 16V4M7 9l5-5 5 5M4 16v4h16v-4",
@@ -867,7 +868,9 @@ async function statsView() {
     api("stats/player?name=" + encodeURIComponent(name)).then((r) => {
       data = r;
       keep();
-      result.replaceChildren(h("div", { class: "row" }, initial(r.name), h("h2", {}, r.name), r.rank ? h("span", { class: "pill" }, r.rank) : null),
+      result.replaceChildren(h("div", { class: "row" }, initial(r.name), h("h2", {}, r.name), r.rank ? h("span", { class: "pill" }, r.rank) : null,
+        h("span", { class: "muted seen", title: r.online || !r.lastSeen ? "" : when(r.lastSeen) }, h("span", { class: "dot" + (r.online ? " on" : "") }),
+          r.online ? "Online now" : r.lastSeen ? "Last seen " + ago(r.lastSeen) : "Not seen in game yet")),
         h("div", { style: "height:12px" }), tabs, h("div", { style: "height:14px" }), out);
       draw();
     }).catch((e) => result.replaceChildren(h("p", { class: "muted" }, e.message)));
@@ -1411,13 +1414,15 @@ async function playerView() {
   const wrap = h("div", {}, h("p", {}, h("a", { href: "#players" }, "← Players")));
   wrap.append(h("div", { class: "card hero" }, initialBig(r.name),
     h("div", {}, h("h1", {}, r.name, " ", rolePill(acc && acc.role), acc && acc.locked ? h("span", { class: "pill locked" }, "locked") : null),
-      h("p", { class: "muted" }, h("span", { class: "dot" + (r.online ? " on" : "") }), r.online ? "Online now" : "Offline",
+      h("p", { class: "muted" }, h("span", { class: "dot" + (r.online ? " on" : "") }),
+        r.online ? "Online now" : h("span", { title: r.lastSeen ? when(r.lastSeen) : "" }, r.lastSeen ? "Last seen " + ago(r.lastSeen) : "Never seen"),
         acc ? " · account since " + when(acc.created) + " · last sign-in " + ago(acc.lastLogin) + " · " + r.devices + " remembered client(s)" : " · no account yet"),
       out)));
   wrap.append(h("div", { class: "tiles" },
     tile("coin", coinName(), fmt(p ? p.coins : 0)),
     tile("bag", "Cosmetics", fmt(p ? p.owned.length : 0)),
-    tile("trophy", "Login streak", fmt(p ? p.streak : 0))));
+    tile("trophy", "Login streak", fmt(p ? p.streak : 0)),
+    tile("clock", "Last seen", r.online ? "Online now" : r.lastSeen ? ago(r.lastSeen) : "Never", r.online || !r.lastSeen ? null : when(r.lastSeen))));
 
   const amount = h("input", { type: "number", min: 0, value: 100, "aria-label": "Amount", style: "max-width:160px" });
   const quick = [100, 1000, 10000].map((n) => h("button", { class: "small ghost", onclick: () => { amount.value = n; } }, "+" + fmt(n)));

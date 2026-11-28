@@ -255,6 +255,11 @@ ranks over to the new name and kicks the old one if it is online. Whatever a gam
 under the old name (inventory, world progress) does not follow. A name with an account, or one
 somebody has already played under, can't be taken.
 
+## Last seen
+
+A player's profile on **Stats** shows "Online now" or when they were last on the server, and so
+does their admin page (where a sign-in to the website counts too, as in the players list).
+
 ## Punishments (admins)
 
 **Admin > Punishments** lists the bans, mutes, warnings and kicks from **LiteBans**: the player,

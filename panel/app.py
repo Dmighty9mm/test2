@@ -1082,6 +1082,18 @@ class Panel:
         return {"uuid": p["uuid"], "name": p["name"], "coins": p["coins"], "owned": json.loads(p["owned"]),
                 "equipped": json.loads(p["equipped"]), "streak": p["streak"]}
 
+    def seen(self, name, logins=False):
+        """Whether a player is on now, and when they last were (None if never). With logins, a
+        sign-in to the website counts too, as it does in the admin's players list."""
+        key = str(name or "").lower()
+        if key in {n.lower() for n in self.online()}:
+            return {"online": True, "lastSeen": self.now()}
+        last = self.db.one("SELECT MAX(last_seen) t FROM players WHERE name_key=?", key)["t"] or 0
+        if logins:
+            acc = self.account(name)
+            last = max(last, (acc["last_login"] or 0) if acc else 0)
+        return {"online": False, "lastSeen": last or None}
+
     def catalog(self):
         return self.db.get_kv("catalog", [])
 
@@ -1486,7 +1498,7 @@ class Panel:
                 games.append({"id": g["id"], "title": g["title"], "stats": out})
         if not found:
             raise ApiError(404, "No stats for that player yet.")
-        return {"name": found, "rank": self.rank_of(found), "games": games}
+        return {"name": found, "rank": self.rank_of(found), "games": games, **self.seen(found)}
 
     def public_info(self):
         st = self.server_status()
@@ -2322,7 +2334,7 @@ class Panel:
         cmds = self.db.all("SELECT * FROM commands WHERE target=? COLLATE NOCASE ORDER BY id DESC LIMIT 20", name)
         tokens = self.db.one("SELECT COUNT(*) n FROM game_tokens WHERE account_id=?", acc["id"])["n"] if acc else 0
         return {"name": (acc or p)["name"], "account": self.public_account(acc) if acc else None, "player": p,
-                "online": name.lower() in {n.lower() for n in self.online()}, "devices": tokens,
+                **self.seen(name, logins=True), "devices": tokens,
                 "rank": self.rank_of(name),
                 "commands": [{"id": c["id"], "action": c["action"], "args": json.loads(c["args"]), "status": c["status"],
                               "result": c["result"], "by": c["by_name"], "at": c["created_at"]} for c in cmds]}
