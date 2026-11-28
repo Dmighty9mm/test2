@@ -2401,7 +2401,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Security-Policy",
-                         "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; "
+                         "default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; "
                          "script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 
     def download(self, kind):

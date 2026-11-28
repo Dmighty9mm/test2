@@ -396,10 +396,10 @@ function drawFooter() {
 
 // ==================== posts: news and changelogs ====================
 
-/** Inline markdown (bold, italic, strike, code, links) as DOM nodes. Text is never parsed as HTML. */
+/** Inline markdown (bold, italic, strike, code, links, pictures) as DOM nodes. Text is never parsed as HTML. */
 function mdInline(text) {
   const out = [];
-  const re = /(`[^`]+`)|\[([^\]]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s<>)\]]+)|\*\*([^*]+(?:\*(?!\*)[^*]*)*)\*\*|~~([^~]+)~~|\*([^*\s][^*]*)\*|(?<![A-Za-z0-9])_([^_\s][^_]*)_(?![A-Za-z0-9])/g;
+  const re = /(`[^`]+`)|\[([^\]]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s<>)\]]+)|\*\*([^*]+(?:\*(?!\*)[^*]*)*)\*\*|~~([^~]+)~~|\*([^*\s][^*]*)\*|(?<![A-Za-z0-9])_([^_\s][^_]*)_(?![A-Za-z0-9])|!\[([^\]]*)\]\(([^)\s]+)\)/g;
   const safe = (u) => (/^(https?:\/\/|#|mailto:)/i.test(u) ? u : null);
   const link = (label, u) => (safe(u) ? h("a", u.startsWith("#") ? { href: u } : { href: u, target: "_blank", rel: "noopener nofollow" }, ...label) : label);
   let last = 0;
@@ -411,6 +411,8 @@ function mdInline(text) {
     else if (m[4]) { const u = m[4].replace(/[.,!?;:]+$/, ""); re.lastIndex -= m[4].length - u.length; out.push(h("a", { href: u, target: "_blank", rel: "noopener nofollow" }, u)); }
     else if (m[5]) out.push(h("strong", {}, ...mdInline(m[5])));
     else if (m[6]) out.push(h("s", {}, ...mdInline(m[6])));
+    // a picture: from an https address, or one uploaded to this site
+    else if (m[10] !== undefined) out.push(/^(https:\/\/|\/(?!\/))/i.test(m[10]) ? h("img", { src: m[10], alt: m[9], loading: "lazy", referrerpolicy: "no-referrer" }) : m[0]);
     else out.push(h("em", {}, ...mdInline(m[7] || m[8])));
     last = re.lastIndex;
   }
@@ -506,7 +508,100 @@ async function newsView() {
     isOwner() ? h("a", { class: "btn primary", href: "#announce" }, icon("edit"), "Write a post") : null), list, pg.more);
 }
 
-/** Owners: write, edit and delete posts, with a live preview. */
+/** The row of formatting buttons above a markdown text box. Each one changes the text as if it was typed, so undo works. */
+function mdToolbar(area) {
+  const put = (text, selFrom, selTo) => {
+    area.focus();
+    const start = area.selectionStart;
+    let done = false;
+    try { done = document.execCommand("insertText", false, text); } catch (e) { /* older browsers: below */ }
+    if (!done) { area.setRangeText(text, start, area.selectionEnd, "end"); area.dispatchEvent(new Event("input", { bubbles: true })); }
+    area.setSelectionRange(start + selFrom, start + selTo);
+  };
+  // **like this**: around what is selected, or around a word to type over
+  const wrap = (before, after, sample) => () => {
+    const sel = area.value.slice(area.selectionStart, area.selectionEnd);
+    if (sel && sel.startsWith(before) && sel.endsWith(after) && sel.length >= before.length + after.length) {
+      const inner = sel.slice(before.length, sel.length - after.length);
+      return put(inner, 0, inner.length);       // pressing it again takes it off
+    }
+    // the marks sit just outside what is selected (as they do right after pressing the button): take them off too
+    const v = area.value;
+    const a = area.selectionStart - before.length;
+    const b = area.selectionEnd + after.length;
+    const star = before === "*" && (v[a - 1] === "*") !== (v[b] === "*") ? false : !(before === "*" && v[a - 1] === "*" && v[a - 2] !== "*");
+    if (a >= 0 && star && v.slice(a, a + before.length) === before && v.slice(b - after.length, b) === after) {
+      area.setSelectionRange(a, b);
+      return put(sel, 0, sel.length);
+    }
+    const inner = sel || sample;
+    put(before + inner + after, before.length, before.length + inner.length);
+  };
+  // "- " or "## " in front of every selected line
+  const lines = (prefix, sample) => () => {
+    const v = area.value;
+    const from = v.lastIndexOf("\n", area.selectionStart - 1) + 1;
+    let to = v.indexOf("\n", area.selectionEnd);
+    if (to < 0) to = v.length;
+    area.setSelectionRange(from, to);
+    const strip = /^(#{1,4}\s+|>\s?|[-*+]\s+|\d{1,3}[.)]\s+)/;
+    const cur = v.slice(from, to).split("\n");
+    const pre = (i) => (typeof prefix === "function" ? prefix(i) : prefix);
+    const on = cur.every((l, i) => l.startsWith(pre(i)));
+    const next = cur.map((l, i) => (on ? l.slice(pre(i).length) : pre(i) + (l.replace(strip, "") || (cur.length === 1 ? sample : "")))).join("\n");
+    put(next, on || cur.length > 1 || cur[0] ? 0 : pre(0).length, next.length);
+  };
+  // something on lines of its own
+  const block = (text, selFrom, selTo) => {
+    const v = area.value;
+    const s = area.selectionStart;
+    const lead = s === 0 || v.slice(0, s).endsWith("\n\n") ? "" : v[s - 1] === "\n" ? "\n" : "\n\n";
+    const after = v.slice(area.selectionEnd);
+    const tail = after.startsWith("\n\n") || !after ? "\n" : after.startsWith("\n") ? "\n" : "\n\n";
+    put(lead + text + tail, lead.length + selFrom, lead.length + selTo);
+  };
+  const address = (what, start) => {
+    const u = (prompt(what, start) || "").trim();
+    if (!u || u === start) return null;
+    return /^(https?:\/\/|\/|#|mailto:)/i.test(u) ? u : "https://" + u;
+  };
+  const link = () => {
+    const sel = area.value.slice(area.selectionStart, area.selectionEnd);
+    const u = address("Where should the link go?", "https://");
+    if (!u) return area.focus();
+    const label = sel || "link text";
+    put("[" + label + "](" + u + ")", 1, 1 + label.length);
+  };
+  const image = () => {
+    const u = address("The picture's address (a link that ends in .png, .jpg, .gif or .webp)", "https://");
+    if (!u) return area.focus();
+    if (/^http:\/\//i.test(u)) { toast("Pictures need an https:// address.", false); return area.focus(); }
+    const sel = area.value.slice(area.selectionStart, area.selectionEnd).replace(/\n/g, " ");
+    const alt = sel || "picture";
+    block("![" + alt + "](" + u + ")", 2, 2 + alt.length);
+  };
+  const code = () => {
+    const sel = area.value.slice(area.selectionStart, area.selectionEnd);
+    if (sel.includes("\n")) block("```\n" + sel + "\n```", 4, 4 + sel.length);
+    else wrap("`", "`", "code")();
+  };
+  const tools = [
+    ["B", "Bold (Ctrl+B)", wrap("**", "**", "bold text"), "b"], ["I", "Italic (Ctrl+I)", wrap("*", "*", "italic text"), "i"], ["S", "Strikethrough", wrap("~~", "~~", "crossed out"), "s"], null,
+    ["H1", "Big heading", lines("## ", "Heading")], ["H2", "Smaller heading", lines("### ", "Heading")], null,
+    ["• List", "Bullet list", lines("- ", "List item")], ["1. List", "Numbered list", lines((i) => i + 1 + ". ", "List item")], ["❝ Quote", "Quote", lines("> ", "Quote")], ["</> Code", "Code", code], null,
+    ["Link", "Link (Ctrl+K)", link], ["Image", "Picture from an address", image], ["― Line", "A line across the post", () => block("---", 3, 3)],
+  ];
+  const keys = { b: tools[0][2], i: tools[1][2], k: link };
+  area.addEventListener("keydown", (e) => {
+    const run = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && keys[e.key.toLowerCase()];
+    if (run) { e.preventDefault(); run(); }
+  });
+  return h("div", { class: "md-tools", role: "toolbar", "aria-label": "Formatting" }, tools.map((t) => (t
+    ? h("button", { type: "button", class: "small" + (t[3] ? " md-" + t[3] : ""), title: t[1], "aria-label": t[1], onmousedown: (e) => e.preventDefault(), onclick: t[2] }, t[0])
+    : h("span", { class: "sep", "aria-hidden": "true" }))));
+}
+
+/** Owners: write, edit and delete posts, with formatting buttons and a live preview beside the text. */
 async function postsEditor() {
   const out = h("div");
   const q = params();
@@ -548,14 +643,13 @@ async function postsEditor() {
   } }, icon("megaphone"), editing ? "Save changes" : "Publish");
   return h("div", {},
     card(editing ? "Edit post" : "Write a post",
-      h("p", { class: "muted" }, "Posts show on the News page: changelogs, events, anything. Write in markdown: ## heading, **bold**, *italic*, - lists, 1. numbered lists, > quotes, `code`, [links](https://…) and --- for a line."),
+      h("p", { class: "muted" }, "Posts show on the News page: changelogs, events, anything. The buttons add the formatting for you (it is markdown, so you can type it too), and the preview shows the post as players will see it."),
+      h("div", { class: "row post-top" }, h("div", { class: "grow" }, h("label", { for: "p-title" }, "Title"), title),
+        h("div", {}, h("label", { for: "p-kind" }, "Kind"), kind), h("label", { class: "check", for: "p-pin" }, pin, " Pin to the top")),
       h("div", { class: "grid g2 post-edit" },
-        h("div", {}, h("label", { for: "p-title" }, "Title"), title,
-          h("div", { class: "row", style: "gap:16px;align-items:end;flex-wrap:wrap" }, h("div", { style: "flex:1;min-width:160px" }, h("label", { for: "p-kind" }, "Kind"), kind),
-            h("label", { class: "check", for: "p-pin" }, pin, " Pin to the top")),
-          h("label", { for: "p-body" }, "Post"), body,
-          h("div", { class: "row", style: "gap:8px;margin-top:12px" }, save, editing ? h("a", { class: "btn", href: "#announce" }, "Cancel") : null), out),
-        h("div", {}, h("label", {}, "Preview"), preview))),
+        h("div", { class: "post-write" }, h("label", { for: "p-body" }, "Post"), mdToolbar(body), body),
+        h("div", { class: "post-preview-col" }, h("label", {}, "Preview"), preview)),
+      h("div", { class: "row", style: "gap:8px;margin-top:14px" }, save, editing ? h("a", { class: "btn", href: "#announce" }, "Cancel") : null), out),
     card("Posts", list));
 }
 

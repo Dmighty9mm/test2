@@ -366,11 +366,14 @@ The **News** page (`#news`) lists posts owners write: server and client changelo
 title, a kind (News, Server update, Client update, Event), an optional pin, and a body in markdown. The three newest
 also show on the homepage.
 
-- Owners write, edit and delete posts under **Admin > Announcements**, with a live preview. (The old banner and
+- Owners write, edit and delete posts under **Admin > Announcements**: formatting buttons above the text box (bold,
+  italic, strikethrough, headings, lists, quote, code, link, image, line; Ctrl+B, Ctrl+I and Ctrl+K work too) and a
+  live preview right beside it. (The old banner and
   game-chat announcement is on the same page as "Quick announcement".)
 - Markdown that works: `## headings`, `**bold**`, `*italic*`, `~~strike~~`, `- lists` (one level of nesting),
   `1. numbered lists`, `> quotes`, `` `code` `` and fenced code blocks, `[links](https://…)`, bare links, and `---`.
-  Pictures are not supported. Posts are drawn as text, never as HTML, so nothing typed in a post can run on the page.
+  Pictures: `![what it shows](https://…/picture.png)`, from an https address or one uploaded to the site (the
+  **Image** button asks for the address). Posts are drawn as text, never as HTML, so nothing typed in a post can run on the page.
 - API: `GET /api/posts?offset=&limit=&tag=`, `GET /api/posts/<id>`, `POST /api/admin/posts` (owner).
 
 ### Giving coins to everyone online

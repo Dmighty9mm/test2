@@ -654,8 +654,23 @@ button.linkish { color: var(--accent2); box-shadow: none; }
 .md pre { background: var(--bg2); border: 2px solid var(--line); padding: 12px 14px; overflow-x: auto; margin: 0 0 12px; } .md pre code { border: 0; padding: 0; background: none; }
 .md blockquote { margin: 0 0 12px; padding: 8px 14px; border-left: 4px solid var(--line2); background: var(--bg2); color: var(--muted); }
 .md hr { border: 0; border-top: 2px solid var(--line); margin: 18px 0; }
-.post-edit textarea { font: 13.5px/1.5 ui-monospace, Menlo, Consolas, monospace; min-height: 300px; resize: vertical; }
-.post-preview .post { max-height: 520px; overflow: auto; }
+.md img { max-width: 100%; height: auto; display: block; margin: 6px 0; border: 2px solid var(--line); }
+.post-top { align-items: end; gap: 16px; margin-bottom: 14px; }
+.post-top .grow { flex: 1 1 260px; min-width: 0; }
+.post-top .grow input { width: 100%; }
+.post-top select { width: auto; min-width: 170px; }
+.post-top .check { padding-bottom: 10px; }
+/* the text box and the preview stand side by side, the same height */
+.post-edit { align-items: stretch; }
+.post-write, .post-preview-col { display: flex; flex-direction: column; min-width: 0; }
+.post-edit textarea { font: 13.5px/1.5 ui-monospace, Menlo, Consolas, monospace; min-height: 420px; resize: vertical; flex: 1; border-top-left-radius: 0; border-top-right-radius: 0; }
+.md-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px; background: var(--card2); border: 1px solid var(--line2); border-bottom: 0; }
+.md-tools button { padding: 5px 9px; min-width: 32px; box-shadow: none; white-space: nowrap; }
+.md-tools .md-b { font-weight: 800; } .md-tools .md-i { font-style: italic; font-family: Georgia, serif; } .md-tools .md-s { text-decoration: line-through; }
+.md-tools .sep { width: 1px; align-self: stretch; background: var(--line2); margin: 2px 4px; }
+.post-preview { flex: 1; min-height: 0; position: relative; }
+.post-preview .post { position: absolute; inset: 0; overflow: auto; animation: none; }
+@media (max-width: 900px) { .post-edit { grid-template-columns: 1fr; } .post-preview .post { position: static; max-height: 520px; } .post-edit textarea { min-height: 300px; } }
 .post-rows { display: grid; }
 .post-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .post-row:first-child { border-top: 0; } .post-row > a:not(.btn) { color: var(--fg); font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
