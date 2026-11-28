@@ -16,6 +16,7 @@ import net.plebmc.client.mods.HudBox;
 import net.plebmc.client.mods.Mod;
 import net.plebmc.client.mods.ModRegistry;
 import net.plebmc.client.mods.Mods;
+import net.plebmc.client.mods.Passwords;
 import net.plebmc.client.mods.SettingsStore;
 import net.plebmc.client.network.PluginChannels;
 
@@ -220,6 +221,97 @@ public class ClientModsTest {
                 reg.speed.sample(0, 64, 0, 1000);
                 check(Math.abs(reg.speed.sample(2, 64, 0, 1500) - 4.0) < 1e-6, "speed in blocks per second");
                 check(reg.byId("crosshair") != null && reg.byId("scoreboard") != null && reg.byId("hurt-cam") != null, "visual mods registered");
+                // ---- speed follows every game tick (20 a second), not a quarter-second window
+                reg.speed.sample(0, 64, 0, 0, 100);
+                check(Math.abs(reg.speed.sample(0.28, 64, 0, 50, 101) - 5.6) < 1e-6, "speed is the last tick's move");
+                check(Math.abs(reg.speed.sample(0.28, 64, 0, 60, 101) - 5.6) < 1e-6, "speed is steady within a tick");
+                check(reg.speed.sample(0.28, 64, 0, 100, 102) == 0.0, "speed drops to zero the tick you stop");
+                check(Math.abs(reg.speed.sample(0.5, 64, 0, 200, 104) - 2.2) < 1e-6, "skipped ticks are averaged");
+
+                // ---- the server's timer is a HUD mod now: off switch, position, look
+                net.plebmc.client.mods.MoreMods.ServerTimer timer = reg.serverTimer;
+                check(timer.hasHud() && timer.isEnabled() && timer.centerAnchored() && "stopwatch".equals(timer.id()), "playtime counter is a movable HUD mod");
+                check(timer.layout(v, M) == null, "no timer from the server: nothing drawn");
+                check(timer.preview(v, M) != null && timer.preview(v, M).texts.get(0).text.equals("12:34.32"), "timer preview for the HUD editor");
+                timer.setting("hundredths").set(0);
+                check(timer.text(754320).equals("12:34"), "timer without hundredths");
+                timer.resetSettings();
+                Apollo.preview("{\"@type\":\"type.googleapis.com/lunarclient.apollo.stopwatch.v1.StartStopwatchMessage\"}");
+                check(timer.layout(v, M) != null, "a running server timer is drawn");
+                timer.setEnabled(false);
+                check(!timer.isActive(), "the timer can be turned off");
+                timer.setEnabled(true);
+                Apollo.preview("{\"@type\":\"type.googleapis.com/lunarclient.apollo.stopwatch.v1.ResetStopwatchMessage\"}");
+
+                // ---- password hider
+                check(Passwords.mask("/login hunter2").equals("/login *******"), "login password is starred");
+                check(Passwords.mask("/l hunter2").equals("/l *******") && Passwords.mask("/LOGIN Hunter2").equals("/LOGIN *******"), "/l and upper case too");
+                check(Passwords.mask("/register abc abc").equals("/register *** ***") && Passwords.mask("/reg abc abc").equals("/reg *** ***"), "register passwords are starred");
+                check(Passwords.mask("/login").equals("/login") && Passwords.mask("/login ").equals("/login "), "nothing to hide yet");
+                check(Passwords.mask("/loginx secret").equals("/loginx secret") && Passwords.mask("/msg Bob /login x").equals("/msg Bob /login x")
+                                && Passwords.mask("hello /login x").equals("hello /login x") && Passwords.mask("/list all").equals("/list all"), "other text is left alone");
+                check(Passwords.mask("/login a b").length() == "/login a b".length(), "length is kept (the cursor stays put)");
+                check(Passwords.isSecret("/l pw") && !Passwords.isSecret("/l") && !Passwords.isSecret("/l  ") && !Passwords.isSecret("/help pw"), "what counts as a secret");
+                check(reg.passwordHider.isEnabled() && reg.passwordHider.skipHistory(), "password hider is on by default");
+
+                // ---- password manager
+                Passwords.forgetAll();
+                check(Passwords.complete("/login", "play.plebmc.top") == null, "nothing saved: nothing to fill in");
+                check(!Passwords.sent("hello", "play.plebmc.top", 1000) && !Passwords.sent("/login", "play.plebmc.top", 1000), "no offer for other messages");
+                check(Passwords.sent("/login hunter2", "Play.PlebMc.top", 1000) && "play.plebmc.top".equals(Passwords.pendingServer(2000)), "offers to save after /login");
+                check(Passwords.saved("play.plebmc.top") == null, "not saved until you say so");
+                check("play.plebmc.top".equals(Passwords.savePending(3000)) && "hunter2".equals(Passwords.saved("PLAY.plebmc.top")), "saved per server");
+                check(!Passwords.sent("/login hunter2", "play.plebmc.top", 4000), "no offer for the password already saved");
+                check("/login hunter2".equals(Passwords.complete("/login", "play.plebmc.top")) && "/l hunter2".equals(Passwords.complete("/l ", "play.plebmc.top")),
+                                "Tab completes /login and /l");
+                check("/register hunter2 hunter2".equals(Passwords.complete("/register", "play.plebmc.top"))
+                                && "/reg hunter2 hunter2".equals(Passwords.complete("/reg", "play.plebmc.top")), "Tab completes /register and /reg");
+                check(Passwords.complete("/login hun", "play.plebmc.top") == null && Passwords.complete("/log", "play.plebmc.top") == null
+                                && Passwords.complete("/login", "other.server") == null, "only the bare command on the right server");
+                check(Passwords.sent("/register newpass newpass", "other.server", 5000) && Passwords.pendingServer(5000 + 121000) == null, "an unanswered offer runs out");
+                check(!Passwords.sent("/register one two", "other.server", 5000), "mismatched register passwords aren't offered");
+                MapStore pws = new MapStore();
+                Passwords.save(pws);
+                check(!pws.get(Passwords.STORE_KEY).contains("hunter2"), "not stored as readable text");
+                Passwords.forgetAll();
+                Passwords.load(pws);
+                check("hunter2".equals(Passwords.saved("play.plebmc.top")) && Passwords.count() == 1, "passwords survive a restart");
+                check(Passwords.forget("play.plebmc.top") && Passwords.saved("play.plebmc.top") == null, "forget");
+                MapStore exp = new MapStore();
+                reg.save(exp);
+                exp.set(Passwords.STORE_KEY, "{\"a\":\"b\"}");
+                check(!net.plebmc.client.mods.SettingsTransfer.export(exp).contains(Passwords.STORE_KEY), "passwords are never in a settings export");
+
+                // ---- ping equalizer
+                net.plebmc.client.mods.MoreMods.PingEqualizer eq = reg.pingEqualizer;
+                check(!eq.isEnabled() && eq.delayEachWay() == 0, "ping equalizer is off by default and adds nothing");
+                eq.setEnabled(true);
+                eq.setting("target").set(2); // 100 ms
+                // a server whose reported ping follows the real one slowly (like the tab list)
+                double real = 30, shown = 30;
+                long t = 100000;
+                for (int i = 0; i < 240; i++) {
+                        eq.update((int) Math.round(shown), t);
+                        shown += (real + eq.addedMs() - shown) * 0.12;
+                        t += 1000;
+                }
+                check(Math.abs(shown - 100) <= 3 && Math.abs(eq.addedMs() - 70) <= 3, "30 ms is brought up to 100: " + shown + " / " + eq.addedMs());
+                check(eq.delayEachWay() * 2 >= eq.addedMs() - 1 && eq.delayEachWay() * 2 <= eq.addedMs() + 1, "half the delay each way");
+                real = 180;
+                for (int i = 0; i < 240; i++) {
+                        eq.update((int) Math.round(shown), t);
+                        shown += (real + eq.addedMs() - shown) * 0.12;
+                        t += 1000;
+                }
+                check(eq.addedMs() == 0, "a ping above the target is never lowered or raised: " + eq.addedMs());
+                eq.reset();
+                eq.update(0, t);
+                check(eq.addedMs() == 0, "a ping of 0 right after joining is not trusted");
+                eq.update(-1, t + 60000);
+                check(eq.addedMs() == 0, "unknown ping: no delay");
+                eq.setEnabled(false);
+                eq.update(20, t + 120000);
+                check(eq.delayEachWay() == 0, "off: no delay");
                 reg.coordinates.resetSettings();
                 check(Mods.Coordinates.facing(0).startsWith("South") && Mods.Coordinates.facing(90).startsWith("West")
                                 && Mods.Coordinates.facing(-90).startsWith("East") && Mods.Coordinates.facing(44).startsWith("South"),

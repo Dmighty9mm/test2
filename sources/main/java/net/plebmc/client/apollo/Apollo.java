@@ -351,6 +351,19 @@ public final class Apollo {
                 dropped = 0;
         }
 
+        /**
+         * A proxy moved the player to another of its servers on the same
+         * connection: the modules forget what the last server sent, and the
+         * handshake goes out again for the new one.
+         */
+        public static void serverSwitched() {
+                resetSession();
+                record("session", "ServerSwitch", ApolloDebugLog.Status.HANDLED, "moved to another server: state cleared");
+                if (PluginChannels.isJoined()) {
+                        sendHandshake();
+                }
+        }
+
         static void record(String channel, String type, ApolloDebugLog.Status status, String detail) {
                 debugLog.add(now(), channel, type, status, detail);
         }

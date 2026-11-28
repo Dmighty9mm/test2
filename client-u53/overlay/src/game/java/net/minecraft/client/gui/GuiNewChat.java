@@ -204,6 +204,9 @@ public class GuiNewChat extends Gui {
 	 * using the up/down arrow keys
 	 */
 	public void addToSentMessages(String parString1) {
+		if (!net.plebmc.client.hud.PlebChat.keepInHistory(parString1)) {
+			return; // PlebClient: a login command with a password in it
+		}
 		if (this.sentMessages.isEmpty()
 				|| !((String) this.sentMessages.get(this.sentMessages.size() - 1)).equals(parString1)) {
 			this.sentMessages.add(parString1);
@@ -344,4 +347,4 @@ public class GuiNewChat extends Gui {
 	public int getLineCount() {
 		return this.getChatHeight() / 9;
 	}
-}
+}

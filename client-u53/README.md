@@ -19,9 +19,9 @@ and `eaglercraft-teavm-fork.github.io`.
 
 ## What is where
 
-- `overlay/` holds the u53 files that PlebClient hooks into, with the hooks applied: 27 game
+- `overlay/` holds the u53 files that PlebClient hooks into, with the hooks applied: 28 game
   classes in `src/game/java` (title screen, theme, HUD, cosmetics layers, item models, RGB text,
-  zoom, sprint, borders...) and the engine files in `src/main`, `src/teavm`, `src/lwjgl`,
+  zoom, sprint, borders, the chat box for the password mods...) and the engine files in `src/main`, `src/teavm`, `src/lwjgl`,
   `src/wasm-gc-teavm` and `src/platform-api` (render scale for FPS Boost, the PlebMc default
   server, server resource packs without a hash, raw packets for squad pings, the RGB font path).
   Every hook calls into `net.plebmc.*`, so a future Eagler update only needs these files re-merged.

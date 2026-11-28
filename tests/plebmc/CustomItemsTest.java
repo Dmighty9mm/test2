@@ -238,6 +238,21 @@ public class CustomItemsTest {
 					}
 				}
 			}
+			// an inventory slot shows the gun exactly where 1.9+ puts it (it used to sit
+			// twice as far from the middle as the pack asked)
+			ItemTransforms.T gui19 = ItemTransforms.read(d19.get("gui")), gui18 = ItemTransforms.read(pdisp.get("gui"));
+			for (int e = 0; e < after.size(); e++) {
+				Map<?, ?> b = (Map<?, ?>) before.get(e), n = (Map<?, ?>) after.get(e);
+				for (String k : new String[] { "from", "to" }) {
+					double[] w = ItemTransforms.guiPoint19(gui19, v3(b.get(k))), h = ItemTransforms.guiPoint18(gui18, v3(n.get(k)), true);
+					check(Math.abs(w[0] - h[0]) < 0.01 && Math.abs(w[1] - h[1]) < 0.01,
+							"slot icon " + k + " " + e + " where 1.9+ draws it: " + Arrays.toString(w) + " vs " + Arrays.toString(h));
+				}
+			}
+			ItemTransforms.T flat = ItemTransforms.convert("gui", ItemTransforms.read(Json.parse("{\"translation\":[4,-2,0],\"scale\":[1.5,1.5,1.5]}")), false);
+			double[] fw = ItemTransforms.guiPoint19(ItemTransforms.read(Json.parse("{\"translation\":[4,-2,0],\"scale\":[1.5,1.5,1.5]}")), new double[] { 3, 12, 8 });
+			double[] fh = ItemTransforms.guiPoint18(flat, new double[] { 3, 12, 8 }, false);
+			check(Math.abs(fw[0] - fh[0]) < 0.01 && Math.abs(fw[1] - fh[1]) < 0.01, "flat slot icon where 1.9+ draws it: " + Arrays.toString(fw) + " vs " + Arrays.toString(fh));
 			check(p30.json.contains("pleb_unclamped"), "transforms marked as unclamped");
 			check(p30.crossbow && p30.aim != null && p30.aim.id.endsWith("_aim"), "a gun has an aiming model");
 		}

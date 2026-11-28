@@ -442,6 +442,9 @@ public abstract class GuiScreen extends Gui implements GuiYesNoCallback {
 	}
 
 	public void sendChatMessage(String msg, boolean addToChat) {
+		if (net.plebmc.client.hud.PlebChat.outgoing(msg)) {
+			return; // PlebClient: one of the client's own password commands
+		}
 		if (addToChat) {
 			this.mc.ingameGUI.getChatGUI().addToSentMessages(msg);
 		}

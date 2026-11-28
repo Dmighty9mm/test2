@@ -72,6 +72,11 @@ final class GameView implements ClientView {
 	}
 
 	@Override
+	public long gameTicks() {
+		return PlebClient.gameTicks;
+	}
+
+	@Override
 	public int pingMs() {
 		EntityPlayerSP p = player();
 		NetHandlerPlayClient nh = mc.getNetHandler();
@@ -191,9 +196,9 @@ final class GameView implements ClientView {
 		if (p == null) {
 			return 0;
 		}
-		long now = System.currentTimeMillis();
-		if (now - suppliesAt > 250L || now < suppliesAt) {
-			// count once a few times a second, not once per group per frame
+		long now = PlebClient.gameTicks;
+		if (now != suppliesAt) {
+			// count once a game tick, not once per group per frame
 			suppliesAt = now;
 			supplies.clear();
 			ItemStack[] inv = p.inventory.mainInventory;

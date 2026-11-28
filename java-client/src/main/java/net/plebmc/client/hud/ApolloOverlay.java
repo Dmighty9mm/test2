@@ -23,7 +23,6 @@ import net.plebmc.client.apollo.module.ChatModule;
 import net.plebmc.client.apollo.module.CooldownModule;
 import net.plebmc.client.apollo.module.HologramModule;
 import net.plebmc.client.apollo.module.NotificationModule;
-import net.plebmc.client.apollo.module.StopwatchModule;
 import net.plebmc.client.apollo.module.TeamModule;
 import net.plebmc.client.apollo.module.TitleModule;
 import net.plebmc.client.apollo.module.VignetteModule;
@@ -47,7 +46,6 @@ final class ApolloOverlay {
 
         // modules are created once at start-up: look them up once, not every frame
         private static VignetteModule vignetteM;
-        private static StopwatchModule stopwatchM;
         private static CooldownModule cooldownM;
         private static ChatModule chatM;
         private static TitleModule titleM;
@@ -61,7 +59,6 @@ final class ApolloOverlay {
         private static void lookup() {
                 if (teamM == null) {
                         vignetteM = Apollo.module(VignetteModule.class);
-                        stopwatchM = Apollo.module(StopwatchModule.class);
                         cooldownM = Apollo.module(CooldownModule.class);
                         chatM = Apollo.module(ChatModule.class);
                         titleM = Apollo.module(TitleModule.class);
@@ -86,30 +83,28 @@ final class ApolloOverlay {
                 if (vignette != null && vignette.isEnabled() && vignette.isActive()) {
                         vignette(w, h, vignette.resource(), vignette.opacity());
                 }
-                compassMarkers.clear();
-                collect = true;
                 Minecraft mc = Minecraft.getMinecraft();
-                // the web client redraws the HUD only a few times a second, so there the
-                // markers that follow the world are drawn every frame instead (renderWorld)
-                world(mc, w, h, haveCamera, eyeX, eyeY, eyeZ, yaw, pitch, fov, pxW, pxH, !GlCompat.hudIsBuffered());
-                PlebClient.mods().compass.setMarkers(new ArrayList<Mods.Compass.Marker>(compassMarkers));
-                stopwatch(w, h, now);
+                if (!GlCompat.hudIsBuffered()) {
+                        // (the web client draws these under its buffered HUD instead: renderWorld)
+                        compassMarkers.clear();
+                        world(mc, w, h, haveCamera, eyeX, eyeY, eyeZ, yaw, pitch, fov, pxW, pxH, true);
+                        PlebClient.mods().compass.setMarkers(new ArrayList<Mods.Compass.Marker>(compassMarkers));
+                }
                 cooldowns(mc, w, h, now);
                 liveChat(h);
                 titles(w, h, now);
                 notifications(w, now);
         }
 
-        /** False while drawing a frame's markers only, so the compass list isn't filled twice. */
-        private boolean collect = true;
-
         private void mark(Mods.Compass.Marker m) {
-                if (collect) {
-                        compassMarkers.add(m);
-                }
+                compassMarkers.add(m);
         }
 
-        /** Every frame, straight to the screen: the markers that follow the world. */
+        /**
+         * The web client, every frame, straight to the screen and under the game's
+         * own (buffered) HUD: the markers that follow the world. Also fills the
+         * compass, so its pips are as fresh as its heading.
+         */
         void renderWorld(int w, int h, boolean haveCamera, double eyeX, double eyeY, double eyeZ, float yaw, float pitch,
                         float fov, int pxW, int pxH, float partialTicks) {
                 if (!GlCompat.hudIsBuffered()) {
@@ -117,12 +112,9 @@ final class ApolloOverlay {
                 }
                 lookup();
                 this.partialTicks = partialTicks;
-                collect = false;
-                try {
-                        world(Minecraft.getMinecraft(), w, h, haveCamera, eyeX, eyeY, eyeZ, yaw, pitch, fov, pxW, pxH, true);
-                } finally {
-                        collect = true;
-                }
+                compassMarkers.clear();
+                world(Minecraft.getMinecraft(), w, h, haveCamera, eyeX, eyeY, eyeZ, yaw, pitch, fov, pxW, pxH, true);
+                PlebClient.mods().compass.setMarkers(new ArrayList<Mods.Compass.Marker>(compassMarkers));
         }
 
         /**
@@ -215,32 +207,6 @@ final class ApolloOverlay {
                 double k = Math.max(0.0, Math.min(1.0, (d - 0.45) / 0.85));
                 float a = (float) (o * k * (0.6 + 0.4 * k) * 1.15);
                 wr.pos(w * ix / (double) n, h * iy / (double) n, -90.0D).color(0f, 0f, 0f, Math.min(0.95f, a)).endVertex();
-        }
-
-        /** Match timer: top center, under the compass when it's there. */
-        private static void stopwatch(int w, int h, long now) {
-                StopwatchModule sw = stopwatchM;
-                if (sw == null || !sw.isEnabled() || !sw.isShown()) {
-                        return;
-                }
-                String s = StopwatchModule.format(sw.elapsedMs(now));
-                int tw = Draw.width(s);
-                Mods.Compass compass = PlebClient.mods().compass;
-                float y = 22;
-                if (compass.isActive() && compass.fy() < 0.25f) {
-                        int[] cp = net.plebmc.client.mods.ModRegistry.place(compass, Mods.Compass.WIDTH, Mods.Compass.HEIGHT,
-                                        w, h);
-                        y = cp[1] + Mods.Compass.HEIGHT + 3;
-                }
-                float x = w / 2f - (tw + 14) / 2f;
-                Draw.fill(x, y, tw + 14, 13, 0x80000000);
-                // a little stopwatch glyph
-                int c = sw.isRunning() ? 0xFFFFFFFF : 0xFFFFFF55;
-                Draw.fill(x + 3, y + 4, 6, 6, 0xFF555555);
-                Draw.fill(x + 4, y + 5, 4, 4, c);
-                Draw.fill(x + 5, y + 2, 2, 2, 0xFF555555);
-                Draw.fill(x + 6, y + 6, 1, 2, 0xFF000000);
-                Draw.text(s, x + 12, y + 3, c, true);
         }
 
         /**

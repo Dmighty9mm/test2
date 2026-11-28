@@ -490,7 +490,7 @@ public final class Mods {
                         super("zoom", "Zoom", "Hold C to zoom", true, 0f, 0f);
                         level = setting("level", "Zoom level", "How far you zoom in when you press the key", LEVEL_NAMES, 1);
                         scroll = setting("scroll", "Scroll to adjust", "Mouse wheel zooms further in or out while zooming", OFF_ON, 1);
-                        smooth = setting("smooth", "Smooth camera", "Cinematic camera while zoomed", OFF_ON, 0);
+                        smooth = setting("smooth", "Cinematic camera", "The camera glides smoothly while you're zoomed in", OFF_ON, 0);
                 }
 
                 /** Field of view while zoomed (Eaglercraft's zoom works in FOV degrees). */

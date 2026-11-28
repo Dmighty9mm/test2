@@ -269,7 +269,7 @@ final class WorldFx {
 		WaypointModule wm = Apollo.module(WaypointModule.class);
 		boolean beams = bm != null && bm.isEnabled() && !bm.all().isEmpty();
 		List<WaypointModule.Waypoint> wps = PlebWaypoints.beams(wm);
-		List<WaypointModule.Waypoint> marks = PlebWaypoints.visible(wm);
+		List<int[]> marks = PlebWaypoints.markBlocks(wm);
 		if (!beams && wps.isEmpty() && marks.isEmpty() || mc.gameSettings.shaders) {
 			return;
 		}
@@ -307,9 +307,8 @@ final class WorldFx {
 				}
 				// the marked block itself lights up (a squad ping shows what was pinged)
 				for (int i = 0; i < marks.size(); i++) {
-					WaypointModule.Waypoint wp = marks.get(i);
-					blockBox(Math.floor(wp.pos.x), Math.floor(wp.pos.y), Math.floor(wp.pos.z), wp.argb,
-							pass == 0 ? 0.16f : 0.3f, ex, ey, ez);
+					int[] m = marks.get(i);
+					blockBox(m[0], m[1], m[2], m[3], pass == 0 ? 0.16f : 0.3f, ex, ey, ez);
 				}
 			}
 		} finally {
