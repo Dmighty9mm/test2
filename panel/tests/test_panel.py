@@ -560,6 +560,16 @@ class PanelLogic(unittest.TestCase):
         self.assertEqual(len(c["features"]), 1)
         self.assertEqual(c["faq"], [{"q": "Q?", "a": "A."}])
         self.assertEqual(c["subtitle"], app.SITE_DEFAULTS["subtitle"])  # left out = the default
+        # a Discord invite, wherever it was typed, comes out as the site's own Discord address
+        self.assertEqual(c["discordUrl"], "https://discord.plebmc.top")
+        self.p.db.set_kv("site_content", {"discordUrl": "https://discord.gg/OldInvite", "footer": "Join discord.gg/abc-123 today",
+                                          "faq": [{"q": "Discord?", "a": "It is https://discord.com/invite/xyz, see you there. Not https://discord.com/channels/1/2"}]})
+        c = self.p.public_info()["content"]
+        self.assertEqual((c["discordUrl"], c["footer"]), ("https://discord.plebmc.top", "Join https://discord.plebmc.top today"))
+        self.assertEqual(c["faq"][0]["a"], "It is https://discord.plebmc.top, see you there. Not https://discord.com/channels/1/2")
+        post = self.p.save_post(owner, {"title": "Join us", "body": "[Discord](https://discord.gg/abc) or https://www.discord.gg/abc/"})["post"]
+        self.assertEqual(self.p.post(post["id"])["body"], "[Discord](https://discord.plebmc.top) or https://discord.plebmc.top")
+        self.assertEqual(self.p.posts()["posts"][0]["body"], "[Discord](https://discord.plebmc.top) or https://discord.plebmc.top")
         # voting: defaults, then the owner's own list
         d = app.SITE_DEFAULTS
         self.assertEqual(c["voteLinks"], d["voteLinks"])  # left out = the default
@@ -1123,6 +1133,21 @@ class PanelHttp(unittest.TestCase):
             with opener.open(urllib.request.Request(self.base + path), timeout=5) as r:
                 self.assertEqual(r.status, 200, path)
                 self.assertIn("script-src 'self'", r.headers["Content-Security-Policy"])
+
+    def test_short_links_open_their_page(self):
+        import http.client
+        host, port = self.base[len("http://"):].split(":")
+        for path, to in (("/download", "/#downloads"), ("/Downloads/", "/#downloads"), ("/vote", "/#vote"), ("/leaderboards", "/#leaderboard"),
+                         ("/account", "/#me")):
+            c = http.client.HTTPConnection(host, int(port), timeout=5)
+            c.request("GET", path)
+            r = c.getresponse()
+            self.assertEqual((r.status, r.getheader("Location")), (302, to), path)
+            c.close()
+        c = http.client.HTTPConnection(host, int(port), timeout=5)
+        c.request("GET", "/something-else")
+        self.assertEqual(c.getresponse().status, 200)      # anything else is still the site itself
+        c.close()
 
     def test_static_and_headers(self):
         req = urllib.request.Request(self.base + "/")

@@ -255,6 +255,18 @@ ranks over to the new name and kicks the old one if it is online. Whatever a gam
 under the old name (inventory, world progress) does not follow. A name with an account, or one
 somebody has already played under, can't be taken.
 
+## Short links
+
+`plebmc.top/download` opens the Download page (`/#downloads`). The same works for `/downloads`, `/shop`, `/news`,
+`/vote`, `/stats`, `/leaderboards`, `/login`, `/register` and `/account`.
+
+## Discord links
+
+Every Discord link on the site goes to `https://discord.plebmc.top` (which forwards to the current invite), so an invite
+that changes never leaves a dead link behind. That covers the header, footer, FAQ and the homepage button, and also any
+`discord.gg/…` or `discord.com/invite/…` link typed into Site content, a news post or the website banner: the site shows
+them as `https://discord.plebmc.top`. Set `PANEL_DISCORD_URL` in `.env` to use another address.
+
 ## On a phone
 
 Every page fits a phone's width without scrolling sideways. The long admin lists (Players, Punishments, Admin log)
