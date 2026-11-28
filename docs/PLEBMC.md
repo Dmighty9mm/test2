@@ -411,7 +411,7 @@ updates on the website. "Download update" on the client's update screen fetches 
 platform's build from the website's Downloads page (`/api/dl/offline`, `/api/dl/wasm` or
 `/api/dl/forge-1.8.9`), and **Website** opens the Downloads page. If the owner typed a link
 of their own under Client updates, the button opens that link instead. The Windows app opens
-the Downloads page. Each build's version is `UpdateCheck.VERSION` (raise it per release).
+the Downloads page. Each build's version is `UpdateCheck.VERSION` (1.0 for the first public release; raise it per release, together with `projectForkVersion` in `client-u53/overlay/.../EaglercraftVersion.java`). The browser client reports the brand **PlebClient** to Eaglercraft servers (its own brand UUID `a8621e2b-c62f-3e4f-b5e0-682d06aa1a61`), so EaglerXServer and EaglerXPlan no longer list it as vanilla Eagler.
 
 ### Skin and cape are kept
 

@@ -12,7 +12,7 @@ import java.util.Map;
 public final class UpdateCheck {
 
 	/** The version of this build. Raise it for each release and set "Latest version" on the panel to match. */
-	public static final String VERSION = "2.1";
+	public static final String VERSION = "1.0";
 
 	/** The panel answered. */
 	public static volatile boolean known;

@@ -566,9 +566,7 @@ public final class PlebClient {
 			LOG.warn("HUD render failed: " + t);
 		}
 		try {
-			if (mc.currentScreen == null) {
-				SecretMods.hud(guiW, guiH);
-			}
+			SecretMods.hud(guiW, guiH);
 			VoteAlert.render(guiW, guiH);
 			if (!(mc.currentScreen instanceof PlebScreen)) {
 				EasterEggs.overlay(guiW, guiH);

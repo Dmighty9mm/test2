@@ -23,7 +23,11 @@ public final class SecretMods {
 	private SecretMods() {
 	}
 
-	/** Drawn on the HUD (in game, no menu over it). */
+	/**
+	 * Drawn with the HUD, also while a menu is open over it: the snow pile and Plebio
+	 * belong to the hotbar, so the inventory dims them with it and they never jump
+	 * between two layers. The falling flakes move to {@link #gui} while a menu is open.
+	 */
 	static void hud(int w, int h) {
 		ClientPrefs p = ClientPrefs.get();
 		if (!p.snowMod && !p.buddyMod) {
@@ -36,7 +40,10 @@ public final class SecretMods {
 		long now = System.currentTimeMillis();
 		GlStateManager.enableBlend();
 		if (p.snowMod) {
-			snow(w, h, now, true);
+			if (mc.currentScreen == null) {
+				flakes(w, h, now);
+			}
+			pile(w, h, now);
 		}
 		if (p.buddyMod) {
 			buddy(w, h, now, mc.thePlayer, w / 2 + 91 + 6);
@@ -68,25 +75,26 @@ public final class SecretMods {
 		// Plebio sits in the corner
 		boolean world = mc.thePlayer != null && mc.theWorld != null;
 		if (p.snowMod) {
-			snow(w, h, now, world);
+			flakes(w, h, now); // the pile on the hotbar is drawn with the HUD, under the menu
 		}
 		// the title screen has its own Plebio when Title buddy is on
 		boolean titleBuddy = mc.currentScreen instanceof net.minecraft.client.gui.GuiMainMenu && p.titleBuddy;
-		if (p.buddyMod && !titleBuddy) {
+		// in a world Plebio is drawn with the HUD (see hud), next to the hotbar
+		if (p.buddyMod && !titleBuddy && !world) {
 			buddy(w, h, now, mc.thePlayer, world ? w / 2 + 91 + 6 : w - 18 - 6);
 		}
 		GlStateManager.popMatrix();
 		GlStateManager.color(1f, 1f, 1f, 1f);
+		// menus expect the depth test on: left off, the next frame's 3D previews (the skin in
+		// Edit Profile, the player in the inventory) draw their far side over their near side
+		GlStateManager.enableDepth();
 	}
 
 	// ==================== Let It Snow ====================
 
 	private static long snowSince;
 
-	private static void snow(int w, int h, long now, boolean pileOnHotbar) {
-		if (snowSince == 0) {
-			snowSince = now;
-		}
+	private static void flakes(int w, int h, long now) {
 		double sec = now / 1000.0;
 		for (int i = 0; i < 90; i++) {
 			double r1 = hash(i * 3 + 1), r2 = hash(i * 7 + 2), r3 = hash(i * 13 + 5);
@@ -97,8 +105,12 @@ public final class SecretMods {
 			int s = r2 > 0.75 ? 2 : 1;
 			Ui.rect(x, y, s, s, Ui.alpha(0xFFFFFFFF, 0x70 + (int) (r3 * 0x70)));
 		}
-		if (!pileOnHotbar) {
-			return;
+	}
+
+	/** The snow on top of the hotbar. */
+	private static void pile(int w, int h, long now) {
+		if (snowSince == 0) {
+			snowSince = now;
 		}
 		// it piles up on top of the hotbar over a minute
 		float pile = Math.min(1f, (now - snowSince) / 60000f);
