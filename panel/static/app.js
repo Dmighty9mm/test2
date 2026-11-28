@@ -39,6 +39,7 @@ const ICONS = {
   user: "M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0",
   grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
   users: "M9 11a4 4 0 100-8 4 4 0 000 8zM2 21a7 7 0 0114 0M16 3.5a4 4 0 010 7.5M18 14a7 7 0 014 7",
+  clock: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2",
   bulb: "M9 18h6M10 21h4M12 3a6 6 0 00-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0012 3z",
   megaphone: "M3 11v2a1 1 0 001 1h2l5 4V6L6 10H4a1 1 0 00-1 1zM15 8a5 5 0 010 8M18 5a9 9 0 010 14",
   upload: "M12 16V4M7 9l5-5 5 5M4 16v4h16v-4",
@@ -372,6 +373,21 @@ function announcementBanner() {
   return h("div", { class: "banner" }, icon("megaphone"), h("span", {}, a.text), h("small", {}, ago(a.at)));
 }
 
+/** "New post" on the homepage for a week after a post goes up. Hiding it lasts until the next post. */
+function newsNotice() {
+  const p = info.newPost;
+  if (!p) return null;
+  try { if (localStorage.getItem("news-notice-hidden") === String(p.id)) return null; } catch (e) { /* show it */ }
+  const bar = h("div", { class: "news-notice" }, h("div", { class: "wrap" }, kindPill(p.tag),
+    h("a", { href: "#news?post=" + p.id }, h("b", {}, p.title), h("span", { class: "go" }, "Read it", icon("arrow"))),
+    h("small", {}, ago(p.at)),
+    h("button", { class: "x", title: "Hide this", "aria-label": "Hide this notice", onclick: () => {
+      try { localStorage.setItem("news-notice-hidden", String(p.id)); } catch (e) { /* hidden for this visit */ }
+      bar.remove();
+    } }, "×")));
+  return bar;
+}
+
 function copyIp(ip) {
   const done = () => toast("Copied " + ip + ". Add it as a server in PlebClient.");
   if (navigator.clipboard) navigator.clipboard.writeText(ip).then(done, () => toast(ip));
@@ -395,10 +411,10 @@ function drawFooter() {
 
 // ==================== posts: news and changelogs ====================
 
-/** Inline markdown (bold, italic, strike, code, links) as DOM nodes. Text is never parsed as HTML. */
+/** Inline markdown (bold, italic, strike, code, links, pictures) as DOM nodes. Text is never parsed as HTML. */
 function mdInline(text) {
   const out = [];
-  const re = /(`[^`]+`)|\[([^\]]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s<>)\]]+)|\*\*([^*]+(?:\*(?!\*)[^*]*)*)\*\*|~~([^~]+)~~|\*([^*\s][^*]*)\*|(?<![A-Za-z0-9])_([^_\s][^_]*)_(?![A-Za-z0-9])/g;
+  const re = /(`[^`]+`)|\[([^\]]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s<>)\]]+)|\*\*([^*]+(?:\*(?!\*)[^*]*)*)\*\*|~~([^~]+)~~|\*([^*\s][^*]*)\*|(?<![A-Za-z0-9])_([^_\s][^_]*)_(?![A-Za-z0-9])|!\[([^\]]*)\]\(([^)\s]+)\)/g;
   const safe = (u) => (/^(https?:\/\/|#|mailto:)/i.test(u) ? u : null);
   const link = (label, u) => (safe(u) ? h("a", u.startsWith("#") ? { href: u } : { href: u, target: "_blank", rel: "noopener nofollow" }, ...label) : label);
   let last = 0;
@@ -410,6 +426,8 @@ function mdInline(text) {
     else if (m[4]) { const u = m[4].replace(/[.,!?;:]+$/, ""); re.lastIndex -= m[4].length - u.length; out.push(h("a", { href: u, target: "_blank", rel: "noopener nofollow" }, u)); }
     else if (m[5]) out.push(h("strong", {}, ...mdInline(m[5])));
     else if (m[6]) out.push(h("s", {}, ...mdInline(m[6])));
+    // a picture: from an https address, or one uploaded to this site
+    else if (m[10] !== undefined) out.push(/^(https:\/\/|\/(?!\/))/i.test(m[10]) ? h("img", { src: m[10], alt: m[9], loading: "lazy", referrerpolicy: "no-referrer" }) : m[0]);
     else out.push(h("em", {}, ...mdInline(m[7] || m[8])));
     last = re.lastIndex;
   }
@@ -505,7 +523,100 @@ async function newsView() {
     isOwner() ? h("a", { class: "btn primary", href: "#announce" }, icon("edit"), "Write a post") : null), list, pg.more);
 }
 
-/** Owners: write, edit and delete posts, with a live preview. */
+/** The row of formatting buttons above a markdown text box. Each one changes the text as if it was typed, so undo works. */
+function mdToolbar(area) {
+  const put = (text, selFrom, selTo) => {
+    area.focus();
+    const start = area.selectionStart;
+    let done = false;
+    try { done = document.execCommand("insertText", false, text); } catch (e) { /* older browsers: below */ }
+    if (!done) { area.setRangeText(text, start, area.selectionEnd, "end"); area.dispatchEvent(new Event("input", { bubbles: true })); }
+    area.setSelectionRange(start + selFrom, start + selTo);
+  };
+  // **like this**: around what is selected, or around a word to type over
+  const wrap = (before, after, sample) => () => {
+    const sel = area.value.slice(area.selectionStart, area.selectionEnd);
+    if (sel && sel.startsWith(before) && sel.endsWith(after) && sel.length >= before.length + after.length) {
+      const inner = sel.slice(before.length, sel.length - after.length);
+      return put(inner, 0, inner.length);       // pressing it again takes it off
+    }
+    // the marks sit just outside what is selected (as they do right after pressing the button): take them off too
+    const v = area.value;
+    const a = area.selectionStart - before.length;
+    const b = area.selectionEnd + after.length;
+    const star = before === "*" && (v[a - 1] === "*") !== (v[b] === "*") ? false : !(before === "*" && v[a - 1] === "*" && v[a - 2] !== "*");
+    if (a >= 0 && star && v.slice(a, a + before.length) === before && v.slice(b - after.length, b) === after) {
+      area.setSelectionRange(a, b);
+      return put(sel, 0, sel.length);
+    }
+    const inner = sel || sample;
+    put(before + inner + after, before.length, before.length + inner.length);
+  };
+  // "- " or "## " in front of every selected line
+  const lines = (prefix, sample) => () => {
+    const v = area.value;
+    const from = v.lastIndexOf("\n", area.selectionStart - 1) + 1;
+    let to = v.indexOf("\n", area.selectionEnd);
+    if (to < 0) to = v.length;
+    area.setSelectionRange(from, to);
+    const strip = /^(#{1,4}\s+|>\s?|[-*+]\s+|\d{1,3}[.)]\s+)/;
+    const cur = v.slice(from, to).split("\n");
+    const pre = (i) => (typeof prefix === "function" ? prefix(i) : prefix);
+    const on = cur.every((l, i) => l.startsWith(pre(i)));
+    const next = cur.map((l, i) => (on ? l.slice(pre(i).length) : pre(i) + (l.replace(strip, "") || (cur.length === 1 ? sample : "")))).join("\n");
+    put(next, on || cur.length > 1 || cur[0] ? 0 : pre(0).length, next.length);
+  };
+  // something on lines of its own
+  const block = (text, selFrom, selTo) => {
+    const v = area.value;
+    const s = area.selectionStart;
+    const lead = s === 0 || v.slice(0, s).endsWith("\n\n") ? "" : v[s - 1] === "\n" ? "\n" : "\n\n";
+    const after = v.slice(area.selectionEnd);
+    const tail = after.startsWith("\n\n") || !after ? "\n" : after.startsWith("\n") ? "\n" : "\n\n";
+    put(lead + text + tail, lead.length + selFrom, lead.length + selTo);
+  };
+  const address = (what, start) => {
+    const u = (prompt(what, start) || "").trim();
+    if (!u || u === start) return null;
+    return /^(https?:\/\/|\/|#|mailto:)/i.test(u) ? u : "https://" + u;
+  };
+  const link = () => {
+    const sel = area.value.slice(area.selectionStart, area.selectionEnd);
+    const u = address("Where should the link go?", "https://");
+    if (!u) return area.focus();
+    const label = sel || "link text";
+    put("[" + label + "](" + u + ")", 1, 1 + label.length);
+  };
+  const image = () => {
+    const u = address("The picture's address (a link that ends in .png, .jpg, .gif or .webp)", "https://");
+    if (!u) return area.focus();
+    if (/^http:\/\//i.test(u)) { toast("Pictures need an https:// address.", false); return area.focus(); }
+    const sel = area.value.slice(area.selectionStart, area.selectionEnd).replace(/\n/g, " ");
+    const alt = sel || "picture";
+    block("![" + alt + "](" + u + ")", 2, 2 + alt.length);
+  };
+  const code = () => {
+    const sel = area.value.slice(area.selectionStart, area.selectionEnd);
+    if (sel.includes("\n")) block("```\n" + sel + "\n```", 4, 4 + sel.length);
+    else wrap("`", "`", "code")();
+  };
+  const tools = [
+    ["B", "Bold (Ctrl+B)", wrap("**", "**", "bold text"), "b"], ["I", "Italic (Ctrl+I)", wrap("*", "*", "italic text"), "i"], ["S", "Strikethrough", wrap("~~", "~~", "crossed out"), "s"], null,
+    ["H1", "Big heading", lines("## ", "Heading")], ["H2", "Smaller heading", lines("### ", "Heading")], null,
+    ["• List", "Bullet list", lines("- ", "List item")], ["1. List", "Numbered list", lines((i) => i + 1 + ". ", "List item")], ["❝ Quote", "Quote", lines("> ", "Quote")], ["</> Code", "Code", code], null,
+    ["Link", "Link (Ctrl+K)", link], ["Image", "Picture from an address", image], ["― Line", "A line across the post", () => block("---", 3, 3)],
+  ];
+  const keys = { b: tools[0][2], i: tools[1][2], k: link };
+  area.addEventListener("keydown", (e) => {
+    const run = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && keys[e.key.toLowerCase()];
+    if (run) { e.preventDefault(); run(); }
+  });
+  return h("div", { class: "md-tools", role: "toolbar", "aria-label": "Formatting" }, tools.map((t) => (t
+    ? h("button", { type: "button", class: "small" + (t[3] ? " md-" + t[3] : ""), title: t[1], "aria-label": t[1], onmousedown: (e) => e.preventDefault(), onclick: t[2] }, t[0])
+    : h("span", { class: "sep", "aria-hidden": "true" }))));
+}
+
+/** Owners: write, edit and delete posts, with formatting buttons and a live preview beside the text. */
 async function postsEditor() {
   const out = h("div");
   const q = params();
@@ -547,14 +658,13 @@ async function postsEditor() {
   } }, icon("megaphone"), editing ? "Save changes" : "Publish");
   return h("div", {},
     card(editing ? "Edit post" : "Write a post",
-      h("p", { class: "muted" }, "Posts show on the News page: changelogs, events, anything. Write in markdown: ## heading, **bold**, *italic*, - lists, 1. numbered lists, > quotes, `code`, [links](https://…) and --- for a line."),
+      h("p", { class: "muted" }, "Posts show on the News page: changelogs, events, anything. The buttons add the formatting for you (it is markdown, so you can type it too), and the preview shows the post as players will see it."),
+      h("div", { class: "row post-top" }, h("div", { class: "grow" }, h("label", { for: "p-title" }, "Title"), title),
+        h("div", {}, h("label", { for: "p-kind" }, "Kind"), kind), h("label", { class: "check", for: "p-pin" }, pin, " Pin to the top")),
       h("div", { class: "grid g2 post-edit" },
-        h("div", {}, h("label", { for: "p-title" }, "Title"), title,
-          h("div", { class: "row", style: "gap:16px;align-items:end;flex-wrap:wrap" }, h("div", { style: "flex:1;min-width:160px" }, h("label", { for: "p-kind" }, "Kind"), kind),
-            h("label", { class: "check", for: "p-pin" }, pin, " Pin to the top")),
-          h("label", { for: "p-body" }, "Post"), body,
-          h("div", { class: "row", style: "gap:8px;margin-top:12px" }, save, editing ? h("a", { class: "btn", href: "#announce" }, "Cancel") : null), out),
-        h("div", {}, h("label", {}, "Preview"), preview))),
+        h("div", { class: "post-write" }, h("label", { for: "p-body" }, "Post"), mdToolbar(body), body),
+        h("div", { class: "post-preview-col" }, h("label", {}, "Preview"), preview)),
+      h("div", { class: "row", style: "gap:8px;margin-top:14px" }, save, editing ? h("a", { class: "btn", href: "#announce" }, "Cancel") : null), out),
     card("Posts", list));
 }
 
@@ -650,6 +760,9 @@ async function homeView() {
   const art = h("div", { class: "hero-art" });
   if (c.heroImage) art.style.backgroundImage = "url(\"" + c.heroImage + "\")";
   const ann = announcementBanner();
+  // a new post this week: a strip across the top, before anything else
+  const notice = newsNotice();
+  if (notice) wrap.append(notice);
   const ping = h("span", { class: "ping" + (s.connected ? " on" : ""), "aria-hidden": "true" }, h("i"), h("i"), h("i"), h("i"), h("i"));
   wrap.append(h("section", {}, art, h("div", { class: "wrap hero-body" },
     c.badge ? h("a", { class: "news", href: "#downloads" }, h("b", {}, "New"), c.badge) : null,
@@ -867,7 +980,9 @@ async function statsView() {
     api("stats/player?name=" + encodeURIComponent(name)).then((r) => {
       data = r;
       keep();
-      result.replaceChildren(h("div", { class: "row" }, initial(r.name), h("h2", {}, r.name), r.rank ? h("span", { class: "pill" }, r.rank) : null),
+      result.replaceChildren(h("div", { class: "row" }, initial(r.name), h("h2", {}, r.name), r.rank ? h("span", { class: "pill" }, r.rank) : null,
+        h("span", { class: "muted seen", title: r.online || !r.lastSeen ? "" : when(r.lastSeen) }, h("span", { class: "dot" + (r.online ? " on" : "") }),
+          r.online ? "Online now" : r.lastSeen ? "Last seen " + ago(r.lastSeen) : "Not seen in game yet")),
         h("div", { style: "height:12px" }), tabs, h("div", { style: "height:14px" }), out);
       draw();
     }).catch((e) => result.replaceChildren(h("p", { class: "muted" }, e.message)));
@@ -1358,10 +1473,10 @@ async function playersView() {
     return { items: r.players, total: r.total, more: r.more };
   }, (p) => h("tr", { class: "click", tabindex: "0", onclick: () => { location.hash = "#player?name=" + encodeURIComponent(p.name); },
     onkeydown: (e) => { if (e.key === "Enter") location.hash = "#player?name=" + encodeURIComponent(p.name); } },
-  h("td", {}, initial(p.name), p.online ? h("span", { class: "dot on", title: "Online" }) : null, p.name, " ", rolePill(p.role)),
-  h("td", { class: "num" }, fmt(p.coins)), h("td", { class: "num" }, fmt(p.items)),
-  h("td", {}, p.locked ? h("span", { class: "pill locked" }, "locked") : p.account ? h("span", { class: "pill good" }, "yes") : h("span", { class: "muted" }, "none")),
-  h("td", { class: "muted" }, ago(p.lastSeen))), { empty: () => h("tr", {}, h("td", { class: "muted", colspan: "5" }, "Nobody found.")) });
+  h("td", { class: "lead" }, initial(p.name), p.online ? h("span", { class: "dot on", title: "Online" }) : null, p.name, " ", rolePill(p.role)),
+  h("td", { class: "num", "data-label": coinName() }, fmt(p.coins)), h("td", { class: "num", "data-label": "Items" }, fmt(p.items)),
+  h("td", { "data-label": "Account" }, p.locked ? h("span", { class: "pill locked" }, "locked") : p.account ? h("span", { class: "pill good" }, "yes") : h("span", { class: "muted" }, "none")),
+  h("td", { class: "muted", "data-label": "Last seen" }, ago(p.lastSeen))), { empty: () => h("tr", {}, h("td", { class: "muted", colspan: "5" }, "Nobody found.")) });
   const keep = () => history.replaceState(null, "", "#players?" + new URLSearchParams(state).toString());
   const drawChips = () => chips.replaceChildren(...[["all", "Everyone"], ["online", "Online"], ["accounts", "Has account"], ["noaccount", "No account"], ["staff", "Staff"], ["locked", "Locked"]]
     .map(([k, t]) => h("button", { class: "chip", "aria-pressed": String(k === state.filter), onclick: () => { state.filter = k; drawChips(); keep(); pg.reset(); } }, t)));
@@ -1371,7 +1486,7 @@ async function playersView() {
   sortSel.addEventListener("change", () => { state.sort = sortSel.value; keep(); pg.reset(); });
   pg.reset();
   return h("div", {}, card("Players", status, h("div", { class: "row" }, search, sortSel), h("div", { style: "height:10px" }), chips, h("div", { style: "height:10px" }),
-    h("div", { class: "scroll" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Player"), h("th", { class: "num" }, coinName()), h("th", { class: "num" }, "Items"), h("th", {}, "Account"), h("th", {}, "Last seen"))), body)), pg.more),
+    h("div", { class: "scroll" }, h("table", { class: "stack" }, h("thead", {}, h("tr", {}, h("th", {}, "Player"), h("th", { class: "num" }, coinName()), h("th", { class: "num" }, "Items"), h("th", {}, "Account"), h("th", {}, "Last seen"))), body)), pg.more),
   createCard(() => pg.reset()));
 }
 
@@ -1411,13 +1526,15 @@ async function playerView() {
   const wrap = h("div", {}, h("p", {}, h("a", { href: "#players" }, "← Players")));
   wrap.append(h("div", { class: "card hero" }, initialBig(r.name),
     h("div", {}, h("h1", {}, r.name, " ", rolePill(acc && acc.role), acc && acc.locked ? h("span", { class: "pill locked" }, "locked") : null),
-      h("p", { class: "muted" }, h("span", { class: "dot" + (r.online ? " on" : "") }), r.online ? "Online now" : "Offline",
+      h("p", { class: "muted" }, h("span", { class: "dot" + (r.online ? " on" : "") }),
+        r.online ? "Online now" : h("span", { title: r.lastSeen ? when(r.lastSeen) : "" }, r.lastSeen ? "Last seen " + ago(r.lastSeen) : "Never seen"),
         acc ? " · account since " + when(acc.created) + " · last sign-in " + ago(acc.lastLogin) + " · " + r.devices + " remembered client(s)" : " · no account yet"),
       out)));
   wrap.append(h("div", { class: "tiles" },
     tile("coin", coinName(), fmt(p ? p.coins : 0)),
     tile("bag", "Cosmetics", fmt(p ? p.owned.length : 0)),
-    tile("trophy", "Login streak", fmt(p ? p.streak : 0))));
+    tile("trophy", "Login streak", fmt(p ? p.streak : 0)),
+    tile("clock", "Last seen", r.online ? "Online now" : r.lastSeen ? ago(r.lastSeen) : "Never", r.online || !r.lastSeen ? null : when(r.lastSeen))));
 
   const amount = h("input", { type: "number", min: 0, value: 100, "aria-label": "Amount", style: "max-width:160px" });
   const quick = [100, 1000, 10000].map((n) => h("button", { class: "small ghost", onclick: () => { amount.value = n; } }, "+" + fmt(n)));
@@ -2126,15 +2243,15 @@ async function punishmentsView() {
     const st = PUNISH_STATUS[x.status];
     const lifted = x.status === "removed" ? "Removed by " + (x.removedBy || "staff") + (x.removedReason ? ": " + x.removedReason : "") : "";
     return h("tr", { class: "pun s-" + (x.status || "none") },
-      h("td", {}, h("span", { class: "pill " + kcls }, klabel), x.ipBan ? h("span", { class: "pill", title: "This one is on the IP address too" }, "IP") : null),
-      h("td", {}, person(x.name, x.ipBan ? "An IP address" : "Unknown player", true)),
-      h("td", {}, person(x.staff, "Unknown", false)),
-      h("td", { class: "wrap" }, x.reason || h("span", { class: "faint" }, "No reason given"),
+      h("td", { class: "lead" }, h("span", { class: "pill " + kcls }, klabel), x.ipBan ? h("span", { class: "pill", title: "This one is on the IP address too" }, "IP") : null),
+      h("td", { class: "lead" }, person(x.name, x.ipBan ? "An IP address" : "Unknown player", true)),
+      h("td", { "data-label": "By" }, person(x.staff, "Unknown", false)),
+      h("td", { class: "wrap", "data-label": "Reason" }, h("div", {}, x.reason || h("span", { class: "faint" }, "No reason given"),
         x.server && x.server !== "*" ? h("small", { class: "faint" }, " · on " + x.server) : null,
-        lifted ? h("small", { class: "pun-lifted" }, lifted) : null),
-      h("td", { title: when(x.at) }, ago(x.at)),
-      h("td", {}, expiry(x)),
-      h("td", {}, st ? h("span", { class: "pill " + st[1] }, st[0]) : h("span", { class: "faint" }, "–")));
+        lifted ? h("small", { class: "pun-lifted" }, lifted) : null)),
+      h("td", { title: when(x.at), "data-label": "When" }, ago(x.at)),
+      h("td", { "data-label": "Expires" }, expiry(x)),
+      h("td", { "data-label": "Status" }, st ? h("span", { class: "pill " + st[1] }, st[0]) : h("span", { class: "faint" }, "–")));
   };
   const drawSource = (src) => {
     let text;
@@ -2162,7 +2279,7 @@ async function punishmentsView() {
   statusSel.addEventListener("change", () => { state.status = statusSel.value; keep(); pg.reset(); });
   pg.reset();
   return h("div", {}, tiles, card("Punishments", status, h("div", { class: "row" }, search, statusSel), h("div", { style: "height:10px" }), chips, h("div", { style: "height:10px" }),
-    h("div", { class: "scroll" }, h("table", { class: "pun-table" }, h("thead", {}, h("tr", {}, h("th", {}, "Type"), h("th", {}, "Player"), h("th", {}, "By"), h("th", {}, "Reason"),
+    h("div", { class: "scroll" }, h("table", { class: "pun-table stack" }, h("thead", {}, h("tr", {}, h("th", {}, "Type"), h("th", {}, "Player"), h("th", {}, "By"), h("th", {}, "Reason"),
       h("th", {}, "When"), h("th", {}, "Expires"), h("th", {}, "Status"))), body)), pg.more));
 }
 
@@ -2177,13 +2294,13 @@ async function auditView() {
     const r = await api("admin/audit?q=" + encodeURIComponent(q.value.trim()) + (before ? "&before=" + before : ""));
     if (r.audit.length) before = r.audit[r.audit.length - 1].id;
     return { items: r.audit, more: r.more };
-  }, (a) => h("tr", {}, h("td", { title: when(a.at) }, ago(a.at)), h("td", {}, a.actor), h("td", {}, h("span", { class: "pill" }, a.action)), h("td", { class: "wrap" }, a.detail)),
+  }, (a) => h("tr", {}, h("td", { title: when(a.at), "data-label": "When" }, ago(a.at)), h("td", { "data-label": "Who" }, a.actor), h("td", { "data-label": "What" }, h("span", { class: "pill" }, a.action)), h("td", { class: "wrap", "data-label": "Detail" }, h("div", {}, a.detail))),
   { empty: () => h("tr", {}, h("td", { class: "muted" }, "Nothing logged.")) });
   let timer;
   q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => pg.reset(), 300); });
   pg.reset();
   return card("Admin log", h("p", { class: "muted" }, "Everything admins did on the panel, newest first."), h("div", { class: "row" }, q), h("div", { style: "height:10px" }),
-    h("div", { class: "scroll" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "When"), h("th", {}, "Who"), h("th", {}, "What"), h("th", {}, "Detail"))), body)), pg.more);
+    h("div", { class: "scroll" }, h("table", { class: "stack" }, h("thead", {}, h("tr", {}, h("th", {}, "When"), h("th", {}, "Who"), h("th", {}, "What"), h("th", {}, "Detail"))), body)), pg.more);
 }
 
 // ==================== owner: site content ====================

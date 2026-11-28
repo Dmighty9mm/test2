@@ -408,11 +408,36 @@ class PanelLogic(unittest.TestCase):
         got = self.p.posts()
         self.assertEqual([(x["title"], x["pinned"], x["author"]) for x in got["posts"]], [("Server 1.2.1", True, "Boss"), ("Client 2.1", False, "Boss")])
         self.assertEqual(self.p.public_info()["latestPosts"][0]["title"], "Server 1.2.1")
+        # the homepage's notice points at the newest post (not the pinned one) for a week
+        self.assertIsNone(make_panel()[0].public_info()["newPost"])
+        self.assertEqual(self.p.public_info()["newPost"]["title"], "Client 2.1")
+        self.clock.t += app.NEWS_NOTICE_DAYS * 86400 - 50
+        self.assertEqual(self.p.public_info()["newPost"]["id"], b["id"])
+        self.clock.t += 100
+        self.assertIsNone(self.p.public_info()["newPost"])
         self.assertTrue(self.p.posts(limit=1)["more"])
         self.p.delete_post(owner, b["id"])
         self.assertEqual(self.p.posts()["total"], 1)
         with self.assertRaises(app.ApiError):
             self.p.post(b["id"])
+
+    def test_last_seen_on_profiles(self):
+        now = self.p.now()
+        self.p.sync({"players": [{"uuid": "u1", "name": "Bob", "coins": 5, "seen": (now - 3600) * 1000},
+                                 {"uuid": "u2", "name": "Ann", "coins": 9, "seen": (now - 60) * 1000}], "online": ["Ann"]})
+        self.assertEqual(self.p.seen("bob"), {"online": False, "lastSeen": now - 3600})
+        self.assertEqual(self.p.seen("ANN"), {"online": True, "lastSeen": now})
+        self.assertEqual(self.p.seen("Nobody"), {"online": False, "lastSeen": None})
+        stats = self.p.player_stats("Bob")
+        self.assertEqual((stats["online"], stats["lastSeen"]), (False, now - 3600))
+        self.assertTrue(self.p.player_stats("Ann")["online"])
+        admin = self.p.admin_player("Bob")
+        self.assertEqual((admin["online"], admin["lastSeen"]), (False, now - 3600))
+        # a website sign-in counts on the admin page, as in the players list, but not on the public profile
+        self.p.server_register("Bob", "password1")
+        self.p.db.run("UPDATE accounts SET last_login=? WHERE name_key='bob'", now - 10)
+        self.assertEqual(self.p.admin_player("Bob")["lastSeen"], now - 10)
+        self.assertEqual(self.p.player_stats("Bob")["lastSeen"], now - 3600)
 
     def test_ideas_board(self):
         mod = {"name": "Mod", "role": "admin"}

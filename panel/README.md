@@ -255,6 +255,16 @@ ranks over to the new name and kicks the old one if it is online. Whatever a gam
 under the old name (inventory, world progress) does not follow. A name with an account, or one
 somebody has already played under, can't be taken.
 
+## On a phone
+
+Every page fits a phone's width without scrolling sideways. The long admin lists (Players, Punishments, Admin log)
+turn into one small card per row there, with each value labelled, instead of a table to scroll sideways.
+
+## Last seen
+
+A player's profile on **Stats** shows "Online now" or when they were last on the server, and so
+does their admin page (where a sign-in to the website counts too, as in the players list).
+
 ## Punishments (admins)
 
 **Admin > Punishments** lists the bans, mutes, warnings and kicks from **LiteBans**: the player,
@@ -361,11 +371,16 @@ The **News** page (`#news`) lists posts owners write: server and client changelo
 title, a kind (News, Server update, Client update, Event), an optional pin, and a body in markdown. The three newest
 also show on the homepage.
 
-- Owners write, edit and delete posts under **Admin > Announcements**, with a live preview. (The old banner and
+- Owners write, edit and delete posts under **Admin > Announcements**: formatting buttons above the text box (bold,
+  italic, strikethrough, headings, lists, quote, code, link, image, line; Ctrl+B, Ctrl+I and Ctrl+K work too) and a
+  live preview right beside it. (The old banner and
   game-chat announcement is on the same page as "Quick announcement".)
 - Markdown that works: `## headings`, `**bold**`, `*italic*`, `~~strike~~`, `- lists` (one level of nesting),
   `1. numbered lists`, `> quotes`, `` `code` `` and fenced code blocks, `[links](https://…)`, bare links, and `---`.
-  Pictures are not supported. Posts are drawn as text, never as HTML, so nothing typed in a post can run on the page.
+  Pictures: `![what it shows](https://…/picture.png)`, from an https address or one uploaded to the site (the
+  **Image** button asks for the address). Posts are drawn as text, never as HTML, so nothing typed in a post can run on the page.
+- For 7 days after a post goes up, the homepage shows a strip across the top with its title and a link to it.
+  A visitor can hide it with the ×; it stays hidden for them until a newer post is published.
 - API: `GET /api/posts?offset=&limit=&tag=`, `GET /api/posts/<id>`, `POST /api/admin/posts` (owner).
 
 ### Giving coins to everyone online

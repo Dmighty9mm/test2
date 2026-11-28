@@ -79,8 +79,10 @@ code { font: 12.5px var(--mono); background: var(--card2); border: 1px solid var
 @media (max-width: 480px) { .who .btn:not(.primary) { display: none; } }
 
 .subnav { border-bottom: 1px solid var(--line); background: var(--bg2); }
-.subnav .wrap { display: flex; gap: 4px; overflow-x: auto; padding-top: 8px; padding-bottom: 8px; scrollbar-width: none; }
-.subnav a { color: var(--muted); font-size: 13px; font-weight: 600; padding: 6px 11px; border-radius: 4px; white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; }
+/* the admin tabs use the whole screen width, and go onto a second row before any is cut off */
+.subnav .wrap { max-width: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; padding: 8px 12px; }
+@media (max-width: 720px) { .subnav .wrap { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; padding-left: 16px; padding-right: 16px; } }
+.subnav a { color: var(--muted); font-size: 13px; font-weight: 600; padding: 6px 9px; border-radius: 4px; white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; }
 .subnav a svg { width: 14px; height: 14px; }
 .subnav a:hover { color: var(--fg); background: rgba(255, 255, 255, .05); text-decoration: none; }
 .subnav a.on { color: var(--accent-ink); background: var(--accent); }
@@ -652,8 +654,23 @@ button.linkish { color: var(--accent2); box-shadow: none; }
 .md pre { background: var(--bg2); border: 2px solid var(--line); padding: 12px 14px; overflow-x: auto; margin: 0 0 12px; } .md pre code { border: 0; padding: 0; background: none; }
 .md blockquote { margin: 0 0 12px; padding: 8px 14px; border-left: 4px solid var(--line2); background: var(--bg2); color: var(--muted); }
 .md hr { border: 0; border-top: 2px solid var(--line); margin: 18px 0; }
-.post-edit textarea { font: 13.5px/1.5 ui-monospace, Menlo, Consolas, monospace; min-height: 300px; resize: vertical; }
-.post-preview .post { max-height: 520px; overflow: auto; }
+.md img { max-width: 100%; height: auto; display: block; margin: 6px 0; border: 2px solid var(--line); }
+.post-top { align-items: end; gap: 16px; margin-bottom: 14px; }
+.post-top .grow { flex: 1 1 260px; min-width: 0; }
+.post-top .grow input { width: 100%; }
+.post-top select { width: auto; min-width: 170px; }
+.post-top .check { padding-bottom: 10px; }
+/* the text box and the preview stand side by side, the same height */
+.post-edit { align-items: stretch; }
+.post-write, .post-preview-col { display: flex; flex-direction: column; min-width: 0; }
+.post-edit textarea { font: 13.5px/1.5 ui-monospace, Menlo, Consolas, monospace; min-height: 420px; resize: vertical; flex: 1; border-top-left-radius: 0; border-top-right-radius: 0; }
+.md-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px; background: var(--card2); border: 1px solid var(--line2); border-bottom: 0; }
+.md-tools button { padding: 5px 9px; min-width: 32px; box-shadow: none; white-space: nowrap; }
+.md-tools .md-b { font-weight: 800; } .md-tools .md-i { font-style: italic; font-family: Georgia, serif; } .md-tools .md-s { text-decoration: line-through; }
+.md-tools .sep { width: 1px; align-self: stretch; background: var(--line2); margin: 2px 4px; }
+.post-preview { flex: 1; min-height: 0; position: relative; }
+.post-preview .post { position: absolute; inset: 0; overflow: auto; animation: none; }
+@media (max-width: 900px) { .post-edit { grid-template-columns: 1fr; } .post-preview .post { position: static; max-height: 520px; } .post-edit textarea { min-height: 300px; } }
 .post-rows { display: grid; }
 .post-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .post-row:first-child { border-top: 0; } .post-row > a:not(.btn) { color: var(--fg); font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
@@ -716,3 +733,40 @@ button.dl-top-pic { padding: 0; border: 0; background: none; box-shadow: none; c
 .pun-table td.wrap { overflow-wrap: anywhere; }
 .pun-lifted { display: block; color: var(--good); margin-top: 2px; }
 tr.pun.s-expired td, tr.pun.s-removed td { opacity: .72; }
+
+/* ==================== "new post" notice on the homepage ==================== */
+.news-notice { background: linear-gradient(90deg, var(--accent-soft), rgba(255, 255, 255, .02)); border-bottom: 1px solid var(--accent-line); }
+.news-notice .wrap { display: flex; align-items: center; gap: 12px; padding-top: 9px; padding-bottom: 9px; }
+.news-notice a { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; flex: 1; color: var(--fg); }
+.news-notice a:hover { text-decoration: none; } .news-notice a:hover .go { text-decoration: underline; }
+.news-notice a b { overflow-wrap: anywhere; }
+.news-notice .go { color: var(--accent2); font-size: 13px; font-weight: 600; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.news-notice .go svg { width: 14px; height: 14px; }
+.news-notice .kind { flex: none; }
+.news-notice small { color: var(--muted); white-space: nowrap; }
+.news-notice .x { flex: none; background: none; border: 0; box-shadow: none; padding: 2px 6px; font-size: 20px; line-height: 1; color: var(--muted); cursor: pointer; }
+.news-notice .x:hover { color: var(--fg); }
+@media (max-width: 560px) { .news-notice small { display: none; } }
+
+/* ==================== phones ==================== */
+/* sections slide in from the side: that must not make the page scroll sideways */
+.home { overflow-x: clip; }
+/* long lists (players, punishments, the admin log): on a phone each row is a small card, not a table to scroll sideways */
+@media (max-width: 640px) {
+  table.stack, table.stack tbody { display: block; }
+  table.stack thead { display: none; }
+  table.stack tr { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; padding: 12px 2px; border-bottom: 1px solid var(--line); }
+  table.stack td { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; width: 100%; padding: 3px 0; border: 0; white-space: normal; min-width: 0; text-align: right; overflow-wrap: anywhere; }
+  table.stack td[data-label]::before { content: attr(data-label); flex: none; color: var(--faint); font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; text-align: left; }
+  table.stack td.lead { width: auto; justify-content: flex-start; align-items: center; text-align: left; font-size: 15px; font-weight: 600; gap: 4px; padding-bottom: 6px; }
+  table.stack td.lead { order: -2; }
+  table.stack td.lead:first-child:has(> .pill:first-child) { order: -1; margin-left: auto; }
+  table.stack td.wrap { min-width: 0; }
+  table.stack td[colspan] { justify-content: center; text-align: center; }
+  table.stack .pun-lifted { text-align: right; }
+  /* the new-post strip: the kind goes above the title */
+  .news-notice .wrap { flex-wrap: wrap; row-gap: 4px; padding-left: 16px; padding-right: 16px; }
+  .news-notice .kind { order: 0; }
+  .news-notice .x { order: 1; margin-left: auto; }
+  .news-notice a { order: 2; flex-basis: 100%; }
+}
