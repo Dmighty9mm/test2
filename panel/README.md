@@ -227,12 +227,33 @@ players on other clients (who also don't earn coins, see `plebclient-only`).
 | --- | --- |
 | `/account` | Are you signed in? What to do next |
 | `/account register <password> <password>` | Make an account for the name you're on (signs you in) |
-| `/account login <password>` | Sign in (any client) |
 | `/account logout` | Sign out for this session |
 | `/account code` | A code (15 minutes) to make the account on the website instead |
 
 `/account` is handled by the proxy before BungeeCord sees it as a command, so the password
 never reaches a backend server or the proxy's command log.
+
+## Profile pictures and usernames
+
+**Profile pictures are skin faces.** Everywhere the site shows a player (header, leaderboards,
+stats, the players list) it draws the face of their Minecraft skin, hat layer included. A skin
+comes from, in this order:
+
+1. The player's own: picked on **My account > Profile picture** (a 64x64 skin PNG), or sent by
+   the PlebMc client with `POST /api/client/skin` and `{name, token, png}` (base64 PNG) or
+   `{name, token, pixels}` (base64 of the raw 64x64 RGBA bytes).
+2. The skin of the Minecraft account with the same name, looked up at Mojang by the panel
+   (only for names this server knows, one at a time, remembered for a day). Owners can switch
+   this off under **Site content > Brand**.
+3. Neither: the colored letter square, as before.
+
+**Usernames can be changed.** Signed-in players change theirs on **My account > Change
+username** (password needed, once every 7 days). Admins rename anyone from the player's page
+with no wait. On an offline-mode server the name *is* the player, so the panel queues a
+`rename` for PlebioAPI, which carries coins, cosmetics, streak, quest progress and LuckPerms
+ranks over to the new name and kicks the old one if it is online. Whatever a game server saved
+under the old name (inventory, world progress) does not follow. A name with an account, or one
+somebody has already played under, can't be taken.
 
 ## Stats and leaderboards
 

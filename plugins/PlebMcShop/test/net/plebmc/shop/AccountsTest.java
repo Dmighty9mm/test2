@@ -226,10 +226,8 @@ public class AccountsTest {
         core.fromClient(fake.id, "{\"type\":\"admin\",\"action\":\"open\"}");
         Map<?, ?> adm = fake.last("admin");
         check(adm != null && Boolean.FALSE.equals(adm.get("allowed")), "nor open the admin menu");
-        account(fake, "login", "letmein123");
-        check(!signin.signedIn(fake.id) && chatHas(fake, "Wrong password"), "wrong password refused");
-        account(fake, "login", "letmein124");
-        check(chatHas(fake, "One moment"), "tries are spaced out");
+        account(fake, "login", "correct horse");
+        check(!signin.signedIn(fake.id), "/account login is gone: the right password in chat signs nobody in");
         // too slow: kicked
         net.skew = 91_000;
         signin.tick();
@@ -362,6 +360,14 @@ public class AccountsTest {
         Cosmetics.signOut();
         pump();
         check(!pa.signedIn && !pa.hasSavedToken() && !signin.signedIn(real.id), "client sign out forgets the token");
+
+        // ---- a new name from the website: coins and cosmetics follow ----
+        long ownerCoins = core.store.get(real.id).coins;
+        java.util.UUID[] moved = core.rename("Owner", "Owner_New");
+        Store.Data nd = moved == null ? null : core.store.peek(moved[1]);
+        check(nd != null && nd.coins == ownerCoins && nd.owned.contains("tophat") && "Owner_New".equals(nd.name)
+                && core.store.peek(real.id) == null && moved[1].equals(StaffLock.offlineUuid("Owner_New")), "a renamed account keeps its coins and cosmetics");
+        check(core.rename("Nobody_Here", "Whoever") == null, "a name that never joined has nothing to move");
     }
 
     public static void main(String[] a) throws Exception {

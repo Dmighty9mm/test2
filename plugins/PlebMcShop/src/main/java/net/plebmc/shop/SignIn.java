@@ -16,9 +16,8 @@ import com.google.gson.Gson;
  * name, so a name proves nothing: a player only counts as signed in (and can
  * spend coins, buy, equip, link or open the admin menu) after giving the
  * password of the panel account that owns their name, either with
- * {@code /account login <password>} (any client) or from the PlebMc client's
- * Sign in screen, which can remember a token so it signs in by itself next
- * time. Nothing here depends on IP addresses: Eaglercraft players often share
+ * the PlebMc client's Sign in screen, which can remember a token so it signs
+ * in by itself next time. There is no chat command that takes the password. Nothing here depends on IP addresses: Eaglercraft players often share
  * one.
  * <p>
  * Names with an account must sign in within {@code accounts.sign-in-seconds}
@@ -348,7 +347,7 @@ final class SignIn {
 
 	// ==================== /account ====================
 
-	/** /account [login|logout|register|code]. Passwords never reach a backend server or the proxy log. */
+	/** /account [logout|register|code]. Passwords never reach a backend server or the proxy log. */
 	void command(UUID p, String[] a, Consumer<String> reply) {
 		Session s = session(p);
 		if (!enabled() || s == null) {
@@ -357,14 +356,6 @@ final class SignIn {
 		}
 		String sub = a.length == 0 ? "" : a[0].toLowerCase(java.util.Locale.ROOT);
 		switch (sub) {
-		case "login":
-		case "signin":
-			if (a.length != 2) {
-				reply.accept(prefix + ShopCore.color("&eUsage: /account login <password>"));
-				return;
-			}
-			attempt(p, a[1], null, false, false);
-			return;
 		case "logout":
 		case "signout":
 			signOut(p, null, "Signed out.");
@@ -382,7 +373,7 @@ final class SignIn {
 					reply.accept(prefix + ShopCore.color("&aSigned in as &f" + s.canonical + (s.role.equals("player") ? "" : " &7(" + s.role + ")")
 							+ "&a. &7Your account: &f" + publicUrl));
 				} else if (s.exists) {
-					reply.accept(prefix + ShopCore.color("&eNot signed in. &f/account login <password>"));
+					reply.accept(prefix + ShopCore.color("&eNot signed in. &7Sign in on PlebClient: &fRight Shift > Sign in"));
 				} else {
 					reply.accept(prefix + ShopCore.color("&eNo PlebMc account on this name yet."));
 					reply.accept(ShopCore.color("&7- &f/account register <password> <password> &7makes one now"));
@@ -407,7 +398,7 @@ final class SignIn {
 		}
 		synchronized (this) {
 			if (s.exists) {
-				reply.accept(prefix + ShopCore.color("&cThis name already has an account. &f/account login <password>"));
+				reply.accept(prefix + ShopCore.color("&cThis name already has an account. &7Sign in on PlebClient: &fRight Shift > Sign in"));
 				return;
 			}
 		}
@@ -435,8 +426,8 @@ final class SignIn {
 				s.canonical = str(r.get("name"), s.name);
 			}
 			log.info("PlebMc accounts: " + s.name + " made an account in game");
-			reply.accept(prefix + ShopCore.color("&aAccount made and signed in. &7Next time: &f/account login <password>"
-					+ "&7. See your coins on &f" + publicUrl));
+			reply.accept(prefix + ShopCore.color("&aAccount made and signed in. &7Next time, sign in on PlebClient with this password."
+					+ " &7See your coins on &f" + publicUrl));
 			sendStatus(p, null, true);
 			changed.accept(p);
 		});

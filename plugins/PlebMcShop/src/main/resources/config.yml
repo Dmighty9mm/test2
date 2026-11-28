@@ -120,7 +120,6 @@ staff-lock:
 # (panel/ in this repo, see panel/README.md) on your VPS, then fill these in and
 # /pleb reload. With accounts on, a player has to sign in to the account that owns
 # their name before they can buy, equip or open the admin menu:
-#   /account login <password>   (any client; the password never reaches a server or the log)
 #   Right Shift > Sign in       (PlebMc client; "Remember me" signs in by itself next time)
 # New players: /account register <password> <password>, or /account code for the website.
 # This doesn't use IPs or nLogin sessions, so players sharing one IP can't ride along.

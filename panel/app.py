@@ -49,7 +49,9 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 import urllib.parse
+import urllib.error
 import urllib.request
+import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(HERE, "static")
@@ -187,6 +189,7 @@ SITE_DEFAULTS = {
     "voteLinks": [{"name": "Eaglercraft Servers", "url": "https://vote.plebmc.top/"}],
     "voteReward": 100,
     "mascot": True,
+    "mojangSkins": True,
     "voteText": "Votes push PlebMc up the server lists so more players find us. You can vote once a day on each site.",
     "ctaTitle": "Ready to play?",
     "ctaText": "Grab PlebClient, make your account on the start screen and see you on play.plebmc.top.",
@@ -317,6 +320,56 @@ def name_problem(name):
     return None
 
 
+# ==================== skins (profile pictures) ====================
+
+MAX_SKIN = 24 * 1024
+RENAME_DAYS = 7
+PNG_SIG = b"\x89PNG\r\n\x1a\n"
+SKIN_FRESH = 24 * 3600        # look a Minecraft account's skin up again after a day
+SKIN_MISS = 6 * 3600          # and a name without one after six hours
+MOJANG_PROFILE = os.environ.get("PANEL_SKIN_PROFILE_URL", "https://api.mojang.com/users/profiles/minecraft/")
+MOJANG_SESSION = os.environ.get("PANEL_SKIN_SESSION_URL", "https://sessionserver.mojang.com/session/minecraft/profile/")
+TEXTURE_URL = re.compile(r"^https?://textures\.minecraft\.net/texture/([0-9a-f]{20,80})$")
+
+
+def skin_problem(data):
+    """Why these bytes are not a Minecraft skin, or None. Only looks at the PNG's structure."""
+    if not isinstance(data, (bytes, bytearray)) or data[:8] != PNG_SIG:
+        return "A skin is a PNG picture."
+    if len(data) > MAX_SKIN:
+        return "That picture is too big for a skin."
+    pos, first, ended = 8, True, False
+    while pos + 12 <= len(data):
+        size = int.from_bytes(data[pos:pos + 4], "big")
+        kind = bytes(data[pos + 4:pos + 8])
+        if pos + 12 + size > len(data):
+            return "That PNG is damaged."
+        if first:
+            if kind != b"IHDR" or size != 13:
+                return "That PNG is damaged."
+            w = int.from_bytes(data[pos + 8:pos + 12], "big")
+            hgt = int.from_bytes(data[pos + 12:pos + 16], "big")
+            if w != 64 or hgt not in (32, 64):
+                return "A skin is 64 by 64 pixels (or 64 by 32 for an old one)."
+            first = False
+        pos += 12 + size
+        if kind == b"IEND":
+            ended = True
+            break
+    if not ended or pos != len(data):
+        return "That PNG is damaged."
+    return None
+
+
+def png_from_rgba(pixels, width=64, height=64):
+    """A PNG from raw RGBA bytes, so the client can send its skin without an encoder."""
+    def chunk(kind, body):
+        return len(body).to_bytes(4, "big") + kind + body + zlib.crc32(kind + body).to_bytes(4, "big")
+    raw = b"".join(b"\x00" + bytes(pixels[y * width * 4:(y + 1) * width * 4]) for y in range(height))
+    head = width.to_bytes(4, "big") + height.to_bytes(4, "big") + bytes([8, 6, 0, 0, 0])
+    return PNG_SIG + chunk(b"IHDR", head) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
+
+
 # ==================== storage ====================
 
 SCHEMA = """
@@ -445,6 +498,12 @@ CREATE TABLE IF NOT EXISTS posts (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS skins (
+  name_key TEXT PRIMARY KEY,
+  source TEXT NOT NULL,
+  png BLOB,
+  updated_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS client_seen (
   day INTEGER NOT NULL,
   version TEXT NOT NULL,
@@ -473,6 +532,9 @@ class Db:
             cols = {r[1] for r in self.conn.execute("PRAGMA table_info(players)")}
             if "last_seen" not in cols:
                 self.conn.execute("ALTER TABLE players ADD COLUMN last_seen INTEGER")
+            cols = {r[1] for r in self.conn.execute("PRAGMA table_info(accounts)")}
+            if "renamed_at" not in cols:
+                self.conn.execute("ALTER TABLE accounts ADD COLUMN renamed_at INTEGER")
 
     def all(self, sql, *args):
         with self.lock:
@@ -570,6 +632,11 @@ class Panel:
         self.code_throttle = Throttle(max_fails=10, window=FAIL_WINDOW, clock=clock)
         # accounts made from the client per address
         self.signup_throttle = Throttle(max_fails=cfg.client_registrations_per_hour, window=3600, clock=clock)
+        # names waiting for a skin lookup
+        self.skin_lock = threading.Lock()
+        self.skin_queue = []
+        self.skin_thread = None
+        self.skin_pause = 1.5
         self.reset_client_versions()
 
     def reset_client_versions(self):
@@ -638,6 +705,48 @@ class Panel:
     def public_account(self, acc):
         return {"name": acc["name"], "role": acc["role"], "locked": bool(acc["locked"]),
                 "created": acc["created_at"], "lastLogin": acc["last_login"]}
+
+    def rename_wait(self, acc):
+        """Seconds until this account may pick a new name itself again."""
+        return max(0, (acc.get("renamed_at") or 0) + RENAME_DAYS * 86400 - self.now())
+
+    def rename_account(self, acc, new_name, actor, cooldown=True):
+        """A new name for an account. In game the name is the player, so PlebioAPI is told to carry the
+        coins and cosmetics over; the account's own rows on the website move here."""
+        new_name = str(new_name or "").strip()
+        problem = name_problem(new_name)
+        if problem:
+            raise ApiError(400, problem)
+        if new_name == acc["name"]:
+            raise ApiError(400, "That is the name already.")
+        old, old_key, key = acc["name"], acc["name_key"], new_name.lower()
+        if cooldown and self.rename_wait(acc):
+            days = -(-self.rename_wait(acc) // 86400)
+            raise ApiError(429, "You can change your name once every %d days. Try again in %d day%s." % (RENAME_DAYS, days, "" if days == 1 else "s"))
+        if key != old_key:
+            if self.account(new_name):
+                raise ApiError(409, "That name is taken.")
+            if self.db.one("SELECT 1 FROM players WHERE name_key=?", key):
+                raise ApiError(409, "Someone already plays under that name.")
+        now = self.now()
+        with self.db.tx() as c:
+            c.execute("UPDATE accounts SET name=?, name_key=?, renamed_at=? WHERE id=?",
+                      (new_name, key, now if cooldown else acc.get("renamed_at"), acc["id"]))
+            c.execute("DELETE FROM game_tokens WHERE account_id=?", (acc["id"],))
+            if key != old_key:
+                c.execute("DELETE FROM claim_codes WHERE name_key IN (?,?)", (key, old_key))
+                for table in ("skins", "stats"):
+                    c.execute("DELETE FROM %s WHERE name_key=?" % table, (key,))
+                c.execute("UPDATE skins SET name_key=? WHERE name_key=?", (key, old_key))
+                c.execute("UPDATE notes SET name_key=? WHERE name_key=?", (key, old_key))
+            c.execute("UPDATE stats SET name_key=?, name=? WHERE name_key=?", (key, new_name, old_key))
+        ranks = self.db.get_kv("player_ranks", {})
+        if old_key in ranks and key != old_key:
+            ranks[key] = ranks.pop(old_key)
+            self.db.set_kv("player_ranks", ranks)
+        self.queue(actor, old, "rename", [new_name])
+        self.audit(actor, "rename", "%s -> %s" % (old, new_name))
+        return self.account_by_id(acc["id"])
 
     def audit(self, actor, action, detail):
         self.db.run("INSERT INTO audit(at,actor,action,detail) VALUES(?,?,?,?)", self.now(), actor, action, detail)
@@ -965,6 +1074,9 @@ class Panel:
                     owned.append(item_id)
                     self.db.run("UPDATE players SET coins=MAX(0, coins-?), owned=? WHERE uuid=?", int(it["price"]),
                                 json.dumps(owned), p["uuid"])
+        if cmd and ok and cmd["action"] == "rename" and not self.account(cmd["target"]):
+            # the old name's player is gone in game: the new name's one arrives with the next sync
+            self.db.run("DELETE FROM players WHERE name_key=?", cmd["target"].lower())
         self.db.run("UPDATE commands SET status=?, result=?, done_at=? WHERE id=?", "done" if ok else "failed",
                     str(result or "")[:500], self.now(), cid)
         self.db.run("UPDATE commands SET status='lost', result='The server did not answer' WHERE status='sent' AND "
@@ -1048,6 +1160,8 @@ class Panel:
         elif action == "signout":
             self.signout_everywhere(acc, actor["name"])
             self.audit(actor["name"], "signout", acc["name"])
+        elif action == "rename":
+            self.rename_account(acc, body.get("newName"), actor["name"], cooldown=False)
         elif action == "role":
             role = str(body.get("role") or "")
             if actor["role"] != "owner" or role not in ROLES:
@@ -1428,6 +1542,7 @@ class Panel:
         except (TypeError, ValueError):
             raise ApiError(400, "The vote reward must be a number.")
         out["mascot"] = bool(body.get("mascot", SITE_DEFAULTS["mascot"]))
+        out["mojangSkins"] = bool(body.get("mojangSkins", SITE_DEFAULTS["mojangSkins"]))
         self.db.set_kv("site_content", out)
         # forget uploads nothing uses any more (a day later, so a page being edited keeps its new pictures)
         used = {v.rsplit("/", 1)[-1] for v in [out[k] for k in SITE_IMAGES] + [f["image"] for f in out["features"]]
@@ -1465,6 +1580,112 @@ class Panel:
         if not re.fullmatch(r"[0-9a-f]{16}", str(iid)):
             return None
         return self.db.one("SELECT mime, data FROM site_images WHERE id=?", str(iid))
+
+    # ---------- skins (profile pictures) ----------
+
+    def set_skin(self, name, png=None, pixels=None):
+        """A player's own skin, from the PlebMc client or picked on the website. It beats a looked-up one."""
+        acc = self.account(name)
+        if not acc:
+            raise ApiError(404, "No such account.")
+        try:
+            if pixels is not None:
+                raw = base64.b64decode(str(pixels), validate=True)
+                if len(raw) != 64 * 64 * 4:
+                    raise ApiError(400, "A skin is 64 by 64 pixels.")
+                data = png_from_rgba(raw)
+            else:
+                data = base64.b64decode(str(png or "").split(",")[-1], validate=True)
+        except ValueError:
+            raise ApiError(400, "That skin could not be read.")
+        problem = skin_problem(data)
+        if problem:
+            raise ApiError(400, problem)
+        self.db.run("INSERT INTO skins(name_key,source,png,updated_at) VALUES(?,?,?,?) ON CONFLICT(name_key) DO UPDATE SET "
+                    "source=excluded.source, png=excluded.png, updated_at=excluded.updated_at",
+                    acc["name_key"], "own", data, self.now())
+        return {"ok": True}
+
+    def clear_skin(self, name):
+        self.db.run("DELETE FROM skins WHERE name_key=?", str(name or "").lower())
+        return {"ok": True}
+
+    def skin(self, name):
+        """The skin PNG for a name, or None. A name nobody has looked up yet is queued for the Minecraft lookup."""
+        key = str(name or "").lower()
+        if not NAME_RE.match(key):
+            return None
+        row = self.db.one("SELECT source, png, updated_at FROM skins WHERE name_key=?", key)
+        if not row or (row["source"] != "own" and self.now() - row["updated_at"] > (SKIN_FRESH if row["png"] else SKIN_MISS)):
+            self.queue_skin(key)
+        return bytes(row["png"]) if row and row["png"] else None
+
+    def queue_skin(self, key):
+        if not self.site_content().get("mojangSkins", True):
+            return
+        if not (self.account(key) or self.db.one("SELECT 1 FROM players WHERE name_key=?", key)):
+            return                      # only names this server knows, so nobody can use the panel to query Mojang
+        with self.skin_lock:
+            if key in self.skin_queue or len(self.skin_queue) >= 500:
+                return
+            self.skin_queue.append(key)
+            if not self.skin_thread or not self.skin_thread.is_alive():
+                self.skin_thread = threading.Thread(target=self.skin_worker, daemon=True)
+                self.skin_thread.start()
+
+    def skin_worker(self):
+        while True:
+            with self.skin_lock:
+                if not self.skin_queue:
+                    self.skin_thread = None
+                    return
+                key = self.skin_queue[0]
+            try:
+                self.lookup_skin(key)
+            except Exception:
+                pass
+            with self.skin_lock:
+                self.skin_queue.pop(0)
+            time.sleep(self.skin_pause)
+
+    def skin_fetch(self, url, limit=64 * 1024):
+        req = urllib.request.Request(url, headers={"User-Agent": "PlebMc-Panel", "Accept": "*/*"})
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                if r.status != 200:
+                    return None
+                data = r.read(limit + 1)
+        except urllib.error.HTTPError as e:
+            if e.code in (204, 404):
+                return None
+            raise
+        return data if len(data) <= limit else None
+
+    def lookup_skin(self, key):
+        """Ask Mojang for the skin of the Minecraft account with this name and remember the answer."""
+        data = None
+        try:
+            prof = self.skin_fetch(MOJANG_PROFILE + urllib.parse.quote(key))
+            uid = str(json.loads(prof).get("id") or "") if prof else ""
+            if re.fullmatch(r"[0-9a-fA-F]{32}", uid):
+                sess = json.loads(self.skin_fetch(MOJANG_SESSION + uid) or b"{}")
+                for prop in sess.get("properties") or []:
+                    if prop.get("name") == "textures":
+                        tex = json.loads(base64.b64decode(prop.get("value") or ""))
+                        m = TEXTURE_URL.match(str(((tex.get("textures") or {}).get("SKIN") or {}).get("url") or ""))
+                        if m:
+                            png = self.skin_fetch("https://textures.minecraft.net/texture/" + m.group(1))
+                            if png and not skin_problem(png):
+                                data = png
+        except (OSError, ValueError, AttributeError, TypeError):
+            return False                # Mojang is unreachable or answered nonsense: try again on a later visit
+        row = self.db.one("SELECT source FROM skins WHERE name_key=?", key)
+        if row and row["source"] == "own":
+            return True
+        self.db.run("INSERT INTO skins(name_key,source,png,updated_at) VALUES(?,?,?,?) ON CONFLICT(name_key) DO UPDATE SET "
+                    "source=excluded.source, png=excluded.png, updated_at=excluded.updated_at",
+                    key, "mojang" if data else "none", data, self.now())
+        return True
 
     # ---------- player notes (admins) ----------
 
@@ -2115,6 +2336,21 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
+        if method == "GET" and route.startswith("skin/"):
+            data = p.skin(unquote(route[len("skin/"):]))
+            tag = '"%s"' % hashlib.sha1(data or b"").hexdigest()[:20]
+            same = self.headers.get("If-None-Match") == tag
+            self.send_response(304 if same else 200 if data else 204)
+            if data and not same:
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(data)))
+            self.send_header("ETag", tag)
+            self.send_header("Cache-Control", "no-cache")      # ask every time, so a new skin shows at once
+            self.security_headers()
+            self.end_headers()
+            if data and not same:
+                self.wfile.write(data)
+            return
         if method == "GET" and route.startswith("site/img/"):
             r = p.site_image(route[len("site/img/"):])
             if not r:
@@ -2174,6 +2410,7 @@ class Handler(BaseHTTPRequestHandler):
             devices = p.db.one("SELECT COUNT(*) n FROM game_tokens WHERE account_id=?", acc["id"])["n"]
             return self.send_json(200, {"ok": True, "account": p.public_account(acc), "player": p.player(acc["name"]),
                                         "catalog": p.catalog(), "devices": devices,
+                                        "renameWait": p.rename_wait(acc), "renameDays": RENAME_DAYS,
                                         "online": acc["name_key"] in {n.lower() for n in p.online()}})
         if method == "POST" and route == "me/password":
             acc = self.web_user()
@@ -2183,6 +2420,19 @@ class Handler(BaseHTTPRequestHandler):
             p.set_password(acc, b.get("password"), acc["name"])
             token, acc = p.web_login(acc["name"], b.get("password"), self.address())
             return self.send_json(200, {"ok": True}, [self.session_cookie(token, SESSION_DAYS * 86400)])
+        if method == "POST" and route == "me/name":
+            acc = self.web_user()
+            b = self.body()
+            if not check_password(str(b.get("password") or ""), acc["password"]):
+                raise ApiError(400, "Your password is wrong.")
+            acc = p.rename_account(acc, b.get("name"), acc["name"])
+            return self.send_json(200, {"ok": True, "account": p.public_account(acc)})
+        if method == "POST" and route == "me/skin":
+            acc = self.web_user()
+            b = self.body()
+            if b.get("remove"):
+                return self.send_json(200, p.clear_skin(acc["name"]))
+            return self.send_json(200, p.set_skin(acc["name"], png=b.get("png")))
         if method == "POST" and route == "me/signout":
             acc = self.web_user()
             p.signout_everywhere(acc, acc["name"], keep_web=self.cookie("pleb_session"))
@@ -2287,6 +2537,14 @@ class Handler(BaseHTTPRequestHandler):
         if route == "logout":
             p.forget_game_token(b.get("token"))
             return self.send_json(200, {"ok": True})
+        if route == "skin":
+            ok = p.game_token(name, b.get("token"))
+            if not ok.get("ok"):
+                return self.send_json(200, ok)
+            try:
+                return self.send_json(200, p.set_skin(name, png=b.get("png"), pixels=b.get("pixels")))
+            except ApiError as e:
+                return self.send_json(200, {"ok": False, "error": e.message})
         if route == "version":
             return self.send_json(200, p.client_version(b.get("version"), b.get("platform")))
         raise ApiError(404, "Not found.")

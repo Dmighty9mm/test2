@@ -146,6 +146,52 @@ function initial(name) {
   for (const c of String(name || "?")) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
   const el = h("span", { class: "face", "aria-hidden": "true" }, String(name || "?").charAt(0).toUpperCase());
   el.style.cssText = "display:inline-grid;place-items:center;font-weight:700;font-size:12px;color:#fff;background:hsl(" + (hash % 360) + " 45% 38%)";
+  wearSkin(el, name);
+  return el;
+}
+
+// ==================== skins as profile pictures ====================
+const skinCache = new Map();
+/** The skin picture for a name (or null), asked for once per page load. */
+function skinImage(name) {
+  const key = String(name || "").toLowerCase();
+  if (!/^[a-z0-9_]{3,16}$/.test(key)) return Promise.resolve(null);
+  if (!skinCache.has(key)) skinCache.set(key, new Promise((done) => {
+    const img = new Image();
+    img.onload = () => done(img);
+    img.onerror = () => done(null);
+    img.src = "/api/skin/" + encodeURIComponent(key);
+  }));
+  return skinCache.get(key);
+}
+/** The face of a skin, with the hat layer on top, as an 8 by 8 canvas the page scales up crisply. */
+function skinHead(img) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 8;
+  c.className = "skin-head";
+  const g = c.getContext("2d");
+  g.imageSmoothingEnabled = false;
+  g.drawImage(img, 8, 8, 8, 8, 0, 0, 8, 8);
+  try {
+    const hat = document.createElement("canvas");
+    hat.width = hat.height = 8;
+    const hg = hat.getContext("2d");
+    hg.drawImage(img, 40, 8, 8, 8, 0, 0, 8, 8);
+    const px = hg.getImageData(0, 0, 8, 8).data;
+    let solid = true;
+    for (let i = 3; i < px.length; i += 4) if (px[i] < 255) { solid = false; break; }
+    if (!solid) g.drawImage(hat, 0, 0);     // an old skin with a filled hat area has no hat
+  } catch (e) { /* the face alone is fine */ }
+  return c;
+}
+/** Swap a letter square for the player's skin face once (and if) there is one. */
+function wearSkin(el, name) {
+  skinImage(name).then((img) => {
+    if (!img) return;
+    el.replaceChildren(skinHead(img));
+    el.classList.add("has-skin");
+    el.style.background = "none";
+  });
   return el;
 }
 function tile(iconName, label, value, sub) {
@@ -659,6 +705,7 @@ async function homeView() {
         if (!x) return h("div", {});
         const head = h("div", { class: "head", "aria-hidden": "true" }, x.name.charAt(0).toUpperCase());
         head.style.background = hue(x.name);
+        wearSkin(head, x.name);
         return h("div", { class: "pod p" + n }, head, link(x), h("span", { class: "val" }, statValue(t.stat, x.value) + " " + st.label.toLowerCase()), h("div", { class: "block" }, n));
       };
       stage.replaceChildren(h("div", { class: "podium" }, pod(t.rows[1], 2), pod(t.rows[0], 1), pod(t.rows[2], 3)),
@@ -1130,8 +1177,53 @@ async function meView() {
     tile("trophy", "Login streak", fmt(p ? p.streak : 0) + " days"),
     tile("shield", "Remembered clients", fmt(r.devices))));
   wrap.append(card("Your cosmetics", itemList(p && p.owned, p && p.equipped, r.catalog)));
+  wrap.append(h("div", { class: "grid g2" }, skinCard(me.name), nameCard(r)));
   wrap.append(h("div", { class: "grid g2" }, passwordCard(), signoutCard()));
   return wrap;
+}
+
+function nameCard(r) {
+  const out = h("div");
+  const days = Math.ceil((r.renameWait || 0) / 86400);
+  const form = h("form", { class: "card", onsubmit: async (e) => {
+    e.preventDefault();
+    const name = form.elements.namedItem("name").value.trim();
+    if (!confirm("Change your name to " + name + "? You can't change it again for " + (r.renameDays || 7) + " days.")) return;
+    try {
+      await api("me/name", { name, password: form.elements.namedItem("password").value });
+      location.reload();
+    } catch (err) { message(out, err.message); }
+  } }, h("h2", {}, "Change username"),
+  h("p", { class: "muted" }, "Your coins, cosmetics and rank move to the new name, and you sign in with it from then on. ",
+    "Things saved on a game server under your old name (like an inventory) stay with the old name. ",
+    "You can do this once every " + (r.renameDays || 7) + " days."),
+  days ? h("p", { class: "muted" }, h("b", {}, "You can change your name again in " + days + " day" + (days === 1 ? "" : "s") + ".")) : null,
+  field("New username", { id: "nname", name: "name", required: true, minlength: 3, maxlength: 16, pattern: "[A-Za-z0-9_]{3,16}", autocomplete: "off", disabled: !!days }),
+  field("Your password", { id: "nname-pw", name: "password", type: "password", required: true, autocomplete: "current-password", disabled: !!days }),
+  h("div", { style: "height:14px" }), h("button", { class: "primary", type: "submit", disabled: !!days }, "Change username"), out);
+  return form;
+}
+
+function skinCard(name) {
+  const out = h("div");
+  const file = h("input", { type: "file", id: "skin-file", accept: "image/png", onchange: () => {
+    const f = file.files[0];
+    if (!f) return;
+    if (f.size > 24 * 1024) { file.value = ""; return message(out, "That picture is too big for a skin."); }
+    const rd = new FileReader();
+    rd.onload = async () => {
+      try { await api("me/skin", { png: String(rd.result) }); location.reload(); } catch (err) { message(out, err.message); }
+      file.value = "";
+    };
+    rd.readAsDataURL(f);
+  } });
+  return h("div", { class: "card" }, h("h2", {}, "Profile picture"),
+    h("p", { class: "muted" }, "Your picture is the face of your Minecraft skin. Pick your skin file (the 64 by 64 PNG) to set it."),
+    h("div", { class: "row" }, initialBig(name), h("div", {}, h("label", { for: "skin-file" }, "Skin file"), file)),
+    h("div", { style: "height:14px" }),
+    h("button", { type: "button", class: "ghost", onclick: async () => {
+      try { await api("me/skin", { remove: true }); location.reload(); } catch (err) { message(out, err.message); }
+    } }, "Remove my skin"), out);
 }
 
 function initialBig(name) {
@@ -1350,7 +1442,15 @@ async function playerView() {
   const mod = card("Moderation", h("div", { class: "row" }, reason, h("button", { class: "danger", onclick: () => act({ action: "kick", reason: reason.value }) }, "Kick")));
   if (acc) {
     const npw = h("input", { type: "password", placeholder: "New password (8+)", autocomplete: "new-password" });
+    const nname = h("input", { placeholder: "New username", maxlength: 16, autocomplete: "off", "aria-label": "New username" });
     mod.append(h("div", { style: "height:12px" }), h("div", { class: "row" }, npw, h("button", { onclick: () => accAct({ action: "password", password: npw.value }) }, "Reset password")),
+      h("div", { style: "height:12px" }), h("div", { class: "row" }, nname, h("button", { onclick: () => {
+        const to = nname.value.trim();
+        if (!to || !confirm("Rename " + r.name + " to " + to + "? Their coins, cosmetics and rank move to the new name.")) return;
+        api("admin/account", { name: r.name, action: "rename", newName: to })
+          .then(() => { toast("Renamed to " + to + "."); location.hash = "#player?name=" + encodeURIComponent(to); })
+          .catch((e) => toast(e.message, false));
+      } }, "Change username")),
       h("div", { style: "height:12px" }),
       h("div", { class: "row" },
         h("button", { onclick: () => accAct({ action: "signout" }) }, "Sign out everywhere"),
@@ -2019,6 +2119,8 @@ async function siteView() {
 
   const mascot = h("input", { type: "checkbox", id: "s-mascot" });
   mascot.checked = c.mascot !== false;
+  const mojang = h("input", { type: "checkbox", id: "s-mojang" });
+  mojang.checked = c.mojangSkins !== false;
   const saveBtn = h("button", { class: "primary", onclick: async () => {
     featPickers.forEach(([f, pk]) => { f.image = pk.get(); });
     const body = Object.fromEntries(fields.map((f) => [f.key, f.get()]));
@@ -2026,7 +2128,7 @@ async function siteView() {
       features: feats.map((f) => ({ title: (f.title || "").trim(), text: (f.text || "").trim(), image: f.image || "" })),
       faq: faqs.map((f) => ({ q: (f.q || "").trim(), a: (f.a || "").trim() })).filter((f) => f.q && f.a),
       voteLinks: votes.map((v) => ({ name: (v.name || "").trim(), url: (v.url || "").trim() })).filter((v) => v.name || v.url),
-      voteReward: Math.max(0, parseInt(reward.value, 10) || 0), mascot: mascot.checked });
+      voteReward: Math.max(0, parseInt(reward.value, 10) || 0), mascot: mascot.checked, mojangSkins: mojang.checked });
     saveBtn.disabled = true;
     try {
       const r = await api("admin/site", body);
@@ -2045,7 +2147,8 @@ async function siteView() {
         ...[["PlebMc blue", "#2ea8ff"], ["Client cyan", "#3fd8e6"], ["TNT red", "#db3f2b"], ["Gold", "#f5c542"]].map(([n, v]) =>
           h("button", { type: "button", class: "ghost small", onclick: () => { accent.value = v; setAccent(v); } }, n))),
       ...F.serverIp.el, ...F.discordUrl.el, ...F.footer.el,
-      h("label", { class: "check", for: "s-mascot" }, mascot, " Show Plebio around the site")),
+      h("label", { class: "check", for: "s-mascot" }, mascot, " Show Plebio around the site"),
+      h("label", { class: "check", for: "s-mojang" }, mojang, " Look up the Minecraft skin of players who have not set their own")),
       card("Under the big picture", ...F.badge.el, ...F.title1.el, ...F.title2.el, ...F.subtitle.el)),
     h("div", { class: "grid g2" }, card("Pictures", hero.el, show.el), card("TNT banner at the bottom", ...F.ctaTitle.el, ...F.ctaText.el)),
     card("Feature cards", ...F.featuresTitle.el, ...F.featuresText.el, h("div", { style: "height:14px" }), featBox),
