@@ -255,6 +255,11 @@ ranks over to the new name and kicks the old one if it is online. Whatever a gam
 under the old name (inventory, world progress) does not follow. A name with an account, or one
 somebody has already played under, can't be taken.
 
+## On a phone
+
+Every page fits a phone's width without scrolling sideways. The long admin lists (Players, Punishments, Admin log)
+turn into one small card per row there, with each value labelled, instead of a table to scroll sideways.
+
 ## Last seen
 
 A player's profile on **Stats** shows "Online now" or when they were last on the server, and so

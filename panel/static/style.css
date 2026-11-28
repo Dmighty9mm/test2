@@ -747,3 +747,26 @@ tr.pun.s-expired td, tr.pun.s-removed td { opacity: .72; }
 .news-notice .x { flex: none; background: none; border: 0; box-shadow: none; padding: 2px 6px; font-size: 20px; line-height: 1; color: var(--muted); cursor: pointer; }
 .news-notice .x:hover { color: var(--fg); }
 @media (max-width: 560px) { .news-notice small { display: none; } }
+
+/* ==================== phones ==================== */
+/* sections slide in from the side: that must not make the page scroll sideways */
+.home { overflow-x: clip; }
+/* long lists (players, punishments, the admin log): on a phone each row is a small card, not a table to scroll sideways */
+@media (max-width: 640px) {
+  table.stack, table.stack tbody { display: block; }
+  table.stack thead { display: none; }
+  table.stack tr { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; padding: 12px 2px; border-bottom: 1px solid var(--line); }
+  table.stack td { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; width: 100%; padding: 3px 0; border: 0; white-space: normal; min-width: 0; text-align: right; overflow-wrap: anywhere; }
+  table.stack td[data-label]::before { content: attr(data-label); flex: none; color: var(--faint); font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; text-align: left; }
+  table.stack td.lead { width: auto; justify-content: flex-start; align-items: center; text-align: left; font-size: 15px; font-weight: 600; gap: 4px; padding-bottom: 6px; }
+  table.stack td.lead { order: -2; }
+  table.stack td.lead:first-child:has(> .pill:first-child) { order: -1; margin-left: auto; }
+  table.stack td.wrap { min-width: 0; }
+  table.stack td[colspan] { justify-content: center; text-align: center; }
+  table.stack .pun-lifted { text-align: right; }
+  /* the new-post strip: the kind goes above the title */
+  .news-notice .wrap { flex-wrap: wrap; row-gap: 4px; padding-left: 16px; padding-right: 16px; }
+  .news-notice .kind { order: 0; }
+  .news-notice .x { order: 1; margin-left: auto; }
+  .news-notice a { order: 2; flex-basis: 100%; }
+}
