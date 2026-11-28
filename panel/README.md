@@ -255,6 +255,14 @@ ranks over to the new name and kicks the old one if it is online. Whatever a gam
 under the old name (inventory, world progress) does not follow. A name with an account, or one
 somebody has already played under, can't be taken.
 
+## Ideas board (admins)
+
+**Admin > Ideas** is the team's own board, hidden from players. Make sections (it starts with
+PlebMc, PlebNite, PlebRPG and Other), and add ideas to them: a name, an optional description,
+a priority (urgent, high, medium, low) and a status (idea, planned, working on it, done,
+dropped). The most urgent ideas come first, finished ones last, and "Hide finished ideas"
+tucks them away. Sections can be renamed, reordered and deleted.
+
 ## Stats and leaderboards
 
 **Stats**: type a player's name to see their stats, one game at a time: PlebMc

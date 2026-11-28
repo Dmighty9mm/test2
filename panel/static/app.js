@@ -39,6 +39,7 @@ const ICONS = {
   user: "M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0",
   grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
   users: "M9 11a4 4 0 100-8 4 4 0 000 8zM2 21a7 7 0 0114 0M16 3.5a4 4 0 010 7.5M18 14a7 7 0 014 7",
+  bulb: "M9 18h6M10 21h4M12 3a6 6 0 00-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0012 3z",
   megaphone: "M3 11v2a1 1 0 001 1h2l5 4V6L6 10H4a1 1 0 00-1 1zM15 8a5 5 0 010 8M18 5a9 9 0 010 14",
   upload: "M12 16V4M7 9l5-5 5 5M4 16v4h16v-4",
   refresh: "M20 11a8 8 0 00-14.9-3M4 4v4h4M4 13a8 8 0 0014.9 3M20 20v-4h-4",
@@ -289,9 +290,9 @@ function pager(container, load, render, opts = {}) {
 
 // [id, label, icon, needs: "me" (signed in), "admin" or "owner"]
 const NAV = [["home", "Home", "home"], ["downloads", "Download", "download"], ["leaderboard", "Leaderboards", "trophy"], ["stats", "Stats", "chart"], ["shop", "Shop", "bag"], ["news", "News", "megaphone"], ["vote", "Vote", "heart"]];
-const ADMIN_NAV = [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["announce", "Announcements", "megaphone"],
+const ADMIN_NAV = [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["announce", "Announcements", "megaphone"], ["ideas", "Ideas", "bulb"],
   ["site", "Site content", "edit", "owner"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Updates", "refresh"], ["audit", "Admin log", "list"]];
-const ADMIN_VIEWS = new Set(["admin", "players", "player", "ranks", "rank", "announce", "site", "makers", "publish", "client", "audit"]);
+const ADMIN_VIEWS = new Set(["admin", "players", "player", "ranks", "rank", "announce", "ideas", "site", "makers", "publish", "client", "audit"]);
 // page headings: [first word, second word (in color), a line under it]
 const HEADS = {
   downloads: ["Get", "PlebClient", "Pick how you want to play. The first time you start it, make your PlebMc account on the start screen."],
@@ -1691,6 +1692,91 @@ async function playerRankCard(name, rank) {
 
 // ==================== admin: announcements ====================
 
+// ==================== ideas (the staff's own board) ====================
+const IDEA_PRIORITY = { urgent: ["Urgent", "bad"], high: ["High", "warn"], medium: ["Medium", "admin"], low: ["Low", ""] };
+const IDEA_STATUS = { idea: "Idea", planned: "Planned", doing: "Working on it", done: "Done", dropped: "Dropped" };
+
+async function ideasView() {
+  let data = await api("admin/ideas");
+  let hideDone = false;
+  try { hideDone = localStorage.getItem("ideas-hide-done") === "1"; } catch (e) { /* fine */ }
+  const board = h("div", { class: "stack" });
+  const send = async (body) => {
+    try { data = await api("admin/ideas", body); draw(); return true; } catch (e) { toast(e.message, false); return false; }
+  };
+  const choice = (map, value, label) => h("select", { "aria-label": label },
+    Object.entries(map).map(([v, t]) => h("option", { value: v, selected: v === value }, Array.isArray(t) ? t[0] : t)));
+
+  // the form for a new idea, or to change one
+  const ideaForm = (sec, idea, close) => {
+    const name = h("input", { placeholder: "Idea", maxlength: 100, value: idea ? idea.name : "", "aria-label": "Idea name" });
+    const text = h("textarea", { rows: 2, placeholder: "Description (optional)", maxlength: 4000, "aria-label": "Description" });
+    text.value = idea ? idea.description : "";
+    const pri = choice(IDEA_PRIORITY, idea ? idea.priority : "medium", "Priority");
+    const st = choice(IDEA_STATUS, idea ? idea.status : "idea", "Status");
+    const where = h("select", { "aria-label": "Section" }, data.sections.map((x) => h("option", { value: x.id, selected: x.id === sec.id }, x.name)));
+    const form = h("form", { class: "idea-form", onsubmit: async (e) => {
+      e.preventDefault();
+      if (!name.value.trim()) return name.focus();
+      await send({ action: "save", id: idea ? idea.id : undefined, section: +where.value, name: name.value, description: text.value, priority: pri.value, status: st.value });
+    } }, name, text, h("div", { class: "row" }, pri, st, idea ? where : null, h("span", { class: "spacer" }),
+      close ? h("button", { type: "button", class: "ghost", onclick: close }, "Cancel") : null,
+      h("button", { class: "primary", type: "submit" }, icon(idea ? "check" : "plus"), idea ? "Save" : "Add idea")));
+    return form;
+  };
+
+  const ideaBlock = (sec, idea) => {
+    const [plabel, pcls] = IDEA_PRIORITY[idea.priority] || [idea.priority, ""];
+    const st = choice(IDEA_STATUS, idea.status, "Status of " + idea.name);
+    st.className = "idea-status";
+    st.onchange = () => send({ action: "set", id: idea.id, status: st.value });
+    const block = h("div", { class: "idea p-" + idea.priority + " s-" + idea.status },
+      h("div", { class: "idea-top" }, h("span", { class: "pill " + pcls }, plabel), h("span", { class: "spacer" }), st),
+      h("h3", {}, idea.name),
+      idea.description ? h("p", {}, idea.description) : null,
+      h("div", { class: "idea-foot" }, h("span", { class: "muted" }, idea.author + " · " + ago(idea.created)), h("span", { class: "spacer" }),
+        h("button", { class: "small ghost", onclick: () => block.replaceWith(h("div", { class: "idea editing" }, ideaForm(sec, idea, draw))) }, "Edit"),
+        h("button", { class: "small ghost danger", onclick: () => { if (confirm("Delete the idea \"" + idea.name + "\"?")) send({ action: "delete", id: idea.id }); } }, "Delete")));
+    return block;
+  };
+
+  const sectionCard = (sec, i) => {
+    const shown = sec.ideas.filter((x) => !hideDone || (x.status !== "done" && x.status !== "dropped"));
+    const hidden = sec.ideas.length - shown.length;
+    const adder = h("div", { class: "idea add" });
+    const closed = () => adder.replaceChildren(h("button", { class: "ghost", onclick: () => { adder.replaceChildren(ideaForm(sec, null, closed)); adder.querySelector("input").focus(); } }, icon("plus"), "Add an idea"));
+    closed();
+    return h("section", { class: "card idea-sec" },
+      h("div", { class: "card-head" }, h("h2", {}, sec.name), h("span", { class: "muted" }, sec.ideas.length + (sec.ideas.length === 1 ? " idea" : " ideas") + (hidden ? " · " + hidden + " finished hidden" : "")),
+        h("span", { class: "spacer" }),
+        h("button", { class: "small ghost", disabled: i === 0, title: "Move up", "aria-label": "Move " + sec.name + " up", onclick: () => send({ action: "section-move", section: sec.id, dir: "up" }) }, "↑"),
+        h("button", { class: "small ghost", disabled: i === data.sections.length - 1, title: "Move down", "aria-label": "Move " + sec.name + " down", onclick: () => send({ action: "section-move", section: sec.id, dir: "down" }) }, "↓"),
+        h("button", { class: "small ghost", onclick: () => { const n = prompt("Section name", sec.name); if (n && n.trim()) send({ action: "section-rename", section: sec.id, name: n }); } }, "Rename"),
+        h("button", { class: "small ghost danger", onclick: () => {
+          if (confirm("Delete the section \"" + sec.name + "\"" + (sec.ideas.length ? " and its " + sec.ideas.length + " idea(s)?" : "?"))) send({ action: "section-delete", section: sec.id });
+        } }, "Delete")),
+      h("div", { class: "idea-grid" }, shown.map((x) => ideaBlock(sec, x)), adder));
+  };
+
+  const newName = h("input", { placeholder: "New section, like Website", maxlength: 40, "aria-label": "New section name" });
+  const hide = h("input", { type: "checkbox", id: "ideas-hide" });
+  hide.checked = hideDone;
+  hide.onchange = () => { hideDone = hide.checked; try { localStorage.setItem("ideas-hide-done", hideDone ? "1" : "0"); } catch (e) { /* fine */ } draw(); };
+  const bar = h("form", { class: "row", onsubmit: async (e) => {
+    e.preventDefault();
+    if (newName.value.trim() && await send({ action: "section-add", name: newName.value })) newName.value = "";
+  } }, newName, h("button", { type: "submit" }, icon("plus"), "Add section"), h("span", { class: "spacer" }),
+    h("label", { class: "check", for: "ideas-hide" }, hide, " Hide finished ideas"));
+  function draw() {
+    board.replaceChildren(...(data.sections.length ? data.sections.map(sectionCard)
+      : [empty("bulb", "No sections yet. Add one above, like PlebMc or Website.")]));
+  }
+  draw();
+  return h("div", { class: "stack" },
+    h("p", { class: "muted", style: "margin:0" }, "A board for the team's ideas. Only admins and owners can see it. The most urgent ideas come first in each section."),
+    bar, board);
+}
+
 async function announceView() {
   const out = h("div");
   const text = h("textarea", { id: "atext", maxlength: 200, placeholder: "Double coins this weekend!" });
@@ -2182,6 +2268,7 @@ const VIEWS = {
   ranks: ["Ranks", ranksView, "admin"],
   rank: ["Rank", rankView, "admin"],
   announce: ["Announcements", announceView, "admin"],
+  ideas: ["Ideas", ideasView, "admin"],
   news: ["News", newsView],
   site: ["Site content", siteView, "owner"],
   publish: ["Publish to shop", publishView, "admin"],

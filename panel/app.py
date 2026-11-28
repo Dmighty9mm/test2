@@ -324,6 +324,10 @@ def name_problem(name):
 
 MAX_SKIN = 24 * 1024
 RENAME_DAYS = 7
+IDEA_SECTIONS = ("PlebMc", "PlebNite", "PlebRPG", "Other")
+IDEA_PRIORITIES = ("urgent", "high", "medium", "low")
+IDEA_STATUSES = ("idea", "planned", "doing", "done", "dropped")
+MAX_IDEA = 4000
 PNG_SIG = b"\x89PNG\r\n\x1a\n"
 SKIN_FRESH = 24 * 3600        # look a Minecraft account's skin up again after a day
 SKIN_MISS = 6 * 3600          # and a name without one after six hours
@@ -502,6 +506,23 @@ CREATE TABLE IF NOT EXISTS skins (
   name_key TEXT PRIMARY KEY,
   source TEXT NOT NULL,
   png BLOB,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS idea_sections (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  pos INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ideas (
+  id INTEGER PRIMARY KEY,
+  section_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  priority TEXT NOT NULL DEFAULT 'medium',
+  status TEXT NOT NULL DEFAULT 'idea',
+  author TEXT NOT NULL,
+  pos INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS client_seen (
@@ -1779,6 +1800,99 @@ class Panel:
         self.audit(actor["name"], "post", "deleted: " + old["title"])
         return {"ok": True}
 
+    # ---------- ideas (the staff's own board) ----------
+
+    def ideas(self):
+        """Every section in its order, each with its ideas: most urgent first, finished ones last."""
+        if not self.db.get_kv("ideas_started", False):
+            for i, name in enumerate(IDEA_SECTIONS):
+                self.db.run("INSERT INTO idea_sections(name,pos) VALUES(?,?)", name, i)
+            self.db.set_kv("ideas_started", True)
+        rows = self.db.all("SELECT * FROM ideas")
+        rows.sort(key=lambda r: (r["status"] in ("done", "dropped"), IDEA_PRIORITIES.index(r["priority"]), r["pos"], r["id"]))
+        out = []
+        for sec in self.db.all("SELECT * FROM idea_sections ORDER BY pos, id"):
+            out.append({"id": sec["id"], "name": sec["name"], "ideas": [
+                {"id": r["id"], "name": r["name"], "description": r["description"], "priority": r["priority"],
+                 "status": r["status"], "author": r["author"], "created": r["created_at"], "updated": r["updated_at"]}
+                for r in rows if r["section_id"] == sec["id"]]})
+        return {"ok": True, "sections": out, "priorities": list(IDEA_PRIORITIES), "statuses": list(IDEA_STATUSES)}
+
+    def idea_action(self, actor, body):
+        action = str(body.get("action") or "")
+        now = self.now()
+
+        def section(key="section"):
+            sec = self.db.one("SELECT * FROM idea_sections WHERE id=?", int(body.get(key) or 0))
+            if not sec:
+                raise ApiError(404, "That section is gone.")
+            return sec
+
+        def idea():
+            row = self.db.one("SELECT * FROM ideas WHERE id=?", int(body.get("id") or 0))
+            if not row:
+                raise ApiError(404, "That idea is gone.")
+            return row
+
+        if action in ("section-add", "section-rename"):
+            name = str(body.get("name") or "").strip()[:40]
+            if not name:
+                raise ApiError(400, "A section needs a name.")
+            if action == "section-add":
+                if self.db.one("SELECT COUNT(*) n FROM idea_sections")["n"] >= 50:
+                    raise ApiError(400, "That is a lot of sections. Delete one first.")
+                top = self.db.one("SELECT COALESCE(MAX(pos), -1) m FROM idea_sections")["m"]
+                self.db.run("INSERT INTO idea_sections(name,pos) VALUES(?,?)", name, top + 1)
+            else:
+                self.db.run("UPDATE idea_sections SET name=? WHERE id=?", name, section()["id"])
+        elif action == "section-move":
+            sec = section()
+            order = [r["id"] for r in self.db.all("SELECT id FROM idea_sections ORDER BY pos, id")]
+            i = order.index(sec["id"])
+            j = max(0, min(len(order) - 1, i + (-1 if body.get("dir") == "up" else 1)))
+            order[i], order[j] = order[j], order[i]
+            for n, sid in enumerate(order):
+                self.db.run("UPDATE idea_sections SET pos=? WHERE id=?", n, sid)
+        elif action == "section-delete":
+            sec = section()
+            self.db.run("DELETE FROM ideas WHERE section_id=?", sec["id"])
+            self.db.run("DELETE FROM idea_sections WHERE id=?", sec["id"])
+            self.audit(actor["name"], "ideas", "deleted section: " + sec["name"])
+        elif action == "save":
+            name = str(body.get("name") or "").strip()[:100]
+            text = str(body.get("description") or "").strip()
+            priority = str(body.get("priority") or "medium")
+            status = str(body.get("status") or "idea")
+            if not name:
+                raise ApiError(400, "An idea needs a name.")
+            if len(text) > MAX_IDEA:
+                raise ApiError(400, "That description is too long (%d characters at most)." % MAX_IDEA)
+            if priority not in IDEA_PRIORITIES or status not in IDEA_STATUSES:
+                raise ApiError(400, "Unknown priority or status.")
+            sec = section()
+            if body.get("id"):
+                self.db.run("UPDATE ideas SET section_id=?, name=?, description=?, priority=?, status=?, updated_at=? WHERE id=?",
+                            sec["id"], name, text, priority, status, now, idea()["id"])
+            else:
+                if self.db.one("SELECT COUNT(*) n FROM ideas")["n"] >= 2000:
+                    raise ApiError(400, "The board is full. Delete some old ideas first.")
+                self.db.run("INSERT INTO ideas(section_id,name,description,priority,status,author,pos,created_at,updated_at) "
+                            "VALUES(?,?,?,?,?,?,?,?,?)", sec["id"], name, text, priority, status, actor["name"], now, now, now)
+        elif action == "set":
+            row = idea()
+            priority = str(body.get("priority") or row["priority"])
+            status = str(body.get("status") or row["status"])
+            if priority not in IDEA_PRIORITIES or status not in IDEA_STATUSES:
+                raise ApiError(400, "Unknown priority or status.")
+            self.db.run("UPDATE ideas SET priority=?, status=?, updated_at=? WHERE id=?", priority, status, now, row["id"])
+        elif action == "delete":
+            row = idea()
+            self.db.run("DELETE FROM ideas WHERE id=?", row["id"])
+            self.audit(actor["name"], "ideas", "deleted idea: " + row["name"])
+        else:
+            raise ApiError(400, "Unknown action.")
+        return self.ideas()
+
     # ---------- the panel updating itself ----------
 
     def update_settings(self):
@@ -2455,6 +2569,9 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 p.add_note(actor, str(b.get("name") or ""), b.get("text"))
             return self.send_json(200, {"ok": True, "notes": p.notes(str(b.get("name") or ""))})
+        if route == "admin/ideas":
+            actor = self.web_user(role="admin")
+            return self.send_json(200, p.idea_action(actor, self.body()) if method == "POST" else p.ideas())
         if method == "POST" and route == "admin/posts":
             actor = self.web_user(role="owner")
             b = self.body(limit=128 * 1024)

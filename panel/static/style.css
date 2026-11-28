@@ -688,3 +688,23 @@ button.dl-top-pic { padding: 0; border: 0; background: none; box-shadow: none; c
 /* ==================== skins as profile pictures ==================== */
 .skin-head { width: 100%; height: 100%; display: block; image-rendering: pixelated; border-radius: inherit; }
 .face.has-skin, .pod .head.has-skin { overflow: hidden; font-size: 0 !important; }
+
+/* ==================== ideas board ==================== */
+.idea-sec .card-head { flex-wrap: wrap; gap: 8px; }
+.idea-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.idea { background: var(--card2); border: 1px solid var(--line2); border-left: 4px solid var(--line2); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.idea.p-urgent { border-left-color: var(--bad); }
+.idea.p-high { border-left-color: var(--warn); }
+.idea.p-medium { border-left-color: var(--accent); }
+.idea.s-done, .idea.s-dropped { opacity: .6; }
+.idea.s-done h3, .idea.s-dropped h3 { text-decoration: line-through; }
+.idea h3 { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
+.idea p { margin: 0; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+.idea-top, .idea-foot { display: flex; align-items: center; gap: 6px; }
+.idea-foot { margin-top: auto; font-size: 12px; }
+.idea-status { width: auto; padding: 3px 26px 3px 8px; font-size: 12px; min-height: 0; }
+.idea.add { border-style: dashed; border-left-width: 1px; justify-content: center; background: none; }
+.idea.add > button { align-self: center; }
+.idea-form { display: flex; flex-direction: column; gap: 8px; }
+.idea-form .row { flex-wrap: wrap; gap: 6px; }
+.idea-form select { width: auto; flex: 0 1 auto; }

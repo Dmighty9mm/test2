@@ -414,6 +414,37 @@ class PanelLogic(unittest.TestCase):
         with self.assertRaises(app.ApiError):
             self.p.post(b["id"])
 
+    def test_ideas_board(self):
+        mod = {"name": "Mod", "role": "admin"}
+        self.assertEqual([s["name"] for s in self.p.ideas()["sections"]], ["PlebMc", "PlebNite", "PlebRPG", "Other"])
+        rpg = self.p.ideas()["sections"][2]["id"]
+        for bad in ({"action": "save", "section": rpg, "name": ""}, {"action": "save", "section": 999, "name": "x"},
+                    {"action": "save", "section": rpg, "name": "x", "priority": "asap"}, {"action": "section-add", "name": " "},
+                    {"action": "save", "section": rpg, "name": "x", "description": "y" * (app.MAX_IDEA + 1)}, {"action": "nope"}):
+            with self.assertRaises(app.ApiError):
+                self.p.idea_action(mod, bad)
+        self.p.idea_action(mod, {"action": "save", "section": rpg, "name": "Pets"})
+        self.p.idea_action(mod, {"action": "save", "section": rpg, "name": "Boss raid", "description": "10 players", "priority": "urgent"})
+        got = self.p.idea_action(mod, {"action": "save", "section": rpg, "name": "Fishing", "priority": "high", "status": "done"})
+        ideas = got["sections"][2]["ideas"]
+        self.assertEqual([(i["name"], i["priority"], i["status"]) for i in ideas],
+                         [("Boss raid", "urgent", "idea"), ("Pets", "medium", "idea"), ("Fishing", "high", "done")])
+        self.assertEqual(ideas[0]["author"], "Mod")
+        pets = ideas[1]["id"]
+        other = got["sections"][3]["id"]
+        self.p.idea_action(mod, {"action": "set", "id": pets, "status": "doing", "priority": "low"})
+        got = self.p.idea_action(mod, {"action": "save", "id": pets, "section": other, "name": "Pets!", "priority": "low", "status": "doing"})
+        self.assertEqual([(i["name"], i["status"]) for i in got["sections"][3]["ideas"]], [("Pets!", "doing")])
+        got = self.p.idea_action(mod, {"action": "section-add", "name": "Website"})
+        got = self.p.idea_action(mod, {"action": "section-move", "section": got["sections"][4]["id"], "dir": "up"})
+        self.assertEqual([s["name"] for s in got["sections"]], ["PlebMc", "PlebNite", "PlebRPG", "Website", "Other"])
+        self.p.idea_action(mod, {"action": "section-rename", "section": other, "name": "Misc"})
+        got = self.p.idea_action(mod, {"action": "section-delete", "section": rpg})
+        self.assertEqual([s["name"] for s in got["sections"]], ["PlebMc", "PlebNite", "Website", "Misc"])
+        self.assertEqual(self.p.db.one("SELECT COUNT(*) n FROM ideas")["n"], 1)
+        got = self.p.idea_action(mod, {"action": "delete", "id": pets})
+        self.assertEqual(sum(len(s["ideas"]) for s in got["sections"]), 0)
+
     def test_coin_gift_says_who_gets_it(self):
         owner = {"name": "Boss", "role": "owner"}
         for flag, args in ((True, [50, "client"]), (False, [50, "all"]), (None, [50])):
