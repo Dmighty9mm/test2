@@ -76,7 +76,7 @@ public class GuiOptionSlider extends GuiButton {
 				this.displayString = minecraft.gameSettings.getKeyBinding(this.options);
 			}
 
-			if (net.plebmc.client.hud.PlebTheme.enabled()) {
+			if (net.plebmc.client.hud.PlebTheme.buttons()) {
 				net.plebmc.client.hud.PlebTheme.sliderKnob(this,
 						this.xPosition + (int) (this.sliderValue * (float) (this.width - 8)), this.dragging);
 				return;

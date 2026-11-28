@@ -466,6 +466,21 @@ class PanelLogic(unittest.TestCase):
         self.p.reset_site_content(owner)
         self.assertEqual(self.p.public_info()["content"]["logo"], "/static/logo.png")
 
+    def test_client_versions_start_over_at_1_0(self):
+        owner = self.p.create_account("Owner", "password1", "owner")
+        self.p.set_client_release(owner, {"latest": "2.1", "minimum": "2.0", "message": "hi"})
+        for v in ("2.0", "2.1", "1.0"):
+            self.p.client_version(v, "wasm")
+        self.p.db.set_kv("client_versions_reset_1_0", None)  # as on a panel from before the reset
+        p2 = app.Panel(self.p.db, self.p.cfg, self.p.clock)
+        self.assertEqual([r["version"] for r in p2.client_versions()], ["1.0"])
+        rel = p2.client_release()
+        self.assertEqual((rel["latest"], rel["minimum"], rel["message"]), ("1.0", "", "hi"))
+        self.assertFalse(p2.client_version("1.0", "wasm")["outdated"])
+        # only once: a later 2.x setting of the owner's own is left alone
+        p2.set_client_release(owner, {"latest": "2.5"})
+        self.assertEqual(app.Panel(self.p.db, self.p.cfg, self.p.clock).client_release()["latest"], "2.5")
+
     def test_client_update_checker(self):
         owner = self.p.create_account("Owner", "password1", "owner")
         r = self.p.client_version("2.0", "web")

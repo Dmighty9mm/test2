@@ -36,6 +36,55 @@ public final class PlebTheme {
 		}
 	}
 
+	private static final net.minecraft.util.ResourceLocation WIDGETS = new net.minecraft.util.ResourceLocation(
+			"textures/gui/widgets.png");
+	private static long packChecked;
+	private static boolean packButtons;
+
+	/**
+	 * Whether buttons and sliders get the Pleb look: the theme is on, and no texture pack
+	 * in use brings its own button art (textures/gui/widgets.png), which wins. The title
+	 * screen is PlebClient's own design, so its buttons always keep the Pleb look.
+	 */
+	public static boolean buttons() {
+		if (!enabled()) {
+			return false;
+		}
+		Minecraft mc = Minecraft.getMinecraft();
+		if (mc == null || mc.currentScreen instanceof net.minecraft.client.gui.GuiMainMenu) {
+			return true;
+		}
+		long now = System.currentTimeMillis();
+		if (now - packChecked > 1000 || now < packChecked) {
+			packChecked = now;
+			packButtons = packHasButtons(mc);
+		}
+		return !packButtons;
+	}
+
+	private static boolean packHasButtons(Minecraft mc) {
+		try {
+			net.minecraft.client.resources.ResourcePackRepository repo = mc.getResourcePackRepository();
+			if (repo == null) {
+				return false;
+			}
+			net.minecraft.client.resources.IResourcePack server = repo.getResourcePackInstance();
+			if (server != null && server.resourceExists(WIDGETS)) {
+				return true;
+			}
+			for (Object o : repo.getRepositoryEntries()) {
+				net.minecraft.client.resources.IResourcePack pack = ((net.minecraft.client.resources.ResourcePackRepository.Entry) o)
+						.getResourcePack();
+				if (pack != null && pack.resourceExists(WIDGETS)) {
+					return true;
+				}
+			}
+		} catch (Throwable t) {
+			// no packs to ask
+		}
+		return false;
+	}
+
 	// ==================== colors ====================
 
 	static final int SKY_TOP = 0xFF0C1522;

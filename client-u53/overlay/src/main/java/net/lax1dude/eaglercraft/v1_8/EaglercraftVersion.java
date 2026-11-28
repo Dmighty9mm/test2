@@ -9,11 +9,14 @@ public class EaglercraftVersion {
 	
 	/// Customize these to fit your fork:
 	
-	// PlebClient: the fork name is the brand string servers see (EaglerXServer, EaglerXPlan),
-	// and the brand UUID below is made from it, so the client no longer counts as vanilla Eagler.
+	// PlebClient: the fork name is the brand string servers see (EaglerXServer, EaglerXPlan
+	// "Brand String"), so it carries the PlebClient version: "PlebClient 1.0". The brand UUID
+	// below is made from the name without the version, so it stays the same in every release
+	// and the client no longer counts as vanilla Eagler.
 	// Keep projectForkVersion equal to net.plebmc.client.cosmetics.UpdateCheck.VERSION.
-	public static final String projectForkName = "PlebClient";
+	public static final String plebBrandName = "PlebClient";
 	public static final String projectForkVersion = "1.0";
+	public static final String projectForkName = plebBrandName + " " + projectForkVersion;
 	public static final String projectForkVendor = "PlebMc";
 	
 	public static final String projectForkURL = "https://plebmc.top";
@@ -33,7 +36,9 @@ public class EaglercraftVersion {
 	
 	// Updating configuration
 	
-	public static final boolean enableUpdateService = true;
+	// PlebClient has its own update check (net.plebmc.client.cosmetics.UpdateCheck); the EaglercraftX
+	// one (the "Check for updates" button in the pause menu) is about upstream builds, so it is off.
+	public static final boolean enableUpdateService = false;
 
 	public static final String updateBundlePackageName = "net.lax1dude.eaglercraft.v1_8.client";
 	public static final int updateBundlePackageVersionInt = 53;
@@ -47,7 +52,7 @@ public class EaglercraftVersion {
 	
 	// Client brand identification system configuration
 	
-	public static final EaglercraftUUID clientBrandUUID = EagUtils.makeClientBrandUUID(projectForkName);
+	public static final EaglercraftUUID clientBrandUUID = EagUtils.makeClientBrandUUID(plebBrandName);
 
 	public static final EaglercraftUUID legacyClientUUIDInSharedWorld = EagUtils.makeClientBrandUUIDLegacy(projectOriginName);
 	
@@ -60,7 +65,7 @@ public class EaglercraftVersion {
 	public static final String mainMenuStringC = "";
 	public static final String mainMenuStringD = "Resources Copyright Mojang AB";
 
-	public static final String mainMenuStringE = projectForkName + " " + projectForkVersion;
+	public static final String mainMenuStringE = projectForkName;
 	public static final String mainMenuStringF = "Made by " + projectForkVendor;
 
 	public static final String mainMenuStringG = "Collector's Edition";

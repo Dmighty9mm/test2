@@ -1258,9 +1258,12 @@ public final class Cosmetics {
 		return slots != null && slots.containsKey("pleb");
 	}
 
-	/** Where players vote for PlebMc (the server can change it; votes pay coins). */
-	public static final String VOTE_URL = "https://eaglercraftservers.com/server/plebmc";
-	private static String voteUrl = VOTE_URL;
+	/**
+	 * Where players vote for PlebMc: the website's Vote page, which lists the vote sites
+	 * set in the website's admin. A server can send another link (voting.url in PlebioAPI).
+	 */
+	private static final String OLD_VOTE_URL = "https://eaglercraftservers.com/server/plebmc";
+	private static String voteUrl = "";
 	private static long voteReward = 100;
 
 	private static long voteAlert = -1;
@@ -1278,7 +1281,8 @@ public final class Cosmetics {
 	}
 
 	public static String voteUrl() {
-		return voteUrl;
+		// one hardcoded site used to be the default everywhere: that now means the website's list
+		return voteUrl.isEmpty() || voteUrl.equals(OLD_VOTE_URL) ? ClientSession.panel() + "/#vote" : voteUrl;
 	}
 
 	/** Coins a vote pays (0 when the server doesn't pay for votes). */

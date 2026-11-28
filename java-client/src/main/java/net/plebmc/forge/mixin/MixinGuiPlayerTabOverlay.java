@@ -12,7 +12,7 @@ import net.minecraft.client.renderer.GlStateManager;
 import net.plebmc.client.hud.PlebEntities;
 import net.plebmc.client.hud.Ui;
 
-/** The Pleb head after the names of players on PlebClient in the tab list. */
+/** The Pleb head before the names of players on PlebClient in the tab list. */
 @Mixin(GuiPlayerTabOverlay.class)
 public abstract class MixinGuiPlayerTabOverlay {
 
@@ -36,17 +36,17 @@ public abstract class MixinGuiPlayerTabOverlay {
 
 	@Redirect(method = "renderPlayerlist", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/FontRenderer;drawStringWithShadow(Ljava/lang/String;FFI)I"))
 	private int plebmc$draw(FontRenderer font, String text, float x, float y, int color) {
-		int r = font.drawStringWithShadow(text, x, y, color);
 		String name = plebmc$name;
 		if (name != null && text != null && text.endsWith(name)) {
 			plebmc$name = null;
 			try {
-				Ui.mascot(x + font.getStringWidth(text) + 2, y, 8, 1f);
+				Ui.mascot(x, y, 8, 1f);
 				GlStateManager.enableBlend();
 			} catch (Throwable t) {
 				// just the name
 			}
+			return font.drawStringWithShadow(text, x + 10, y, color);
 		}
-		return r;
+		return font.drawStringWithShadow(text, x, y, color);
 	}
 }

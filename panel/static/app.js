@@ -1186,7 +1186,7 @@ async function dashboardView() {
     tile("image", "Designs saved", fmt(d.designs))));
   const max = Math.max(1, ...d.signups.map((x) => x.count));
   const bars = h("div", { class: "bars" }, d.signups.map((x) => {
-    const b = h("div", { title: new Date(x.day * 1000).toLocaleDateString() + ": " + x.count + " new" });
+    const b = h("div", { title: new Date(x.day * 1000).toLocaleDateString() + ": " + x.count + " new" }, h("b", { class: x.count ? "" : "zero" }, fmt(x.count)));
     b.style.height = Math.max(2, (x.count / max) * 100) + "%";
     return b;
   }));

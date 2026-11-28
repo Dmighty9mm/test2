@@ -195,16 +195,18 @@ public class GuiPlayerTabOverlay extends Gui {
 					j2 += 9;
 				}
 
+				if (net.plebmc.client.hud.PlebEntities.isPleb(gameprofile.getId())) {
+					// plays on PlebClient: the Pleb head before the name
+					net.plebmc.client.hud.Ui.mascot(j2, k2, 8, 1f);
+					net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.enableBlend();
+					j2 += 10;
+				}
+
 				if (networkplayerinfo1.getGameType() == WorldSettings.GameType.SPECTATOR) {
 					s1 = EnumChatFormatting.ITALIC + s1;
 					this.mc.fontRendererObj.drawStringWithShadow(s1, (float) j2, (float) k2, -1862270977);
 				} else {
 					this.mc.fontRendererObj.drawStringWithShadow(s1, (float) j2, (float) k2, -1);
-				}
-				if (net.plebmc.client.hud.PlebEntities.isPleb(gameprofile.getId())) {
-					// plays on PlebClient: the Pleb head after the name
-					net.plebmc.client.hud.Ui.mascot(j2 + this.mc.fontRendererObj.getStringWidth(s1) + 2, k2, 8, 1f);
-					net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.enableBlend();
 				}
 
 				if (scoreObjectiveIn != null && networkplayerinfo1.getGameType() != WorldSettings.GameType.SPECTATOR) {

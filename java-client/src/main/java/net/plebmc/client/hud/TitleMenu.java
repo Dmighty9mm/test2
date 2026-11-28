@@ -207,6 +207,7 @@ public final class TitleMenu {
 		EasterEggs.titleExtras(w, h, now);
 		showcase(x0, w, h, mx, my, t, acc, slideIn);
 		coinsChip(w, mx, my, acc, slideIn);
+		signOutChip(mx, my, slideIn);
 		footer(x0, w, h, mx, my, splash, acc, slideIn, pr);
 		if (pr.titleBuddy) {
 			buddy(w, h, mx, my, now, slideIn);
@@ -647,6 +648,37 @@ public final class TitleMenu {
 			String tip = guest ? "Guests earn no coins. Click to sign in" : c < 0 ? "Join PlebMc to load your coins" : "Open the shop";
 			int tw = font.getStringWidth(tip);
 			textShadow(font, tip, coinX + coinW - tw, coinY + coinH + 4, Ui.alpha(0xFFDCE4EA, Math.round(0xC0 * hv * in)));
+		}
+	}
+
+	// ---- sign out (top right, left of the coins; only when signed in) ----
+
+	private static int outX, outY, outW, outH;
+	private static float outHover;
+
+	private static void signOutChip(int mx, int my, float in) {
+		outW = 0;
+		if (!net.plebmc.client.cosmetics.ClientSession.signedIn() || net.plebmc.client.cosmetics.ClientSession.guest()) {
+			return;
+		}
+		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
+		String label = "Sign out";
+		outW = 8 + 9 + 5 + font.getStringWidth(label) + 8;
+		outH = 18;
+		outX = coinX - 6 - outW;
+		outY = coinY;
+		boolean over = pending == null && mx >= outX && mx < outX + outW && my >= outY && my < outY + outH;
+		outHover = approach(outHover, over ? 1f : 0f, 14f);
+		float hv = ease(outHover);
+		int a = Math.round(255 * in);
+		roundF(outX, outY, outW, outH, Ui.alpha(0xFF05090E, Math.round((0x9C + 0x30 * hv) * in)));
+		outlineF(outX, outY, outW, outH, Ui.alpha(Ui.mix(0xFF2A3440, 0xFFFF6B6B, hv), a));
+		iconF("nav_logout", outX + 8, outY + 4.5f, 1f, Ui.alpha(Ui.mix(0xFFB9C4CD, 0xFFFF8A8A, hv), a));
+		textShadow(font, label, outX + 22, outY + 5, Ui.alpha(Ui.mix(0xFFDCE4EA, 0xFFFFFFFF, hv), a));
+		if (hv > 0.02f) {
+			String tip = "Signed in as " + net.plebmc.client.cosmetics.ClientSession.name();
+			int tw = font.getStringWidth(tip);
+			textShadow(font, tip, outX + outW - tw, outY + outH + 4, Ui.alpha(0xFFDCE4EA, Math.round(0xC0 * hv * in)));
 		}
 	}
 
@@ -1099,6 +1131,10 @@ public final class TitleMenu {
 				buddyBack = 0;
 			}
 			EasterEggs.plebioClicked();
+			return true;
+		}
+		if (outW > 0 && mx >= outX && mx < outX + outW && my >= outY && my < outY + outH) {
+			start("logout", mx, my);
 			return true;
 		}
 		if (mx >= coinX && mx < coinX + coinW && my >= coinY && my < coinY + coinH) {

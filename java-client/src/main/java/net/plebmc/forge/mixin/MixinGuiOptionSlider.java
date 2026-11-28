@@ -24,7 +24,7 @@ public abstract class MixinGuiOptionSlider {
 	@Inject(method = "mouseDragged", at = @At("TAIL"))
 	private void plebmc$knob(Minecraft mc, int mouseX, int mouseY, CallbackInfo ci) {
 		GuiButton self = (GuiButton) (Object) this;
-		if (self.visible && PlebTheme.enabled()) {
+		if (self.visible && PlebTheme.buttons()) {
 			PlebTheme.sliderKnob(self, self.xPosition + (int) (this.sliderValue * (float) (self.width - 8)), this.dragging);
 		}
 	}

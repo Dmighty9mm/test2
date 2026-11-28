@@ -142,7 +142,10 @@ final class ShopCore {
 		}
 		currency = cfg.str("currency-name", "PlebMc Coins");
 		voteReward = cfg.bool("voting.enabled", true) ? Math.max(0, (long) cfg.dbl("voting.reward", 100)) : 0;
-		voteUrl = cfg.str("voting.url", "https://eaglercraftservers.com/server/plebmc");
+		voteUrl = cfg.str("voting.url", VOTE_PAGE);
+		if (voteUrl.isEmpty() || voteUrl.equals("https://eaglercraftservers.com/server/plebmc")) {
+			voteUrl = VOTE_PAGE; // the old default was one hardcoded site
+		}
 		prefix = color(cfg.str("messages.prefix", "&8[&b&lPlebMc&8] &7"));
 		hiddenWorlds.clear();
 		for (String w : cfg.list("hidden-in-worlds")) {
@@ -1070,7 +1073,9 @@ final class ShopCore {
 	// ==================== voting ====================
 
 	long voteReward = 100;
-	String voteUrl = "https://eaglercraftservers.com/server/plebmc";
+	/** The website's Vote page: it lists the vote sites set in the website's admin (Site content). */
+	static final String VOTE_PAGE = "https://plebmc.top/#vote";
+	String voteUrl = VOTE_PAGE;
 	/** Votes for names that haven't joined yet (paid when they join). */
 	private final Map<String, Integer> pendingVotes = new HashMap<>();
 	/** The last vote per name, so a server list sending one vote twice doesn't pay twice. */

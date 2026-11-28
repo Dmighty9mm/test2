@@ -570,6 +570,25 @@ class Panel:
         self.code_throttle = Throttle(max_fails=10, window=FAIL_WINDOW, clock=clock)
         # accounts made from the client per address
         self.signup_throttle = Throttle(max_fails=cfg.client_registrations_per_hour, window=3600, clock=clock)
+        self.reset_client_versions()
+
+    def reset_client_versions(self):
+        """Once: PlebClient's version numbers start over at 1.0 (the first public release). The builds before it
+        called themselves 2.0 and 2.1, so their rows leave "versions in use", and a Latest or Minimum version
+        of 2.0 or above (which would tell every 1.0 client it is out of date) goes back to 1.0."""
+        if self.db.get_kv("client_versions_reset_1_0", None):
+            return
+        for r in self.db.all("SELECT DISTINCT version FROM client_seen"):
+            if version_key(r["version"]) >= (2, 0, 0, 0):
+                self.db.run("DELETE FROM client_seen WHERE version=?", r["version"])
+        rel = self.db.get_kv("client_release", None)
+        if rel:
+            if rel.get("latest") and version_key(rel["latest"]) >= (2, 0, 0, 0):
+                rel["latest"] = "1.0"
+            if rel.get("minimum") and version_key(rel["minimum"]) >= (2, 0, 0, 0):
+                rel["minimum"] = ""
+            self.db.set_kv("client_release", rel)
+        self.db.set_kv("client_versions_reset_1_0", True)
 
     def now(self):
         return int(self.clock())

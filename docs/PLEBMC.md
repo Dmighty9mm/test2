@@ -411,7 +411,7 @@ updates on the website. "Download update" on the client's update screen fetches 
 platform's build from the website's Downloads page (`/api/dl/offline`, `/api/dl/wasm` or
 `/api/dl/forge-1.8.9`), and **Website** opens the Downloads page. If the owner typed a link
 of their own under Client updates, the button opens that link instead. The Windows app opens
-the Downloads page. Each build's version is `UpdateCheck.VERSION` (1.0 for the first public release; raise it per release, together with `projectForkVersion` in `client-u53/overlay/.../EaglercraftVersion.java`). The browser client reports the brand **PlebClient** to Eaglercraft servers (its own brand UUID `a8621e2b-c62f-3e4f-b5e0-682d06aa1a61`), so EaglerXServer and EaglerXPlan no longer list it as vanilla Eagler.
+the Downloads page. Each build's version is `UpdateCheck.VERSION` (1.0 for the first public release; raise it per release, together with `projectForkVersion` in `client-u53/overlay/.../EaglercraftVersion.java`). The browser client reports the brand string **PlebClient 1.0** (name and PlebClient version; the Eagler client version stays `u53`) to Eaglercraft servers, with its own brand UUID `a8621e2b-c62f-3e4f-b5e0-682d06aa1a61` (made from `PlebClient`, the same in every release), so EaglerXServer and EaglerXPlan no longer list it as vanilla Eagler. EaglercraftX's own update checker is off (`enableUpdateService = false`): PlebClient has its own. Version numbers started over at 1.0: the website drops its records of 2.x clients once, and a Latest or Minimum version of 2.0 or above goes back to 1.0 (`reset_client_versions` in `panel/app.py`).
 
 ### Skin and cape are kept
 
@@ -869,6 +869,12 @@ With the PlebClient menus on, `hud/TitleMenu.java` replaces the vanilla title sc
 **Settings > Title screen** (the sidebar's Customize entry) sets the sidebar (opens on hover, always open, icons only), the background (wallpaper or panorama), how much it is darkened, the mini mascot, the particles, the mascot head, a clock, the splash text and the accent color (12 colors). Turning the PlebClient menus off brings back the classic menu.
 
 ## Menu theme
+
+Buttons and sliders get the Pleb look everywhere, the pause menu included, unless a texture pack in use has its own `textures/gui/widgets.png` (`PlebTheme.buttons()`): then the pack's buttons show. The title screen is PlebClient's own and always keeps the Pleb look. Signed in, the title screen has a Sign out button next to the coins. In the tab list, players on PlebClient have the Pleb head before their name.
+
+The Vote button and `/vote` open the website's Vote page (`https://plebmc.top/#vote`), which lists the vote sites set in the website's admin (Site content), so vote sites are added there and nowhere else. `voting.url` in PlebioAPI's config can point somewhere else.
+
+PlebNite item models on WASM: the WASM build's file listing returns nothing for a non-recursive listing of a folder, so `FolderPackFiles.list` lists recursively and keeps the direct children.
 
 `hud/PlebTheme.java` restyles every vanilla menu (buttons, sliders, backgrounds, lists, the title screen wordmark) in the PlebClient look. **Settings > PlebClient menus** turns it off (on by default; `ClientPrefs.modernMenus`). The Forge port does the same with mixins (`MixinGuiButton`, `MixinGuiScreen`, `MixinGuiSlot`, `MixinGuiMainMenu`, the slider mixins).
 
