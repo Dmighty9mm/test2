@@ -339,6 +339,9 @@ IDEA_SECTIONS = ("PlebMc", "PlebNite", "PlebRPG", "Other")
 IDEA_PRIORITIES = ("urgent", "high", "medium", "low")
 IDEA_STATUSES = ("idea", "planned", "doing", "done", "dropped")
 MAX_IDEA = 4000
+# LiteBans punishments, sent by PlebioAPI on the proxy
+PUNISH_KINDS = ("ban", "mute", "warn", "kick")
+PUNISH_STATUSES = ("active", "expired", "removed")
 PNG_SIG = b"\x89PNG\r\n\x1a\n"
 SKIN_FRESH = 24 * 3600        # look a Minecraft account's skin up again after a day
 SKIN_MISS = 6 * 3600          # and a name without one after six hours
@@ -536,6 +539,26 @@ CREATE TABLE IF NOT EXISTS ideas (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS punishments (
+  kind TEXT NOT NULL,
+  id INTEGER NOT NULL,
+  uuid TEXT NOT NULL DEFAULT '',
+  name TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  staff TEXT NOT NULL DEFAULT '',
+  at INTEGER NOT NULL DEFAULT 0,
+  until INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 0,
+  removed_by TEXT NOT NULL DEFAULT '',
+  removed_reason TEXT NOT NULL DEFAULT '',
+  removed_at INTEGER NOT NULL DEFAULT 0,
+  server TEXT NOT NULL DEFAULT '',
+  ip_ban INTEGER NOT NULL DEFAULT 0,
+  silent INTEGER NOT NULL DEFAULT 0,
+  sweep INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (kind, id)
+);
+CREATE INDEX IF NOT EXISTS punishments_at ON punishments(at);
 CREATE TABLE IF NOT EXISTS client_seen (
   day INTEGER NOT NULL,
   version TEXT NOT NULL,
@@ -1904,6 +1927,109 @@ class Panel:
             raise ApiError(400, "Unknown action.")
         return self.ideas()
 
+    # ---------- punishments (LiteBans on the proxy, read and sent by PlebioAPI) ----------
+
+    def punishments_sync(self, body):
+        """Rows PlebioAPI read from LiteBans. A full pass ("sweep") ends by dropping rows LiteBans no longer has."""
+        now = self.now()
+        state = {"at": now, "available": bool(body.get("available", True)), "reason": str(body.get("reason") or "")[:200]}
+        rows = body.get("rows")
+        sweep = body.get("sweep") if isinstance(body.get("sweep"), dict) else None
+        try:
+            sweep_id = int(sweep.get("id") or 0) if sweep else 0
+        except (TypeError, ValueError):
+            sweep_id = 0
+
+        def num(v, ms=False):
+            try:
+                n = int(v or 0)
+            except (TypeError, ValueError):
+                return 0
+            return max(0, n // 1000 if ms else n)
+
+        def text(v, limit):
+            return "" if v is None else str(v)[:limit]
+
+        saved = 0
+        with self.db.tx() as c:
+            for r in rows if isinstance(rows, list) else []:
+                if not isinstance(r, dict) or r.get("kind") not in PUNISH_KINDS:
+                    continue
+                pid = num(r.get("id"))
+                if not pid:
+                    continue
+                c.execute("INSERT OR REPLACE INTO punishments(kind,id,uuid,name,reason,staff,at,until,active,removed_by,"
+                          "removed_reason,removed_at,server,ip_ban,silent,sweep) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                          (r["kind"], pid, text(r.get("uuid"), 36).lower(), text(r.get("name"), 32), text(r.get("reason"), 500),
+                           text(r.get("staff"), 32), num(r.get("time"), True), num(r.get("until"), True), 1 if r.get("active") else 0,
+                           text(r.get("removedBy"), 32), text(r.get("removedReason"), 500), num(r.get("removedAt"), True),
+                           text(r.get("server"), 64), 1 if r.get("ipBan") else 0, 1 if r.get("silent") else 0, sweep_id))
+                saved += 1
+            if sweep and sweep.get("done") and sweep_id:
+                # the proxy just sent everything LiteBans has for these kinds: what it didn't send was deleted there
+                for kind in sweep.get("kinds") or []:
+                    if kind in PUNISH_KINDS:
+                        c.execute("DELETE FROM punishments WHERE kind=? AND sweep<>?", (kind, sweep_id))
+        if sweep and sweep.get("done"):
+            state["full"] = now
+        else:
+            state["full"] = (self.db.get_kv("punishments_state") or {}).get("full", 0)
+        self.db.set_kv("punishments_state", state)
+        return {"ok": True, "saved": saved}
+
+    @staticmethod
+    def punishment_status(r, now):
+        """active, expired or removed (lifted by staff). A kick is over as soon as it happens, so it has none."""
+        if r["kind"] == "kick":
+            return ""
+        if r["removed_by"] and not r["removed_by"].startswith("#") and not r["active"]:
+            return "removed"
+        if not r["active"] or (r["until"] > 0 and r["until"] <= now):
+            return "expired"
+        return "active"
+
+    def punishments_page(self, q="", kind="", status="", offset=0):
+        now = self.now()
+        where, args = ["1=1"], []
+        if kind in PUNISH_KINDS:
+            where.append("kind=?")
+            args.append(kind)
+        lifted = "(active=0 AND removed_by<>'' AND removed_by NOT LIKE '#%')"
+        if status == "active":
+            where.append("kind<>'kick' AND active=1 AND (until<=0 OR until>?)")
+            args.append(now)
+        elif status == "removed":
+            where.append("kind<>'kick' AND " + lifted)
+        elif status == "expired":
+            where.append("kind<>'kick' AND NOT " + lifted + " AND (active=0 OR (until>0 AND until<=?))")
+            args.append(now)
+        q = str(q or "").strip()[:60]
+        if q:
+            like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            where.append("(name LIKE ? ESCAPE '\\' OR staff LIKE ? ESCAPE '\\' OR reason LIKE ? ESCAPE '\\' OR removed_by LIKE ? ESCAPE '\\' OR uuid=?)")
+            args += [like, like, like, like, q.lower()]
+        where = " AND ".join(where)
+        offset = max(0, int(offset or 0))
+        total = self.db.one("SELECT COUNT(*) n FROM punishments WHERE " + where, *args)["n"]
+        rows = self.db.all("SELECT * FROM punishments WHERE " + where + " ORDER BY at DESC, id DESC LIMIT ? OFFSET ?",
+                           *(args + [PAGE, offset]))
+        items = [{"kind": r["kind"], "id": r["id"], "uuid": r["uuid"], "name": r["name"], "reason": r["reason"], "staff": r["staff"],
+                  "at": r["at"], "until": r["until"], "status": self.punishment_status(r, now),
+                  "removedBy": "" if r["removed_by"].startswith("#") else r["removed_by"], "removedReason": r["removed_reason"],
+                  "removedAt": r["removed_at"], "server": r["server"], "ipBan": bool(r["ip_ban"]), "silent": bool(r["silent"])}
+                 for r in rows]
+        counts = {k: {"total": 0, "active": 0} for k in PUNISH_KINDS}
+        for r in self.db.all("SELECT kind, COUNT(*) n, SUM(CASE WHEN active=1 AND (until<=0 OR until>?) THEN 1 ELSE 0 END) a "
+                             "FROM punishments GROUP BY kind", now):
+            if r["kind"] in counts:
+                counts[r["kind"]] = {"total": r["n"], "active": 0 if r["kind"] == "kick" else r["a"] or 0}
+        st = self.db.get_kv("punishments_state") or {}
+        at = st.get("at", 0)
+        # PlebioAPI checks in at least every 2 minutes
+        source = {"connected": now - at < 300, "lastSync": at, "available": bool(st.get("available")) if at else False,
+                  "reason": st.get("reason", ""), "ever": bool(at), "full": st.get("full", 0)}
+        return {"ok": True, "items": items, "total": total, "more": offset + len(items) < total, "counts": counts, "source": source}
+
     # ---------- the panel updating itself ----------
 
     def update_settings(self):
@@ -2645,6 +2771,10 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST" and route == "admin/ranks":
             actor = self.web_user(role="owner")
             return self.send_json(200, p.rank_change(actor, self.body()))
+        if method == "GET" and route == "admin/punishments":
+            self.web_user(role="admin")
+            offset = one("offset")
+            return self.send_json(200, p.punishments_page(one("q"), one("kind"), one("status"), int(offset) if offset.isdigit() else 0))
         if method == "GET" and route == "admin/audit":
             self.web_user(role="admin")
             before = one("before")
@@ -2686,7 +2816,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, {"commands": p.pending()})
         if method != "POST":
             raise ApiError(404, "Not found.")
-        b = self.body(limit=16 * 1024 * 1024 if route in ("sync", "asset") else 64 * 1024)
+        b = self.body(limit=16 * 1024 * 1024 if route in ("sync", "asset", "punishments") else 64 * 1024)
         if route == "login":
             return self.send_json(200, p.game_login(str(b.get("name") or ""), b.get("password"), bool(b.get("remember"))))
         if route == "token":
@@ -2710,6 +2840,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, p.sync(b))
         if route == "asset":
             return self.send_json(200, p.put_asset(b))
+        if route == "punishments":
+            return self.send_json(200, p.punishments_sync(b))
         if route == "ack":
             for a in b.get("results") or []:
                 if isinstance(a, dict) and isinstance(a.get("id"), int):

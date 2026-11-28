@@ -445,6 +445,64 @@ class PanelLogic(unittest.TestCase):
         got = self.p.idea_action(mod, {"action": "delete", "id": pets})
         self.assertEqual(sum(len(s["ideas"]) for s in got["sections"]), 0)
 
+    def test_punishments_from_litebans(self):
+        now = self.p.now()
+        ms = lambda sec: sec * 1000
+        self.assertFalse(self.p.punishments_page()["source"]["ever"])
+        rows = [
+            {"kind": "ban", "id": 1, "uuid": "U-1", "name": "Griefer", "reason": "Griefing spawn", "staff": "Mod", "time": ms(now - 500), "until": 0, "active": True},
+            {"kind": "ban", "id": 2, "uuid": "u-2", "name": "Cheater", "reason": "Fly hacks", "staff": "Console", "time": ms(now - 400), "until": ms(now - 10), "active": True},
+            {"kind": "ban", "id": 3, "uuid": "u-3", "name": "Sorry", "reason": "Spam", "staff": "Mod", "time": ms(now - 300), "until": 0, "active": False,
+             "removedBy": "Boss", "removedReason": "Appealed", "removedAt": ms(now - 5)},
+            {"kind": "ban", "id": 4, "uuid": "u-4", "name": "Old", "reason": "x", "staff": "Mod", "time": ms(now - 900), "until": ms(now - 800), "active": False, "removedBy": "#expired"},
+            {"kind": "mute", "id": 1, "uuid": "u-1", "name": "Griefer", "reason": "100% toxic_chat", "staff": "Mod", "time": ms(now - 200), "until": ms(now + 3600), "active": True},
+            {"kind": "warn", "id": 1, "uuid": "u-5", "name": "Newbie", "reason": "Caps", "staff": "Helper", "time": ms(now - 100), "until": 0, "active": True},
+            {"kind": "kick", "id": 1, "uuid": "u-5", "name": "Newbie", "reason": "AFK", "staff": "Helper", "time": ms(now - 50), "until": 0, "active": True, "server": "plebnite"},
+            {"kind": "nuke", "id": 9, "name": "x"}, {"kind": "ban"}, "junk",
+        ]
+        self.assertEqual(self.p.punishments_sync({"available": True, "rows": rows})["saved"], 7)
+        page = self.p.punishments_page()
+        self.assertEqual([(i["kind"], i["name"], i["status"]) for i in page["items"]],
+                         [("kick", "Newbie", ""), ("warn", "Newbie", "active"), ("mute", "Griefer", "active"), ("ban", "Sorry", "removed"),
+                          ("ban", "Cheater", "expired"), ("ban", "Griefer", "active"), ("ban", "Old", "expired")])
+        self.assertEqual(page["counts"], {"ban": {"total": 4, "active": 1}, "mute": {"total": 1, "active": 1},
+                                          "warn": {"total": 1, "active": 1}, "kick": {"total": 1, "active": 0}})
+        self.assertTrue(page["source"]["connected"] and page["source"]["available"])
+        sorry = page["items"][3]
+        self.assertEqual((sorry["removedBy"], sorry["removedReason"], sorry["removedAt"], sorry["until"]), ("Boss", "Appealed", now - 5, 0))
+        self.assertEqual(page["items"][6]["removedBy"], "")
+        self.assertEqual(page["items"][2]["until"], now + 3600)
+        names = lambda **kw: [(i["kind"], i["name"]) for i in self.p.punishments_page(**kw)["items"]]
+        self.assertEqual(names(kind="ban", status="active"), [("ban", "Griefer")])
+        self.assertEqual(names(status="expired"), [("ban", "Cheater"), ("ban", "Old")])
+        self.assertEqual(names(status="removed"), [("ban", "Sorry")])
+        self.assertEqual(names(status="active"), [("warn", "Newbie"), ("mute", "Griefer"), ("ban", "Griefer")])
+        self.assertEqual(names(q="griefer"), [("mute", "Griefer"), ("ban", "Griefer")])
+        self.assertEqual(names(q="helper"), [("kick", "Newbie"), ("warn", "Newbie")])
+        self.assertEqual(names(q="fly"), [("ban", "Cheater")])
+        self.assertEqual(names(q="u-1"), [("mute", "Griefer"), ("ban", "Griefer")])
+        self.assertEqual(names(q="%"), [("mute", "Griefer")])
+        self.assertEqual(names(q="_"), [("mute", "Griefer")])
+        self.assertEqual(names(kind="kick"), [("kick", "Newbie")])
+        # the mute runs out by itself
+        self.clock.t += 7200
+        self.assertEqual(names(status="active"), [("warn", "Newbie"), ("ban", "Griefer")])
+        # an unban shows up on the next sync; a full pass drops what LiteBans no longer has
+        rows[0].update(active=False, removedBy="Boss", removedAt=ms(self.p.now()))
+        self.p.punishments_sync({"available": True, "rows": rows[:2], "sweep": {"id": 77, "kinds": ["ban"]}})
+        self.assertEqual(len(names(kind="ban")), 4)
+        self.p.punishments_sync({"available": True, "rows": rows[2:3], "sweep": {"id": 77, "kinds": ["ban"], "done": True}})
+        self.assertEqual(names(kind="ban"), [("ban", "Sorry"), ("ban", "Cheater"), ("ban", "Griefer")])
+        self.assertEqual(names(kind="ban", status="removed"), [("ban", "Sorry"), ("ban", "Griefer")])
+        self.assertEqual(len(names()), 6)
+        # LiteBans missing on the proxy
+        self.p.punishments_sync({"available": False, "reason": "LiteBans isn't on this proxy."})
+        src = self.p.punishments_page()["source"]
+        self.assertEqual((src["available"], src["reason"], src["connected"]), (False, "LiteBans isn't on this proxy.", True))
+        self.assertEqual(len(names()), 6)
+        self.clock.t += 600
+        self.assertFalse(self.p.punishments_page()["source"]["connected"])
+
     def test_coin_gift_says_who_gets_it(self):
         owner = {"name": "Boss", "role": "owner"}
         for flag, args in ((True, [50, "client"]), (False, [50, "all"]), (None, [50])):
@@ -1054,6 +1112,12 @@ class PanelHttp(unittest.TestCase):
         s, _, _ = self.call("/static/../app.py")
         self.assertEqual(s, 404)
 
+
+    def test_punishments_are_for_admins(self):
+        s, _, _ = self.call("/api/admin/punishments")
+        self.assertEqual(s, 401)
+        s, _, _ = self.call("/api/server/punishments", {"rows": []}, headers={"Authorization": "Bearer nope"})
+        self.assertEqual(s, 401)
 
     def test_stats_key_only_sends_stats(self):
         self.p.cfg.stats_key = "s" * 40

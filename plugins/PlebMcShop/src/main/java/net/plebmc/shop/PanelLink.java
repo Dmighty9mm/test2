@@ -78,6 +78,11 @@ final class PanelLink {
 		call("POST", "asset", body("hash", hash, "data", java.util.Base64.getEncoder().encodeToString(data)));
 	}
 
+	/** LiteBans' bans, mutes, warnings and kicks, for the panel's Punishments page (see Punishments). */
+	void punishments(Map<String, Object> body) throws IOException {
+		call("POST", "punishments", body);
+	}
+
 	/** Changes queued by admins on the panel: [{id, target, action, args, by}] */
 	List<Map<?, ?>> commands() throws IOException {
 		Object c = call("GET", "commands", null).get("commands");

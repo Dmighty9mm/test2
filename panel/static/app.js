@@ -290,9 +290,9 @@ function pager(container, load, render, opts = {}) {
 
 // [id, label, icon, needs: "me" (signed in), "admin" or "owner"]
 const NAV = [["home", "Home", "home"], ["downloads", "Download", "download"], ["leaderboard", "Leaderboards", "trophy"], ["stats", "Stats", "chart"], ["shop", "Shop", "bag"], ["news", "News", "megaphone"], ["vote", "Vote", "heart"]];
-const ADMIN_NAV = [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["announce", "Announcements", "megaphone"], ["ideas", "Ideas", "bulb"],
+const ADMIN_NAV = [["admin", "Dashboard", "grid"], ["players", "Players", "users"], ["ranks", "Ranks", "crown"], ["punishments", "Punishments", "shield"], ["announce", "Announcements", "megaphone"], ["ideas", "Ideas", "bulb"],
   ["site", "Site content", "edit", "owner"], ["makers", "Cosmetic makers", "hammer"], ["publish", "Publish to shop", "upload"], ["client", "Updates", "refresh"], ["audit", "Admin log", "list"]];
-const ADMIN_VIEWS = new Set(["admin", "players", "player", "ranks", "rank", "announce", "ideas", "site", "makers", "publish", "client", "audit"]);
+const ADMIN_VIEWS = new Set(["admin", "players", "player", "ranks", "rank", "punishments", "announce", "ideas", "site", "makers", "publish", "client", "audit"]);
 // page headings: [first word, second word (in color), a line under it]
 const HEADS = {
   downloads: ["Get", "PlebClient", "Pick how you want to play. The first time you start it, make your PlebMc account on the start screen."],
@@ -1440,7 +1440,8 @@ async function playerView() {
   wrap.append(h("div", { style: "height:18px" }));
 
   const reason = h("input", { placeholder: "Kick reason", value: "Kicked by an admin." });
-  const mod = card("Moderation", h("div", { class: "row" }, reason, h("button", { class: "danger", onclick: () => act({ action: "kick", reason: reason.value }) }, "Kick")));
+  const mod = card("Moderation", h("div", { class: "row" }, reason, h("button", { class: "danger", onclick: () => act({ action: "kick", reason: reason.value }) }, "Kick")),
+    h("p", { class: "muted", style: "margin:10px 0 0" }, h("a", { href: "#punishments?q=" + encodeURIComponent(r.name) }, "Bans, mutes, warnings and kicks for " + r.name + " →")));
   if (acc) {
     const npw = h("input", { type: "password", placeholder: "New password (8+)", autocomplete: "new-password" });
     const nname = h("input", { placeholder: "New username", maxlength: 16, autocomplete: "off", "aria-label": "New username" });
@@ -2082,6 +2083,89 @@ async function downloadsView() {
     h("p", { class: "faint", style: "font-size:13px;margin:18px 0 0" }, "Got PlebClient already? It tells you on its start screen when a newer version is out."));
 }
 
+// ==================== admin: punishments (LiteBans) ====================
+const PUNISH_KIND = { ban: ["Ban", "bad"], mute: ["Mute", "warn"], warn: ["Warning", "admin"], kick: ["Kick", ""] };
+const PUNISH_STATUS = { active: ["Active", "bad"], expired: ["Expired", ""], removed: ["Removed", "good"] };
+/** "in 3 d", "in 2 h": how long until a time in the future. */
+function until(t) {
+  const s = t - Date.now() / 1000;
+  if (s < 60) return "in under a minute";
+  if (s < 3600) return "in " + Math.floor(s / 60) + " min";
+  if (s < 86400) return "in " + Math.floor(s / 3600) + " h";
+  if (s < 86400 * 60) return "in " + Math.floor(s / 86400) + " d";
+  return new Date(t * 1000).toLocaleDateString();
+}
+
+async function punishmentsView() {
+  const p0 = params();
+  const state = { q: p0.q || "", kind: p0.kind || "", status: p0.status || "" };
+  const status = h("p", { class: "muted" });
+  const tiles = h("div", { class: "tiles" });
+  const search = h("input", { placeholder: "Search by player, staff member or reason", "aria-label": "Search punishments", value: state.q, type: "search" });
+  const statusSel = select("pstatus", [["", "Any status"], ["active", "Active"], ["expired", "Expired"], ["removed", "Removed by staff"]], state.status);
+  statusSel.setAttribute("aria-label", "Status");
+  const chips = h("div", { class: "chips" });
+  const body = h("tbody");
+  const keep = () => history.replaceState(null, "", "#punishments?" + new URLSearchParams(Object.entries(state).filter(([, v]) => v)).toString());
+  const setKind = (k) => { state.kind = k; drawChips(); keep(); pg.reset(); };
+  // a name with its skin head; players link to their admin page
+  const person = (name, fallback, link) => {
+    if (!name) return h("span", { class: "muted" }, fallback);
+    const real = /^[A-Za-z0-9_]{3,16}$/.test(name) && name.toLowerCase() !== "console";
+    const inner = [real ? initial(name) : null, name];
+    return link && real ? h("a", { class: "pun-who", href: "#player?name=" + encodeURIComponent(name) }, inner) : h("span", { class: "pun-who" }, inner);
+  };
+  const expiry = (x) => {
+    if (x.kind === "kick") return h("span", { class: "faint" }, "–");
+    if (x.status === "removed") return h("span", { class: "muted", title: x.removedAt ? when(x.removedAt) : "" }, x.removedAt ? "lifted " + ago(x.removedAt) : "lifted");
+    if (!x.until) return x.status === "active" ? h("b", {}, "Permanent") : h("span", { class: "muted" }, "Permanent");
+    return h("span", { class: x.status === "active" ? "" : "muted", title: when(x.until) }, x.until * 1000 > Date.now() ? until(x.until) : ago(x.until));
+  };
+  const row = (x) => {
+    const [klabel, kcls] = PUNISH_KIND[x.kind] || [x.kind, ""];
+    const st = PUNISH_STATUS[x.status];
+    const lifted = x.status === "removed" ? "Removed by " + (x.removedBy || "staff") + (x.removedReason ? ": " + x.removedReason : "") : "";
+    return h("tr", { class: "pun s-" + (x.status || "none") },
+      h("td", {}, h("span", { class: "pill " + kcls }, klabel), x.ipBan ? h("span", { class: "pill", title: "This one is on the IP address too" }, "IP") : null),
+      h("td", {}, person(x.name, x.ipBan ? "An IP address" : "Unknown player", true)),
+      h("td", {}, person(x.staff, "Unknown", false)),
+      h("td", { class: "wrap" }, x.reason || h("span", { class: "faint" }, "No reason given"),
+        x.server && x.server !== "*" ? h("small", { class: "faint" }, " · on " + x.server) : null,
+        lifted ? h("small", { class: "pun-lifted" }, lifted) : null),
+      h("td", { title: when(x.at) }, ago(x.at)),
+      h("td", {}, expiry(x)),
+      h("td", {}, st ? h("span", { class: "pill " + st[1] }, st[0]) : h("span", { class: "faint" }, "–")));
+  };
+  const drawSource = (src) => {
+    let text;
+    if (!src.ever) text = "Nothing from the proxy yet. Punishments show up here once the newest PlebioAPI is on the BungeeCord proxy next to LiteBans.";
+    else if (!src.available) text = "The proxy can't read LiteBans" + (src.reason ? ": " + src.reason : ".");
+    else if (!src.connected) text = "The proxy isn't connected (last update " + ago(src.lastSync) + "). This is the list as it was then.";
+    else text = "Read from LiteBans on the proxy · updated " + ago(src.lastSync);
+    status.replaceChildren(h("span", { class: "dot" + (src.connected && src.available ? " on" : "") }), text);
+  };
+  const drawTiles = (c) => tiles.replaceChildren(
+    ...[["ban", "Bans", "active now"], ["mute", "Mutes", "active now"], ["warn", "Warnings", "still counting"]].map(([k, label, sub]) =>
+      tile("shield", label, fmt(c[k].total), fmt(c[k].active) + " " + sub)),
+    tile("shield", "Kicks", fmt(c.kick.total), "in total"));
+  const drawChips = () => chips.replaceChildren(...[["", "All"], ["ban", "Bans"], ["mute", "Mutes"], ["warn", "Warnings"], ["kick", "Kicks"]]
+    .map(([k, t]) => h("button", { class: "chip", "aria-pressed": String(k === state.kind), onclick: () => setKind(k) }, t)));
+  const pg = pager(body, async (offset) => {
+    const r = await api("admin/punishments?" + new URLSearchParams({ ...state, offset }).toString());
+    if (offset === 0) { drawSource(r.source); drawTiles(r.counts); }
+    return { items: r.items, total: r.total, more: r.more };
+  }, row, { empty: () => h("tr", {}, h("td", { class: "muted", colspan: "7" },
+    state.q || state.kind || state.status ? "No punishments match that." : "No punishments yet.")) });
+  drawChips();
+  let timer;
+  search.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => { state.q = search.value.trim(); keep(); pg.reset(); }, 250); });
+  statusSel.addEventListener("change", () => { state.status = statusSel.value; keep(); pg.reset(); });
+  pg.reset();
+  return h("div", {}, tiles, card("Punishments", status, h("div", { class: "row" }, search, statusSel), h("div", { style: "height:10px" }), chips, h("div", { style: "height:10px" }),
+    h("div", { class: "scroll" }, h("table", { class: "pun-table" }, h("thead", {}, h("tr", {}, h("th", {}, "Type"), h("th", {}, "Player"), h("th", {}, "By"), h("th", {}, "Reason"),
+      h("th", {}, "When"), h("th", {}, "Expires"), h("th", {}, "Status"))), body)), pg.more));
+}
+
 // ==================== admin: log ====================
 
 async function auditView() {
@@ -2269,6 +2353,7 @@ const VIEWS = {
   rank: ["Rank", rankView, "admin"],
   announce: ["Announcements", announceView, "admin"],
   ideas: ["Ideas", ideasView, "admin"],
+  punishments: ["Punishments", punishmentsView, "admin"],
   news: ["News", newsView],
   site: ["Site content", siteView, "owner"],
   publish: ["Publish to shop", publishView, "admin"],

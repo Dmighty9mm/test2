@@ -133,6 +133,9 @@ accounts:
   server-key: ''
   # A name that has an account must sign in this soon after joining or is kicked (0 = never kick)
   sign-in-seconds: 90
+  # Show LiteBans' bans, mutes, warnings and kicks on the panel's Punishments page (admins
+  # only). Needs LiteBans on this proxy. It only reads, and never sends IP addresses.
+  punishments: true
 
 messages:
   prefix: '&8[&b&lPlebMc&8] &7'

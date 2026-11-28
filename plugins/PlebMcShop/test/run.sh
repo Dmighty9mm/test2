@@ -5,7 +5,9 @@ set -e
 cd "$(dirname "$0")/.."
 ./build.sh >/dev/null
 rm -rf build/test && mkdir -p build/test
+# H2 (LiteBans' default database) for PunishmentsTest; tests only
+[ -f lib/h2-1.4.200.jar ] || curl -sSfL -o lib/h2-1.4.200.jar https://repo1.maven.org/maven2/com/h2database/h2/1.4.200/h2-1.4.200.jar
 C=../../sources/main/java/net/plebmc/client
-L=lib/gson-2.8.0.jar:lib/snakeyaml-2.2.jar:lib/api-5.4.jar:../../gateway/EaglercraftXBungee/EaglerXBungee-Latest.jar:$(ls lib/bungeecord-*.jar | tr "\n" ":")
+L=lib/h2-1.4.200.jar:lib/gson-2.8.0.jar:lib/snakeyaml-2.2.jar:lib/api-5.4.jar:../../gateway/EaglercraftXBungee/EaglerXBungee-Latest.jar:$(ls lib/bungeecord-*.jar | tr "\n" ":")
 javac -nowarn -cp build/classes:$L -d build/test $(find test -name '*.java') $(find $C/cosmetics $C/network $C/apollo -name '*.java') $C/mods/SettingsStore.java
 java -cp build/test:build/classes:$L net.plebmc.shop.ShopTest
