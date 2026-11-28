@@ -1,6 +1,6 @@
 name: PlebioAPI
-version: 2.2.0
+version: 2.3.0
 main: net.plebmc.shop.BungeeShop
 author: PlebMc
 description: PlebMc Coins, quests and the cosmetics shop for the PlebMc client (plebmc:shop channel)
-softDepends: [EaglercraftXBungee, nLogin, LuckPerms]
+softDepends: [EaglercraftXBungee, nLogin, LuckPerms, LiteBans]

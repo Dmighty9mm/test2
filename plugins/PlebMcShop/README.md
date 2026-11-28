@@ -13,6 +13,9 @@ work on every server behind the proxy.
 - **Spending**: hats and HD cloaks, in shop collections (PlebMc, Partners, ...). Everyone on the PlebMc client sees each other's (per server).
 - **PlebMc accounts**: players sign in to their PlebMc account (the panel, `panel/`), which
   proves who they are on a cracked server. Admin and owner accounts get the client's admin menu.
+- **Punishments on the panel**: with LiteBans on the same proxy, its bans, mutes, warnings and
+  kicks show on the panel's admin-only Punishments page (read-only, no IP addresses, nothing to
+  set up; `accounts.punishments: false` turns it off).
 - **Publish from the panel**: hats and cloaks made in the panel's makers go straight into the
   shop (the file is saved, the item is added to `items:` and the shop reloads).
 

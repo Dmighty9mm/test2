@@ -172,6 +172,7 @@ public final class BungeeShop extends Plugin implements Listener {
 		getProxy().getScheduler().schedule(this, signin::tick, 5, 5, TimeUnit.SECONDS);
 		getProxy().getScheduler().schedule(this, this::pollPanel, 5, 3, TimeUnit.SECONDS);
 		getProxy().getScheduler().schedule(this, this::syncPanel, 10, 20, TimeUnit.SECONDS);
+		getProxy().getScheduler().schedule(this, this::syncPunishments, 15, 20, TimeUnit.SECONDS);
 		getProxy().getScheduler().schedule(this, core::minute, 1, 1, TimeUnit.MINUTES);
 		getProxy().getScheduler().schedule(this, core::saveIfDirty, 30, 30, TimeUnit.SECONDS);
 		getLogger().info(core.catalog.all().size() + " cosmetics, " + core.quests.allQuests().size() + " quests in "
@@ -591,6 +592,21 @@ public final class BungeeShop extends Plugin implements Listener {
 				lastSync = now;
 			}
 		}
+	}
+
+	/** LiteBans' punishments for the panel's admin page (found when first needed, after every plugin enabled). */
+	private Punishments punishments;
+
+	/** Every 20 s: send the panel LiteBans' newest bans, mutes, warnings and kicks (when something changed). */
+	private void syncPunishments() {
+		PanelLink link = panelLink;
+		if (!accountsOn() || link == null || !core.config.bool("accounts.punishments", true)) {
+			return;
+		}
+		if (punishments == null) {
+			punishments = new Punishments(null, getLogger());
+		}
+		punishments.tick(link::punishments, System.currentTimeMillis());
 	}
 
 	/** Every 3 s: apply changes admins made on the panel (coins, cosmetics, kicks, sign-outs). */

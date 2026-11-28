@@ -255,6 +255,22 @@ ranks over to the new name and kicks the old one if it is online. Whatever a gam
 under the old name (inventory, world progress) does not follow. A name with an account, or one
 somebody has already played under, can't be taken.
 
+## Punishments (admins)
+
+**Admin > Punishments** lists the bans, mutes, warnings and kicks from **LiteBans**: the player,
+who gave it, the reason, when, when it runs out, and whether it is active, expired or was
+removed by staff (with who lifted it and why). Search by player, staff member or reason, and
+filter by type and status. A player's admin page links to their punishments. The page only
+shows them: banning and unbanning stay in game.
+
+There is nothing to set up on the panel and no database password to give it. PlebioAPI on the
+BungeeCord proxy reads the list through LiteBans' own API (so it works with H2, MySQL or
+whatever LiteBans is set to) and sends it over with the server key: the newest of each kind
+within 20 seconds of a change, and everything every 10 minutes, which also picks up old
+punishments that were lifted or deleted. IP addresses are never sent or stored. It needs
+PlebioAPI 2.3.0 or newer on the same proxy as LiteBans; `accounts.punishments: false` in
+PlebioAPI's `config.yml` turns it off.
+
 ## Ideas board (admins)
 
 **Admin > Ideas** is the team's own board, hidden from players. Make sections (it starts with

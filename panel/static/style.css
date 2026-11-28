@@ -708,3 +708,11 @@ button.dl-top-pic { padding: 0; border: 0; background: none; box-shadow: none; c
 .idea-form { display: flex; flex-direction: column; gap: 8px; }
 .idea-form .row { flex-wrap: wrap; gap: 6px; }
 .idea-form select { width: auto; flex: 0 1 auto; }
+
+/* ==================== punishments ==================== */
+.pun-who { display: inline-flex; align-items: center; white-space: nowrap; color: var(--fg); font-weight: 600; }
+.pun-who .face { flex: none; }
+.pun-table .pill + .pill { margin-left: 4px; }
+.pun-table td.wrap { overflow-wrap: anywhere; }
+.pun-lifted { display: block; color: var(--good); margin-top: 2px; }
+tr.pun.s-expired td, tr.pun.s-removed td { opacity: .72; }
