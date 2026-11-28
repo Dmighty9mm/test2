@@ -472,7 +472,7 @@ public abstract class RendererLivingEntity<T extends EntityLivingBase> extends R
 							- (entitylivingbase.isChild() ? entitylivingbase.height / 2.0F : 0.0F), (float) d2);
 					EaglercraftGPU.glNormal3f(0.0F, 1.0F, 0.0F);
 					GlStateManager.rotate(-this.renderManager.playerViewY, 0.0F, 1.0F, 0.0F);
-					GlStateManager.rotate(this.renderManager.playerViewX, 1.0F, 0.0F, 0.0F);
+					GlStateManager.rotate(net.plebmc.client.hud.PlebClient.nameTilt(this.renderManager.playerViewX), 1.0F, 0.0F, 0.0F);
 					GlStateManager.scale(-0.02666667F, -0.02666667F, 0.02666667F);
 					GlStateManager.translate(0.0F, 9.374999F, 0.0F);
 					GlStateManager.disableLighting();

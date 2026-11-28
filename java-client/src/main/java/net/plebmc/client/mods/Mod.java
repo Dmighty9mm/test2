@@ -170,6 +170,11 @@ public abstract class Mod {
         }
 
         public static final String[] OFF_ON = { "Off", "On" };
+        /** Keys a mod's hotkey can be set to (LWJGL key codes, the same on every build). */
+        public static final String[] KEY_NAMES = { "F", "G", "H", "R", "T", "Y", "V", "B", "N", "M", "X", "Z", "C", "J", "K",
+                        "L", "U", "I", "O", "P" };
+        public static final int[] KEY_CODES = { 33, 34, 35, 19, 20, 21, 47, 48, 49, 50, 45, 44, 46, 36, 37, 38, 22, 23, 24,
+                        25 };
         /** Marks a free-text setting. */
         public static final String[] TEXT = { "" };
 

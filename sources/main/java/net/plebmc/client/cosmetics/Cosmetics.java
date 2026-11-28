@@ -1262,6 +1262,8 @@ public final class Cosmetics {
 	 * Where players vote for PlebMc: the website's Vote page, which lists the vote sites
 	 * set in the website's admin. A server can send another link (voting.url in PlebioAPI).
 	 */
+	/** Redirects to the website's Vote page. */
+	public static final String VOTE_PAGE = "https://vote.plebmc.top";
 	private static final String OLD_VOTE_URL = "https://eaglercraftservers.com/server/plebmc";
 	private static String voteUrl = "";
 	private static long voteReward = 100;
@@ -1282,7 +1284,7 @@ public final class Cosmetics {
 
 	public static String voteUrl() {
 		// one hardcoded site used to be the default everywhere: that now means the website's list
-		return voteUrl.isEmpty() || voteUrl.equals(OLD_VOTE_URL) ? ClientSession.panel() + "/#vote" : voteUrl;
+		return voteUrl.isEmpty() || voteUrl.equals(OLD_VOTE_URL) || voteUrl.equals("https://plebmc.top/#vote") ? VOTE_PAGE : voteUrl;
 	}
 
 	/** Coins a vote pays (0 when the server doesn't pay for votes). */

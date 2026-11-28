@@ -6,6 +6,7 @@ import java.util.Map;
 import net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager;
 import net.lax1dude.eaglercraft.v1_8.opengl.WorldRenderer;
 import net.minecraft.client.Minecraft;
+import net.minecraft.util.ResourceLocation;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
@@ -83,6 +84,129 @@ public final class PlebTheme {
 			// no packs to ask
 		}
 		return false;
+	}
+
+	// ==================== containers (inventory, chests, furnaces...) ====================
+
+	private static final String CONTAINERS = "textures/gui/container/";
+	private static final Map<String, ResourceLocation> skins = new HashMap<>();
+	private static final Map<String, Boolean> packSkins = new HashMap<>();
+	private static long packSkinsChecked;
+	private static long skinnedAt;
+
+	/**
+	 * TextureManager.bindTexture: a vanilla container background (the inventory, chests,
+	 * furnaces, the creative tabs...) is swapped for a copy in the Pleb colors, made from
+	 * the vanilla picture. A texture pack that has its own picture for it wins.
+	 */
+	public static ResourceLocation containerSkin(ResourceLocation r) {
+		String p = r.getResourcePath();
+		if (p.length() < 24 || p.charAt(13) != 'c' || !p.startsWith(CONTAINERS) || p.endsWith("stats_icons.png")
+				|| !"minecraft".equals(r.getResourceDomain()) || !enabled()) {
+			return r;
+		}
+		try {
+			long now = System.currentTimeMillis();
+			if (now - packSkinsChecked > 1500 || now < packSkinsChecked) {
+				packSkinsChecked = now;
+				packSkins.clear();
+			}
+			Boolean pack = packSkins.get(p);
+			if (pack == null) {
+				pack = packHas(Minecraft.getMinecraft(), r);
+				packSkins.put(p, pack);
+			}
+			if (pack) {
+				return r;
+			}
+			ResourceLocation skin = skins.get(p);
+			if (skin == null) {
+				skin = makeSkin(r, p);
+				skins.put(p, skin);
+			}
+			if (skin != r) {
+				skinnedAt = now;
+			}
+			return skin;
+		} catch (Throwable t) {
+			skins.put(p, r);
+			return r;
+		}
+	}
+
+	/** Font renderer: the dark gray of container titles turns light while a Pleb container is drawn. */
+	public static int containerText(int color) {
+		if (color != 4210752 || skinnedAt == 0) {
+			return color;
+		}
+		if (System.currentTimeMillis() - skinnedAt > 250) {
+			return color;
+		}
+		Minecraft mc = Minecraft.getMinecraft();
+		return mc != null && mc.currentScreen instanceof net.minecraft.client.gui.inventory.GuiContainer ? 0xFFC9D4DD : color;
+	}
+
+	/** Gray levels of the vanilla container pictures and the Pleb color each one becomes. */
+	private static final int[][] RAMP = { { 0x00, 0x05080C }, { 0x37, 0x080C12 }, { 0x55, 0x0B1118 }, { 0x8B, 0x0E151E },
+			{ 0xC6, 0x18222E }, { 0xFF, 0x3A4C60 } };
+
+	/** Recolors ARGB pixels in place: the grays become the Pleb blue-grays, colors stay. */
+	static void recolor(int[] px) {
+		for (int i = 0; i < px.length; i++) {
+			int c = px[i];
+			int a = c >>> 24, r = c >> 16 & 255, g = c >> 8 & 255, b = c & 255;
+			if (a == 0 || Math.abs(r - g) > 6 || Math.abs(g - b) > 6 || Math.abs(r - b) > 6) {
+				continue;
+			}
+			int l = (r + g + b) / 3;
+			int k = 1;
+			while (k < RAMP.length - 1 && l > RAMP[k][0]) {
+				k++;
+			}
+			float t = (l - RAMP[k - 1][0]) / (float) (RAMP[k][0] - RAMP[k - 1][0]);
+			px[i] = a << 24 | (Ui.mix(0xFF000000 | RAMP[k - 1][1], 0xFF000000 | RAMP[k][1], Math.max(0f, Math.min(1f, t))) & 0xFFFFFF);
+		}
+	}
+
+	private static boolean packHas(Minecraft mc, ResourceLocation r) {
+		try {
+			net.minecraft.client.resources.ResourcePackRepository repo = mc.getResourcePackRepository();
+			if (repo == null) {
+				return false;
+			}
+			net.minecraft.client.resources.IResourcePack server = repo.getResourcePackInstance();
+			if (server != null && server.resourceExists(r)) {
+				return true;
+			}
+			for (Object o : repo.getRepositoryEntries()) {
+				net.minecraft.client.resources.IResourcePack pack = ((net.minecraft.client.resources.ResourcePackRepository.Entry) o)
+						.getResourcePack();
+				if (pack != null && pack.resourceExists(r)) {
+					return true;
+				}
+			}
+		} catch (Throwable t) {
+			// no packs to ask
+		}
+		return false;
+	}
+
+	private static ResourceLocation makeSkin(ResourceLocation r, String p) throws java.io.IOException {
+		Minecraft mc = Minecraft.getMinecraft();
+		net.lax1dude.eaglercraft.v1_8.opengl.ImageData img = net.minecraft.client.renderer.texture.TextureUtil
+				.readBufferedImage(mc.getResourceManager().getResource(r).getInputStream());
+		// this client's pictures are ABGR: swap to ARGB for the recolor and back
+		int[] px = img.pixels;
+		for (int i = 0; i < px.length; i++) {
+			px[i] = px[i] & 0xFF00FF00 | (px[i] & 0xFF) << 16 | px[i] >> 16 & 0xFF;
+		}
+		recolor(px);
+		for (int i = 0; i < px.length; i++) {
+			px[i] = px[i] & 0xFF00FF00 | (px[i] & 0xFF) << 16 | px[i] >> 16 & 0xFF;
+		}
+		ResourceLocation skin = new ResourceLocation("plebskin", p);
+		mc.getTextureManager().loadTexture(skin, new net.minecraft.client.renderer.texture.DynamicTexture(img));
+		return skin;
 	}
 
 	// ==================== colors ====================

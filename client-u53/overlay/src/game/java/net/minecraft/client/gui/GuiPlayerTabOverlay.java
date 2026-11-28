@@ -195,18 +195,19 @@ public class GuiPlayerTabOverlay extends Gui {
 					j2 += 9;
 				}
 
+				int plebOff = 0;
 				if (net.plebmc.client.hud.PlebEntities.isPleb(gameprofile.getId())) {
 					// plays on PlebClient: the Pleb head before the name
 					net.plebmc.client.hud.Ui.mascot(j2, k2, 8, 1f);
 					net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.enableBlend();
-					j2 += 10;
+					plebOff = 10; // only the name moves over: the ping and score keep their place
 				}
 
 				if (networkplayerinfo1.getGameType() == WorldSettings.GameType.SPECTATOR) {
 					s1 = EnumChatFormatting.ITALIC + s1;
-					this.mc.fontRendererObj.drawStringWithShadow(s1, (float) j2, (float) k2, -1862270977);
+					this.mc.fontRendererObj.drawStringWithShadow(s1, (float) (j2 + plebOff), (float) k2, -1862270977);
 				} else {
-					this.mc.fontRendererObj.drawStringWithShadow(s1, (float) j2, (float) k2, -1);
+					this.mc.fontRendererObj.drawStringWithShadow(s1, (float) (j2 + plebOff), (float) k2, -1);
 				}
 
 				if (scoreObjectiveIn != null && networkplayerinfo1.getGameType() != WorldSettings.GameType.SPECTATOR) {

@@ -46,6 +46,8 @@ public class EaglerFontRenderer extends FontRenderer {
 	}
 
 	public int drawString(String text, float x, float y, int color, boolean dropShadow) {
+		// PlebClient: container titles are dark gray, which can't be read on the Pleb container look
+		color = net.plebmc.client.hud.PlebTheme.containerText(color);
 		if (text == null || text.length() == 0) {
 			this.posX = x + (dropShadow ? 1 : 0);
 			this.posY = y;

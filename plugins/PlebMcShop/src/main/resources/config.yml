@@ -250,7 +250,7 @@ items:
 voting:
   enabled: true
   reward: 100
-  url: 'https://plebmc.top/#vote'
+  url: 'https://vote.plebmc.top'
   announce: true
   announce-message: '&b%player% &7voted for PlebMc and got &e%amount% %currency%&7! Vote too: &f/vote'
   votifier:

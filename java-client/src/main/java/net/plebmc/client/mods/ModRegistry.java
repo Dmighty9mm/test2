@@ -55,6 +55,7 @@ public final class ModRegistry {
         public final MoreMods.Overlays overlays = add(new MoreMods.Overlays());
         public final MoreMods.DeathCoords deathCoords = add(new MoreMods.DeathCoords());
         public final MoreMods.OwnNametag ownNametag = add(new MoreMods.OwnNametag());
+        public final MoreMods.Waypoints waypoints = add(new MoreMods.Waypoints());
 
         private <T extends Mod> T add(T m) {
                 mods.add(m);

@@ -175,10 +175,21 @@ public final class PlebEntities {
 	 * server made glow, visible through walls like the glowing effect of
 	 * later versions.
 	 */
+	private static final float[] CAM_MV = new float[16];
+	private static final float[] CAM_PROJ = new float[16];
+
 	public static void renderGlow(float partialTicks) {
 		Minecraft mc = Minecraft.getMinecraft();
 		if (mc.theWorld == null) {
 			return;
+		}
+		try {
+			// the camera of this frame, for markers drawn on the HUD (waypoints, teammates)
+			net.minecraft.client.renderer.entity.RenderManager rm = mc.getRenderManager();
+			GlCompat.matrices(CAM_MV, CAM_PROJ);
+			Projector.capture(CAM_MV, CAM_PROJ, rm.viewerPosX, rm.viewerPosY, rm.viewerPosZ);
+		} catch (Throwable t) {
+			Projector.forget();
 		}
 		try {
 			CosmeticTrails.update(mc);

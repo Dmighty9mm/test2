@@ -20,7 +20,7 @@ public final class PlebMenu {
 	public static final String SERVER_NAME = "PlebMc";
 	/** Java Edition address of the PlebMc network. */
 	public static final String SERVER_ADDRESS = "play.plebmc.top";
-	public static final String DISCORD = "https://discord.gg/bR89zXFH9h";
+	public static final String DISCORD = "https://discord.plebmc.top";
 
 	public static final int ID_JOIN = 0x504C01;
 	private static final int ID_DISCORD = 0x504C02;
@@ -72,6 +72,33 @@ public final class PlebMenu {
 
 	public static void joinServer(GuiScreen from) {
 		Minecraft mc = Minecraft.getMinecraft();
-		mc.displayGuiScreen(new GuiConnecting(from, mc, new ServerData(SERVER_NAME, SERVER_ADDRESS, false)));
+		ServerData server = new ServerData(SERVER_NAME, SERVER_ADDRESS, false);
+		// PlebMc asks before it loads its resource pack
+		server.setResourceMode(ServerData.ServerResourceMode.PROMPT);
+		mc.displayGuiScreen(new GuiConnecting(from, mc, server));
+	}
+
+	/**
+	 * The pause menu (GuiScreen.drawScreen for GuiIngameMenu): the client's name
+	 * and the Pleb head between the "Game menu" title and the first button.
+	 */
+	public static void pauseBrand(int width, int height) {
+		try {
+			int top = 30, bottom = height / 4 + 8;
+			if (bottom - top < 18) {
+				return; // a very small window: no room
+			}
+			String name = net.plebmc.client.mods.ClientInfo.NAME;
+			float scale = bottom - top >= 30 ? 1.5f : 1f;
+			int logo = Math.round(12 * scale);
+			int tw = Math.round(Ui.width(name) * scale);
+			int w = logo + 5 + tw;
+			int x = (width - w) / 2;
+			int y = top + (bottom - top - logo) / 2;
+			Ui.mascot(x, y, logo, 1f);
+			Ui.big(name, x + logo + 5, y + Math.round((logo - 8 * scale) / 2f) + 1, scale, 0xFFFFFFFF, true);
+		} catch (Throwable t) {
+			// the menu works without it
+		}
 	}
 }

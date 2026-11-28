@@ -367,7 +367,7 @@ public abstract class Render<T extends Entity> {
 			GlStateManager.translate((float) x + 0.0F, (float) y + entityIn.height + 0.5F, (float) z);
 			EaglercraftGPU.glNormal3f(0.0F, 1.0F, 0.0F);
 			GlStateManager.rotate(-this.renderManager.playerViewY, 0.0F, 1.0F, 0.0F);
-			GlStateManager.rotate(this.renderManager.playerViewX, 1.0F, 0.0F, 0.0F);
+			GlStateManager.rotate(net.plebmc.client.hud.PlebClient.nameTilt(this.renderManager.playerViewX), 1.0F, 0.0F, 0.0F);
 			GlStateManager.scale(-f1, -f1, f1);
 			GlStateManager.disableLighting();
 			GlStateManager.depthMask(false);

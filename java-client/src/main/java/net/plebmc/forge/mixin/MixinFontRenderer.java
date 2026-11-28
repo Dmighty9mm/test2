@@ -40,14 +40,20 @@ public abstract class MixinFontRenderer {
 	@Shadow
 	protected abstract void renderStringAtPos(String text, boolean shadow);
 
+	/** Container titles are dark gray, which can't be read on the Pleb container look. */
+	@ModifyVariable(method = "renderString", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	private int plebmc$containerText(int color) {
+		return net.plebmc.client.hud.PlebTheme.containerText(color);
+	}
+
 	@ModifyVariable(method = "renderString", at = @At("HEAD"), argsOnly = true, ordinal = 0)
 	private String plebmc$nickDraw(String text) {
-		return net.plebmc.client.text.ModernText.fold(PlebClient.filterText(text));
+		return net.plebmc.client.hud.Emoji.fold(net.plebmc.client.text.ModernText.fold(PlebClient.filterText(text)));
 	}
 
 	@ModifyVariable(method = "getStringWidth", at = @At("HEAD"), argsOnly = true, ordinal = 0)
 	private String plebmc$nickWidth(String text) {
-		return net.plebmc.client.text.ModernText.fold(PlebClient.filterText(text));
+		return net.plebmc.client.hud.Emoji.fold(net.plebmc.client.text.ModernText.fold(PlebClient.filterText(text)));
 	}
 
 	@Shadow
@@ -59,6 +65,28 @@ public abstract class MixinFontRenderer {
 
 	/** The character renderStringAtPos is on, for the two below. */
 	private char plebmc$char;
+
+	/** Emoji: each is two chars, the first 9 pixels wide and the second none. */
+	@Inject(method = "getCharWidth", at = @At("HEAD"), cancellable = true)
+	private void plebmc$emojiWidth(char c, CallbackInfoReturnable<Integer> cir) {
+		if (net.plebmc.client.hud.Emoji.isSurrogate(c)) {
+			cir.setReturnValue(net.plebmc.client.hud.Emoji.width(c));
+		}
+	}
+
+	@Inject(method = "renderChar", at = @At("HEAD"), cancellable = true)
+	private void plebmc$emojiChar(char c, boolean italic, CallbackInfoReturnable<Float> cir) {
+		if (net.plebmc.client.hud.Emoji.isSurrogate(c)) {
+			cir.setReturnValue(net.plebmc.client.hud.Emoji.onChar(c, this.posX, this.posY));
+		}
+	}
+
+	/** The emoji of a line are drawn when the line is done (not for its shadow). */
+	@Inject(method = "renderString", at = @At("RETURN"))
+	private void plebmc$emojiFlush(String text, float x, float y, int color, boolean dropShadow,
+			CallbackInfoReturnable<Integer> cir) {
+		net.plebmc.client.hud.Emoji.flush(this.alpha, dropShadow);
+	}
 
 	/** Newer small caps letters measure (and draw) with PlebClient's glyphs. */
 	@Inject(method = "getCharWidth", at = @At("HEAD"), cancellable = true)

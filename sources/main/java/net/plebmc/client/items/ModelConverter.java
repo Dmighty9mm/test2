@@ -38,6 +38,11 @@ public final class ModelConverter {
 		/** Sprite names used ("plebitems:p/qualityarmory/item/ak47" or "minecraft:items/stick"). */
 		public final Set<String> sprites;
 
+		/** The model hangs on a crossbow (a gun: held with both arms up). */
+		public boolean crossbow;
+		/** For a crossbow model: the same model placed for aiming down the sights, or null. */
+		public Result aim;
+
 		Result(String id, String json, Set<String> sprites) {
 			this.id = id;
 			this.json = json;
@@ -193,6 +198,25 @@ public final class ModelConverter {
 	/** Converts the model {@code ref}, or returns null (the item then keeps its normal model). */
 	@SuppressWarnings("unchecked")
 	public Result convert(String ref) {
+		return convert(ref, 0);
+	}
+
+	/**
+	 * A model on a crossbow, set up the way 1.14+ draws a loaded crossbow
+	 * ({@link Result#aim} is the same model in the aiming position).
+	 */
+	public Result convertCrossbow(String ref) {
+		Result r = convert(ref, 1);
+		if (r != null) {
+			r.crossbow = true;
+			r.aim = convert(ref, 2);
+		}
+		return r;
+	}
+
+	/** {@code mode}: 0 normal, 1 on a crossbow, 2 on a crossbow and aiming. */
+	@SuppressWarnings("unchecked")
+	private Result convert(String ref, int mode) {
 		try {
 			List<Map<String, Object>> chain = new ArrayList<>();
 			String kind = null;
@@ -316,15 +340,17 @@ public final class ModelConverter {
 				Object modern = display.get(modernKey(slot));
 				if (modern == null && legacy != null) {
 					t18 = ItemTransforms.read(legacy); // already 1.8 style
+				} else if (mode != 0 && !generated && "firstperson".equals(slot)) {
+					Object left = display.get("firstperson_lefthand");
+					ItemTransforms.T t19 = mode == 2 && left != null ? ItemTransforms.read(left)
+							: modern != null ? ItemTransforms.read(modern) : ItemTransforms.default19(slot, kind);
+					t18 = mode == 2 ? ItemTransforms.convertAim(t19) : ItemTransforms.convert(slot, t19, true);
 				} else {
 					ItemTransforms.T t19 = modern != null ? ItemTransforms.read(modern)
 							: ItemTransforms.default19(slot, kind);
 					t18 = ItemTransforms.convert(slot, t19, !generated);
 				}
 				t18s.put(slot, t18 == null ? ItemTransforms.IDENTITY : t18);
-			}
-			if (!generated) {
-				refit((List<Object>) out.get("elements"), t18s);
 			}
 			for (Map.Entry<String, ItemTransforms.T> e : t18s.entrySet()) {
 				if (!e.getValue().isIdentity()) {
@@ -334,7 +360,7 @@ public final class ModelConverter {
 			if (!disp.isEmpty()) {
 				out.put("display", disp);
 			}
-			return new Result(modelId(ref), Json.write(out), sprites);
+			return new Result(modelId(ref) + (mode == 2 ? "_aim" : ""), Json.write(out), sprites);
 		} catch (RuntimeException e) {
 			warnings.add(ref + ": " + e);
 			return null;

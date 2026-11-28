@@ -96,6 +96,10 @@ public final class VanillaNames {
 		if (m != null && !m.equals(registry18)) {
 			out.add(m);
 		}
+		// ViaBackwards turns a 1.13+ phantom membrane into leather for 1.8 (QualityArmory ammo is phantom membrane)
+		if ("leather".equals(registry18)) {
+			out.add("phantom_membrane");
+		}
 		return out;
 	}
 }

@@ -529,7 +529,11 @@ public class ItemRenderer {
 		boolean flag = false;
 		if (this.itemToRender != null && itemstack != null) {
 			if (!this.itemToRender.getIsItemStackEqual(itemstack)) {
-				flag = true;
+				if (net.plebmc.client.itemrender.PlebItems.aimSwap(this.itemToRender, itemstack)) {
+					this.itemToRender = itemstack;
+				} else {
+					flag = true;
+				}
 			}
 		} else if (this.itemToRender == null && itemstack == null) {
 			flag = false;

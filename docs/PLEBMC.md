@@ -6,7 +6,7 @@ how to install them, and the technical reference for developers.
 - **PlebClient** is PlebMc's own Minecraft 1.8 client. It comes as a browser client
   (Eaglercraft, an offline HTML file), a Windows desktop app, and a Forge 1.8.9 mod for
   Minecraft Java Edition.
-- **PlebMc** is the server network (`play.plebmc.top`, `wss://eagler.plebmc.top`). The
+- **PlebMc** is the server network (`play.plebmc.top`, `wss://play.plebmc.top`). The
   client talks to it through the server plugins described below.
 
 Part 1 is for players and server owners. Part 2 is the install guide for every plugin.
@@ -82,7 +82,7 @@ lax1dude's newest release, which can also build a WASM-GC version. See
 the same screens, mods, shop, quests, cosmetics, login, Apollo features, hex colors and
 hologram fix, and it talks to the same server plugins. Differences:
 
-- Join PlebMc connects to `play.plebmc.top` instead of `wss://eagler.plebmc.top`.
+- Join PlebMc connects to `play.plebmc.top` instead of `wss://play.plebmc.top`.
 - No Resolution setting (Java draws at the window size). FPS Boost still switches vsync,
   render distance and the fast video settings.
 - Zoom is its own key (C, rebind under Controls > PlebMc), because Java has no built-in zoom.
@@ -99,9 +99,9 @@ name ("Join PlebMc", "PlebMc Coins").
 ## Title screen and menu design
 
 **Main menu.** The title screen always offers **Play PlebMc** (joins the PlebMc server
-directly) and **Discord** (https://discord.gg/bR89zXFH9h), and PlebMc is pinned first in the
+directly) and **Discord** (https://discord.plebmc.top), and PlebMc is pinned first in the
 server list as a default entry that can't be deleted. The browser client joins
-`wss://eagler.plebmc.top`; the Forge client joins `play.plebmc.top`.
+`wss://play.plebmc.top`; the Forge client joins `play.plebmc.top`.
 
 **Menu redesign (PR #6).** `PlebTheme` restyles every vanilla menu in the PlebClient look:
 dark glass buttons with an accent Join button, themed sliders, backgrounds and lists, and a
@@ -201,7 +201,8 @@ The PlebNite category in Mods holds everything made for PlebNite matches:
 | Mod | Id | Default | What it does |
 |---|---|---|---|
 | Compass | `compass` | on | Heading strip at the top with a pip for every teammate and waypoint, and a square pointing at the middle of the storm (red while you're outside it) |
-| Squad Ping | `squad-ping` | on | **Sneak + F** marks a spot for your squad (see below) |
+| Squad Ping | `squad-ping` | on | **Sneak + F** marks a spot for your squad (see below); the key can be changed in the mod's settings |
+| Waypoints | `waypoints` | on | Your own waypoints: **B** (changeable) opens the list, "Add here" drops one where you stand. Kept per server and dimension, with a label, compass pip, block highlight and an optional sky beam |
 | Squad | `squad-hud` | on | Each teammate with their color, a health bar (gray when too far to know) and distance |
 | Supplies | `supplies` | off | Blocks, arrows, golden apples, pearls, potions and TNT in your inventory as icons with counts |
 | Low Health Warning | `low-health` | on | Red screen edges at 2 to 5 hearts, pulsing faster the lower you are |
@@ -214,6 +215,20 @@ The client draws a colored chevron above each teammate through walls (with name 
 when far away), a 1.9-style outline in the teammate's color (red when knocked), the server's
 nametag lines (health or KNOCKED), and a pip on the Compass. Glow outlines turn off while
 shaders are on.
+
+**Emoji.** Emoji typed on newer versions (😭 and the rest, flags and joined emoji included) are drawn as
+small pictures in chat, signs, nametags and everywhere else text is drawn (1.8's font stops at U+FFFF, so
+they used to be blank). The pictures are Noto Emoji (`textures/gui/emoji.png`, indexed by
+`plebclient/emoji.txt`).
+
+**World markers.** Waypoint labels, teammate arrows, holograms and the border are drawn every frame with
+the world's own camera matrices, so they stay glued to their spot when you turn and also show in third
+person. A waypoint's block (a squad ping, for example) gets a see-through highlight.
+
+**Guns from 1.9+ packs.** Models on a crossbow (QualityArmory guns) are held with both arms up like a
+loaded crossbow on newer versions, and while the gun plugin's aiming stand-in is in your hand the gun is
+drawn in its aiming position (the pack's `firstperson_lefthand`). Converted models keep their full
+translation and scale (1.8 limits them to 24 pixels and 4x).
 
 **Squad pings (Sneak + F).** PlebNite places a ping when a player swaps hands while sneaking.
 A 1.8 client has no off hand, so the Squad Ping mod sends the 1.9+ "swap item with off hand"
@@ -870,9 +885,17 @@ With the PlebClient menus on, `hud/TitleMenu.java` replaces the vanilla title sc
 
 ## Menu theme
 
+Containers (the inventory, chests, furnaces, the creative tabs...) get the Pleb look too: `PlebTheme.containerSkin` swaps a vanilla `textures/gui/container/*` picture for a copy recolored at run time (grays become the Pleb blue-grays), and `containerText` lightens the dark gray container titles. A texture pack that has its own picture for a container wins, per picture.
+
+PlebMc is not an entry of the server list: it has its own starred card above the list (`FeaturedServer`; click to join, resource packs on Prompt). The browser client joins `wss://play.plebmc.top`. Discord links are `https://discord.plebmc.top` and vote links `https://vote.plebmc.top` (both redirect).
+
+Block Outline thickness: browsers draw every GL line one pixel wide, so the browser client draws the outline as 12 thin bars sized by distance.
+
+Client versions on the website may be pre-releases (`1.1-beta1`, `1.1-rc1`), which sort below their version (`version_key` in `panel/app.py`).
+
 Buttons and sliders get the Pleb look everywhere, the pause menu included, unless a texture pack in use has its own `textures/gui/widgets.png` (`PlebTheme.buttons()`): then the pack's buttons show. The title screen is PlebClient's own and always keeps the Pleb look. Signed in, the title screen has a Sign out button next to the coins. In the tab list, players on PlebClient have the Pleb head before their name.
 
-The Vote button and `/vote` open the website's Vote page (`https://plebmc.top/#vote`), which lists the vote sites set in the website's admin (Site content), so vote sites are added there and nowhere else. `voting.url` in PlebioAPI's config can point somewhere else.
+The Vote button and `/vote` open `https://vote.plebmc.top`, which redirects to the website's Vote page, which lists the vote sites set in the website's admin (Site content), so vote sites are added there and nowhere else. `voting.url` in PlebioAPI's config can point somewhere else.
 
 PlebNite item models on WASM: the WASM build's file listing returns nothing for a non-recursive listing of a folder, so `FolderPackFiles.list` lists recursively and keeps the direct children.
 

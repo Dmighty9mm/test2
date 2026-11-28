@@ -964,6 +964,8 @@ public class EntityRenderer implements IResourceManagerReloadListener {
 						this.mc.ingameGUI.renderVignette(this.mc.thePlayer.getBrightness(parFloat1), l, i1);
 					}
 					this.mc.ingameGUI.renderGameOverlayCrosshairs(l, i1);
+					net.plebmc.client.hud.PlebClient.renderWorldMarkers(l, i1, parFloat1);
+					GlStateManager.enableBlend();
 					GlStateManager.bindTexture(this.overlayFramebuffer.getTexture());
 					GlStateManager.color(1.0f, 1.0f, 1.0f, 1.0f);
 					GlStateManager.enableBlend();

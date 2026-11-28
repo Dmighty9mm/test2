@@ -440,6 +440,27 @@ public final class MoreMods {
 		}
 	}
 
+	/** Your own waypoints: a key opens the list, where you add one at your feet. */
+	public static final class Waypoints extends Mod {
+		private final Setting key;
+		private final Setting beams;
+
+		public Waypoints() {
+			super("waypoints", "Waypoints", "Make your own waypoints: press a key (B) to add and manage them", true, 0f, 0f);
+			category(GAMEPLAY);
+			key = setting("key", "Key", "Opens your waypoints", KEY_NAMES, 7);
+			beams = setting("beams", "Sky beams", "A beam of light at each of your waypoints", OFF_ON, 1);
+		}
+
+		public int keyCode() {
+			return KEY_CODES[key.get()];
+		}
+
+		public boolean beams() {
+			return beams.on();
+		}
+	}
+
 	public static final class OwnNametag extends Mod {
 		public OwnNametag() {
 			super("own-nametag", "Own Nametag", "See your own name above your head in third person", false, 0f, 0f);

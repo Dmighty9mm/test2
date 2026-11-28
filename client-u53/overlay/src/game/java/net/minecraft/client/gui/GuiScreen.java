@@ -107,6 +107,9 @@ public abstract class GuiScreen extends Gui implements GuiYesNoCallback {
 	 * mouseY, renderPartialTicks
 	 */
 	public void drawScreen(int i, int j, float var3) {
+		if (this instanceof GuiIngameMenu) {
+			net.plebmc.client.hud.PlebMenu.pauseBrand(this.width, this.height);
+		}
 		for (int k = 0, l = this.buttonList.size(); k < l; ++k) {
 			((GuiButton) this.buttonList.get(k)).drawButton(this.mc, i, j);
 		}

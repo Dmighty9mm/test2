@@ -337,9 +337,15 @@ public final class PlebVisuals {
 			fillBox(bb);
 		}
 		color(bo.lineArgb(now));
-		GlCompat.lineWidth(bo.lineWidth());
-		GlCompat.outline(bb);
-		GlCompat.lineWidth(2f);
+		// browsers draw every GL line one pixel wide whatever width is asked for, so the
+		// outline is 12 thin bars, sized by distance to look bo.lineWidth() pixels thick
+		double cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2 - player.getEyeHeight(), cz = (bb.minZ + bb.maxZ) / 2;
+		double dist = Math.max(0.6, Math.sqrt(cx * cx + cy * cy + cz * cz));
+		int sh = Math.max(240, Minecraft.getMinecraft().displayHeight);
+		double hw = Math.max(0.0015, bo.lineWidth() * 0.5 * dist * 1.4 / sh);
+		GlStateManager.disableCull();
+		edgeBars(bb, hw);
+		GlStateManager.enableCull();
 		GlStateManager.depthMask(true);
 		GlStateManager.enableTexture2D();
 		GlStateManager.disableBlend();
@@ -349,6 +355,18 @@ public final class PlebVisuals {
 
 	private static void color(int argb) {
 		GlStateManager.color((argb >> 16 & 255) / 255f, (argb >> 8 & 255) / 255f, (argb & 255) / 255f, (argb >>> 24) / 255f);
+	}
+
+	/** The 12 edges of {@code b} as bars {@code hw} thick from their middle line. */
+	private static void edgeBars(AxisAlignedBB b, double hw) {
+		double[] xs = { b.minX, b.maxX }, ys = { b.minY, b.maxY }, zs = { b.minZ, b.maxZ };
+		for (int i = 0; i < 2; i++) {
+			for (int j = 0; j < 2; j++) {
+				fillBox(new AxisAlignedBB(b.minX - hw, ys[i] - hw, zs[j] - hw, b.maxX + hw, ys[i] + hw, zs[j] + hw));
+				fillBox(new AxisAlignedBB(xs[i] - hw, b.minY + hw, zs[j] - hw, xs[i] + hw, b.maxY - hw, zs[j] + hw));
+				fillBox(new AxisAlignedBB(xs[i] - hw, ys[j] - hw, b.minZ + hw, xs[i] + hw, ys[j] + hw, b.maxZ - hw));
+			}
+		}
 	}
 
 	private static void fillBox(AxisAlignedBB b) {

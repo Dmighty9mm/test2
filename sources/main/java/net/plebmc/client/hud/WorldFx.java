@@ -268,8 +268,9 @@ final class WorldFx {
 		BeamModule bm = Apollo.module(BeamModule.class);
 		WaypointModule wm = Apollo.module(WaypointModule.class);
 		boolean beams = bm != null && bm.isEnabled() && !bm.all().isEmpty();
-		List<WaypointModule.Waypoint> wps = wm != null && wm.isEnabled() ? wm.visible("") : null;
-		if (!beams && (wps == null || wps.isEmpty()) || mc.gameSettings.shaders) {
+		List<WaypointModule.Waypoint> wps = PlebWaypoints.beams(wm);
+		List<WaypointModule.Waypoint> marks = PlebWaypoints.visible(wm);
+		if (!beams && wps.isEmpty() && marks.isEmpty() || mc.gameSettings.shaders) {
 			return;
 		}
 		RenderManager rm = mc.getRenderManager();
@@ -300,11 +301,15 @@ final class WorldFx {
 						beam(b.pos.x + 0.5, b.pos.y, b.pos.z + 0.5, b.argb, alpha, ex, ey, ez, far);
 					}
 				}
-				if (wps != null) {
-					for (int i = 0; i < wps.size(); i++) {
-						WaypointModule.Waypoint wp = wps.get(i);
-						beam(wp.pos.x + 0.5, wp.pos.y, wp.pos.z + 0.5, wp.argb, alpha, ex, ey, ez, far);
-					}
+				for (int i = 0; i < wps.size(); i++) {
+					WaypointModule.Waypoint wp = wps.get(i);
+					beam(wp.pos.x + 0.5, wp.pos.y, wp.pos.z + 0.5, wp.argb, alpha, ex, ey, ez, far);
+				}
+				// the marked block itself lights up (a squad ping shows what was pinged)
+				for (int i = 0; i < marks.size(); i++) {
+					WaypointModule.Waypoint wp = marks.get(i);
+					blockBox(Math.floor(wp.pos.x), Math.floor(wp.pos.y), Math.floor(wp.pos.z), wp.argb,
+							pass == 0 ? 0.16f : 0.3f, ex, ey, ez);
 				}
 			}
 		} finally {
@@ -318,6 +323,49 @@ final class WorldFx {
 			GlStateManager.color(1f, 1f, 1f, 1f);
 			if (fog) {
 				GlStateManager.enableFog();
+			}
+		}
+	}
+
+	/** A see-through box around one block: faint faces and brighter edges. */
+	private static void blockBox(double bx, double by, double bz, int argb, float alpha, double ex, double ey, double ez) {
+		double x0 = bx - ex - 0.004, y0 = by - ey - 0.004, z0 = bz - ez - 0.004;
+		double x1 = x0 + 1.008, y1 = y0 + 1.008, z1 = z0 + 1.008;
+		double cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
+		double dist = Math.sqrt(cx * cx + cy * cy + cz * cz);
+		if (dist > 160.0) {
+			return;
+		}
+		float r = ((argb >> 16) & 0xFF) / 255f;
+		float g = ((argb >> 8) & 0xFF) / 255f;
+		float b = (argb & 0xFF) / 255f;
+		Tessellator t = Tessellator.getInstance();
+		WorldRenderer wr = t.getWorldRenderer();
+		wr.begin(7, DefaultVertexFormats.POSITION_COLOR);
+		box(wr, x0, y0, z0, x1, y1, z1, r, g, b, alpha);
+		// edges as thin bars (WebGL has no wide lines), a little thicker far away
+		double e = Math.max(0.02, dist * 0.004);
+		float ea = Math.min(1f, alpha * 3.2f);
+		for (int i = 0; i < 2; i++) {
+			for (int j = 0; j < 2; j++) {
+				double ya = i == 0 ? y0 : y1 - e, za = j == 0 ? z0 : z1 - e;
+				box(wr, x0, ya, za, x1, ya + e, za + e, r, g, b, ea);
+				double xa = i == 0 ? x0 : x1 - e;
+				box(wr, xa, y0, za, xa + e, y1, za + e, r, g, b, ea);
+				box(wr, xa, j == 0 ? y0 : y1 - e, z0, xa + e, (j == 0 ? y0 : y1 - e) + e, z1, r, g, b, ea);
+			}
+		}
+		t.draw();
+	}
+
+	private static void box(WorldRenderer wr, double x0, double y0, double z0, double x1, double y1, double z1, float r,
+			float g, float b, float a) {
+		double[][] q = { { x0, y0, z0, x1, y0, z0, x1, y1, z0, x0, y1, z0 }, { x0, y0, z1, x1, y0, z1, x1, y1, z1, x0, y1, z1 },
+				{ x0, y0, z0, x0, y0, z1, x0, y1, z1, x0, y1, z0 }, { x1, y0, z0, x1, y0, z1, x1, y1, z1, x1, y1, z0 },
+				{ x0, y0, z0, x1, y0, z0, x1, y0, z1, x0, y0, z1 }, { x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1 } };
+		for (double[] f : q) {
+			for (int i = 0; i < 12; i += 3) {
+				wr.pos(f[i], f[i + 1], f[i + 2]).color(r, g, b, a).endVertex();
 			}
 		}
 	}

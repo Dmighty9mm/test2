@@ -662,7 +662,7 @@ public final class TitleMenu {
 			return;
 		}
 		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
-		String label = "Sign out";
+		String label = "Log out";
 		outW = 8 + 9 + 5 + font.getStringWidth(label) + 8;
 		outH = 18;
 		outX = coinX - 6 - outW;
@@ -993,7 +993,7 @@ public final class TitleMenu {
 		}
 		if (e > 0.05f) {
 			int la = Math.round(255 * e);
-			float ox = (1f - e) * -6f;
+			float ox = snap((1f - e) * -6f);
 			textShadow(font, "Pleb", lx + 24 + ox, ly + 5, Ui.alpha(0xFFFFFFFF, la));
 			textShadow(font, "Client", lx + 24 + ox + font.getStringWidth("Pleb"), ly + 5, Ui.alpha(acc, la));
 		}
@@ -1046,20 +1046,21 @@ public final class TitleMenu {
 				gradientH(0, y, sw - 1, rh, Ui.alpha(acc, Math.round(0x2C * hv)), Ui.alpha(acc, 0));
 			}
 			// icon: nudges right, grows a little and takes the accent
-			float icx = 15 + 2f * hv;
+			float icx = 15; // stays put on hover: a nudge read as the menu shifting
 			float icy = y + rh / 2f;
 			int base = primary ? acc : 0xFFDCE4EA;
 			int ic = Ui.mix(base, primary ? Ui.mix(acc, 0xFFFFFFFF, 0.45f) : acc, hv);
 			GlStateManager.pushMatrix();
 			GlStateManager.translate(icx, icy, 0f);
-			float sc = (rh < 14 ? 0.82f : 1f) * (1f + 0.08f * hv);
+			float sc = rh < 14 ? 0.82f : 1f;
 			GlStateManager.scale(sc, sc, 1f);
 			iconF(it[i][2], -5.5f + 0.6f, -5.5f + 0.6f, 1f, 0x90000000);
 			iconF(it[i][2], -5.5f, -5.5f, 1f, ic);
 			GlStateManager.popMatrix();
 			// label: slides in with the sidebar, brightens on hover
 			if (e > 0.04f) {
-				float lxp = 31 + (1f - e) * -10f + 2f * hv;
+				// slides in with the sidebar, on whole screen pixels so the letters never creep at the end
+				float lxp = snap(31 + (1f - e) * -10f);
 				int room = Math.round(sw - lxp - 6);
 				if (room > 8) {
 					String label = Ui.fit(it[i][1], room);
@@ -1243,7 +1244,14 @@ public final class TitleMenu {
 		}
 		float k = 1f - (float) Math.exp(-speed * dt);
 		float n = v + (target - v) * k;
-		return Math.abs(target - n) < 0.002f ? target : n;
+		return Math.abs(target - n) < 0.01f ? target : n;
+	}
+
+	/** {@code v} on the nearest whole screen pixel (GUI units are several screen pixels wide). */
+	private static float snap(float v) {
+		Minecraft mc = Minecraft.getMinecraft();
+		int sf = screen == null || screen.width <= 0 ? 1 : Math.max(1, Math.round(mc.displayWidth / (float) screen.width));
+		return Math.round(v * sf) / (float) sf;
 	}
 
 	/** Smoothstep-like ease in/out. */

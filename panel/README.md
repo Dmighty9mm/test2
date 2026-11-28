@@ -34,7 +34,7 @@ to the panel and kept in its database. **Reset to defaults** puts everything bac
 
 ### Voting
 
-The **Vote** page lists the server lists players vote on (by default `https://vote.plebmc.top/`),
+The **Vote** page lists the server lists players vote on (by default eaglercraftservers.com; `https://vote.plebmc.top` redirects to this page, so don't list it as a vote site),
 with the steps and the reward. The browser remembers which sites a visitor voted on today:
 until they're done, the Vote link shows a red dot and a small reminder pops up in the corner
 (one **Later** hides it for the day). Owners change the vote sites, the reward shown and the

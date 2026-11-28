@@ -692,8 +692,16 @@ public final class Mods {
          */
         public static final class SquadPing extends Mod {
                 public SquadPing() {
-                        super("squad-ping", "Squad Ping", "Sneak + F marks a spot for your squad", true, 0f, 0f);
+                        super("squad-ping", "Squad Ping", "Sneak + a key (F) marks a spot for your squad", true, 0f, 0f);
                         category(PLEBNITE);
+                        key = setting("key", "Key", "Hold Sneak and press this key to ping", KEY_NAMES, 0);
+                }
+
+                private final Setting key;
+
+                /** The key that pings while sneaking (an LWJGL key code). */
+                public int keyCode() {
+                        return KEY_CODES[key.get()];
                 }
         }
 

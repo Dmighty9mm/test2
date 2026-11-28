@@ -114,11 +114,9 @@ public final class ItemTransforms {
 		Mat c;
 		switch (slot18) {
 		case "firstperson":
-			c = Mat.of18(V18_HAND_FP).mul(Mat.of19(V19_HAND_FP).inverse());
-			break;
+			return hand(V18_HAND_FP, V19_HAND_FP, m19);
 		case "thirdperson":
-			c = Mat.of18(V18_HAND_TP).mul(Mat.of19(V19_HAND_TP).inverse());
-			break;
+			return hand(V18_HAND_TP, V19_HAND_TP, m19);
 		case "gui":
 			c = model3d ? Mat.of19(V19_BLOCK_GUI).inverse() : Mat.identity();
 			break;
@@ -135,6 +133,29 @@ public final class ItemTransforms {
 			c = Mat.identity();
 		}
 		return c.mul(Mat.of19(m19)).to18();
+	}
+
+	/**
+	 * A hand slot. 1.8 draws a held item as {@code S(2) * M18 * S(0.5)} (twice as
+	 * big before the transform, half after), so the sword reference really is
+	 * {@code V18 * S(0.5)} and the model's own transform gets the 2 back.
+	 */
+	private static T hand(T v18, T v19, T m19) {
+		double[] half = { 0.5, 0.5, 0.5 }, twice = { 2, 2, 2 };
+		return Mat.of18(v18).mul(Mat.scale(half)).mul(Mat.of19(v19).inverse()).mul(Mat.of19(m19))
+				.mul(Mat.scale(twice)).to18();
+	}
+
+	/**
+	 * First person for a gun being aimed: 1.9+ gun plugins move the gun to the
+	 * off hand, so this is {@code left19} ("firstperson_lefthand") drawn where
+	 * the left hand would be (1.12 blocks to the left, mirrored the way 1.9+
+	 * applies a left hand transform).
+	 */
+	public static T convertAim(T left19) {
+		T m = new T(new double[] { left19.r[0], -left19.r[1], -left19.r[2] },
+				new double[] { -left19.t[0] - 1.12 * 16, left19.t[1], left19.t[2] }, left19.s);
+		return hand(V18_HAND_FP, V19_HAND_FP, m);
 	}
 
 	/**
@@ -234,12 +255,13 @@ public final class ItemTransforms {
 		return v;
 	}
 
-	/** As 1.8 JSON (translation and scale clamped to what 1.8 accepts). */
+	/** As 1.8 JSON, marked so the client reads it without 1.8's limits (24 pixels, 4x). */
 	public static java.util.Map<String, Object> write(T t) {
 		java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
 		m.put("rotation", list(t.r, -1e9, 1e9));
-		m.put("translation", list(t.t, -24, 24));
-		m.put("scale", list(t.s, -4, 4));
+		m.put("translation", list(t.t, -1e9, 1e9));
+		m.put("scale", list(t.s, -1e9, 1e9));
+		m.put("pleb_unclamped", Boolean.TRUE); // read by the client's ItemTransformVec3f
 		return m;
 	}
 
