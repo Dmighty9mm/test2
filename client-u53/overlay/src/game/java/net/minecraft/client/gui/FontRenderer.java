@@ -203,6 +203,9 @@ public class FontRenderer implements IResourceManagerReloadListener {
 	private float func_181559_a(char parChar1, boolean parFlag) {
 		if (parChar1 == 32) {
 			return 4.0F;
+		} else if (net.plebmc.client.hud.Emoji.isSurrogate(parChar1)) {
+			// PlebClient: half of an emoji (drawn when the line is done)
+			return net.plebmc.client.hud.Emoji.onChar(parChar1, this.posX, this.posY);
 		} else {
 			if (!this.unicodeFlag && parChar1 >= 0x100) {
 				float pleb = net.plebmc.client.hud.ModernFont.draw(parChar1, this.posX, this.posY, parFlag);
@@ -547,7 +550,8 @@ public class FontRenderer implements IResourceManagerReloadListener {
 			GlStateManager.color(this.red, this.blue, this.green, this.alpha);
 			this.posX = x;
 			this.posY = y;
-			this.renderStringAtPos(net.plebmc.client.text.ModernText.fold(text), dropShadow);
+			this.renderStringAtPos(net.plebmc.client.hud.Emoji.fold(net.plebmc.client.text.ModernText.fold(text)), dropShadow);
+			net.plebmc.client.hud.Emoji.flush(this.alpha, dropShadow);
 		}
 		return (int) this.posX;
 	}
@@ -595,6 +599,9 @@ public class FontRenderer implements IResourceManagerReloadListener {
 	 */
 	public int getCharWidth(char character) {
 		character = net.plebmc.client.text.ModernText.fold(character);
+		if (net.plebmc.client.hud.Emoji.isSurrogate(character)) {
+			return net.plebmc.client.hud.Emoji.width(character);
+		}
 		if (!this.unicodeFlag && character >= 0x100) {
 			int pleb = net.plebmc.client.hud.ModernFont.width(character);
 			if (pleb >= 0) {

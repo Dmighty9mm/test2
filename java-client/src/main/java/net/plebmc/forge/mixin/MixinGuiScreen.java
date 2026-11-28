@@ -27,4 +27,14 @@ public abstract class MixinGuiScreen {
 			ci.cancel();
 		}
 	}
+
+	/** The pause menu shows the client's name and logo above its buttons. */
+	@Inject(method = "drawScreen", at = @At("HEAD"))
+	private void plebmc$pauseBrand(int mouseX, int mouseY, float partialTicks, CallbackInfo ci) {
+		Object self = this;
+		if (self instanceof net.minecraft.client.gui.GuiIngameMenu) {
+			net.minecraft.client.gui.GuiScreen g = (net.minecraft.client.gui.GuiScreen) self;
+			net.plebmc.client.hud.PlebMenu.pauseBrand(g.width, g.height);
+		}
+	}
 }

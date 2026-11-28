@@ -662,7 +662,7 @@ public final class TitleMenu {
 			return;
 		}
 		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
-		String label = "Sign out";
+		String label = "Log out";
 		outW = 8 + 9 + 5 + font.getStringWidth(label) + 8;
 		outH = 18;
 		outX = coinX - 6 - outW;

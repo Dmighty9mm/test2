@@ -201,7 +201,8 @@ The PlebNite category in Mods holds everything made for PlebNite matches:
 | Mod | Id | Default | What it does |
 |---|---|---|---|
 | Compass | `compass` | on | Heading strip at the top with a pip for every teammate and waypoint, and a square pointing at the middle of the storm (red while you're outside it) |
-| Squad Ping | `squad-ping` | on | **Sneak + F** marks a spot for your squad (see below) |
+| Squad Ping | `squad-ping` | on | **Sneak + F** marks a spot for your squad (see below); the key can be changed in the mod's settings |
+| Waypoints | `waypoints` | on | Your own waypoints: **B** (changeable) opens the list, "Add here" drops one where you stand. Kept per server and dimension, with a label, compass pip, block highlight and an optional sky beam |
 | Squad | `squad-hud` | on | Each teammate with their color, a health bar (gray when too far to know) and distance |
 | Supplies | `supplies` | off | Blocks, arrows, golden apples, pearls, potions and TNT in your inventory as icons with counts |
 | Low Health Warning | `low-health` | on | Red screen edges at 2 to 5 hearts, pulsing faster the lower you are |
@@ -214,6 +215,20 @@ The client draws a colored chevron above each teammate through walls (with name 
 when far away), a 1.9-style outline in the teammate's color (red when knocked), the server's
 nametag lines (health or KNOCKED), and a pip on the Compass. Glow outlines turn off while
 shaders are on.
+
+**Emoji.** Emoji typed on newer versions (😭 and the rest, flags and joined emoji included) are drawn as
+small pictures in chat, signs, nametags and everywhere else text is drawn (1.8's font stops at U+FFFF, so
+they used to be blank). The pictures are Noto Emoji (`textures/gui/emoji.png`, indexed by
+`plebclient/emoji.txt`).
+
+**World markers.** Waypoint labels, teammate arrows, holograms and the border are drawn every frame with
+the world's own camera matrices, so they stay glued to their spot when you turn and also show in third
+person. A waypoint's block (a squad ping, for example) gets a see-through highlight.
+
+**Guns from 1.9+ packs.** Models on a crossbow (QualityArmory guns) are held with both arms up like a
+loaded crossbow on newer versions, and while the gun plugin's aiming stand-in is in your hand the gun is
+drawn in its aiming position (the pack's `firstperson_lefthand`). Converted models keep their full
+translation and scale (1.8 limits them to 24 pixels and 4x).
 
 **Squad pings (Sneak + F).** PlebNite places a ping when a player swaps hands while sneaking.
 A 1.8 client has no off hand, so the Squad Ping mod sends the 1.9+ "swap item with off hand"

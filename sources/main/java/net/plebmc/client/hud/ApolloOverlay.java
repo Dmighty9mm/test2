@@ -87,10 +87,56 @@ final class ApolloOverlay {
                         vignette(w, h, vignette.resource(), vignette.opacity());
                 }
                 compassMarkers.clear();
+                collect = true;
                 Minecraft mc = Minecraft.getMinecraft();
+                // the web client redraws the HUD only a few times a second, so there the
+                // markers that follow the world are drawn every frame instead (renderWorld)
+                world(mc, w, h, haveCamera, eyeX, eyeY, eyeZ, yaw, pitch, fov, pxW, pxH, !GlCompat.hudIsBuffered());
+                PlebClient.mods().compass.setMarkers(new ArrayList<Mods.Compass.Marker>(compassMarkers));
+                stopwatch(w, h, now);
+                cooldowns(mc, w, h, now);
+                liveChat(h);
+                titles(w, h, now);
+                notifications(w, now);
+        }
+
+        /** False while drawing a frame's markers only, so the compass list isn't filled twice. */
+        private boolean collect = true;
+
+        private void mark(Mods.Compass.Marker m) {
+                if (collect) {
+                        compassMarkers.add(m);
+                }
+        }
+
+        /** Every frame, straight to the screen: the markers that follow the world. */
+        void renderWorld(int w, int h, boolean haveCamera, double eyeX, double eyeY, double eyeZ, float yaw, float pitch,
+                        float fov, int pxW, int pxH, float partialTicks) {
+                if (!GlCompat.hudIsBuffered()) {
+                        return; // already drawn with the HUD
+                }
+                lookup();
+                this.partialTicks = partialTicks;
+                collect = false;
+                try {
+                        world(Minecraft.getMinecraft(), w, h, haveCamera, eyeX, eyeY, eyeZ, yaw, pitch, fov, pxW, pxH, true);
+                } finally {
+                        collect = true;
+                }
+        }
+
+        /**
+         * Waypoints, holograms, teammates and the border. The camera is the world
+         * pass's own matrices when there are any (right in third person too),
+         * otherwise the first person math, which only holds in first person.
+         */
+        private void world(Minecraft mc, int w, int h, boolean firstPerson, double eyeX, double eyeY, double eyeZ, float yaw,
+                        float pitch, float fov, int pxW, int pxH, boolean draw) {
                 cam.setup(eyeX, eyeY, eyeZ, yaw, pitch, fov, pxW, pxH, w, h);
+                cam.useMatrices(true);
+                boolean haveCamera = firstPerson || Projector.captured();
                 indexPlayers(mc);
-                if (haveCamera) {
+                if (haveCamera && draw) {
                         if (mc.gameSettings.shaders) {
                                 beams(); // no world pass hook with shaders on: fall back to HUD columns
                         }
@@ -102,12 +148,6 @@ final class ApolloOverlay {
                         waypointMarkers();
                         team(mc, false);
                 }
-                PlebClient.mods().compass.setMarkers(new ArrayList<Mods.Compass.Marker>(compassMarkers));
-                stopwatch(w, h, now);
-                cooldowns(mc, w, h, now);
-                liveChat(h);
-                titles(w, h, now);
-                notifications(w, now);
         }
 
         /** Loaded players by UUID, so markers can follow the live entity instead of the last server update. */
@@ -402,17 +442,13 @@ final class ApolloOverlay {
          * beam itself is drawn in the world. Every waypoint also goes on the compass.
          */
         private void waypoints(boolean hudBeams) {
-                WaypointModule wm = waypointM;
-                if (wm == null || !wm.isEnabled()) {
-                        return;
-                }
-                List<WaypointModule.Waypoint> list = wm.visible("");
+                List<WaypointModule.Waypoint> list = PlebWaypoints.visible(waypointM);
                 for (int i = 0; i < list.size(); i++) {
                         WaypointModule.Waypoint wp = list.get(i);
                         double px = wp.pos.x + 0.5;
                         double pz = wp.pos.z + 0.5;
                         int dist = (int) Math.round(cam.distance(px, wp.pos.y, pz));
-                        compassMarkers.add(new Mods.Compass.Marker(bearing(px, pz), wp.argb, wp.name, dist, true));
+                        mark(new Mods.Compass.Marker(bearing(px, pz), wp.argb, wp.name, dist, true));
                         if (hudBeams) {
                                 beam(px, wp.pos.y, pz, wp.argb);
                         }
@@ -432,16 +468,12 @@ final class ApolloOverlay {
 
         /** Compass entries for waypoints when the HUD camera is unavailable (third person). */
         private void waypointMarkers() {
-                WaypointModule wm = waypointM;
-                if (wm == null || !wm.isEnabled()) {
-                        return;
-                }
-                List<WaypointModule.Waypoint> list = wm.visible("");
+                List<WaypointModule.Waypoint> list = PlebWaypoints.visible(waypointM);
                 for (int i = 0; i < list.size(); i++) {
                         WaypointModule.Waypoint wp = list.get(i);
                         double px = wp.pos.x + 0.5;
                         double pz = wp.pos.z + 0.5;
-                        compassMarkers.add(new Mods.Compass.Marker(bearing(px, pz), wp.argb, wp.name,
+                        mark(new Mods.Compass.Marker(bearing(px, pz), wp.argb, wp.name,
                                         (int) Math.round(cam.distance(px, wp.pos.y, pz)), true));
                 }
         }
@@ -506,7 +538,7 @@ final class ApolloOverlay {
                                 continue;
                         }
                         int dist = (int) Math.round(cam.distance(x, y, z));
-                        compassMarkers.add(new Mods.Compass.Marker(bearing(x, z), m.argb, ApolloText.plain(m.name), dist, false));
+                        mark(new Mods.Compass.Marker(bearing(x, z), m.argb, ApolloText.plain(m.name), dist, false));
                         if (!draw || !cam.project(x, y, z) || cam.sx < -8 || cam.sy < -8 || cam.sx > cam.guiW() + 8
                                         || cam.sy > cam.guiH() + 8) {
                                 continue;

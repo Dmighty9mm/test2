@@ -33,6 +33,12 @@ public abstract class MixinRender {
 		}
 	}
 
+	/** Nametags tilt toward the camera in the front-facing third person view too. */
+	@org.spongepowered.asm.mixin.injection.ModifyArg(method = "renderLivingLabel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/GlStateManager;rotate(FFFF)V", ordinal = 1), index = 0)
+	private float plebmc$nameTilt(float angle) {
+		return net.plebmc.client.hud.PlebClient.nameTilt(angle);
+	}
+
 	/** Entity distance from the Video Settings screen (players are always drawn). */
 	@Inject(method = "shouldRender", at = @At("HEAD"), cancellable = true)
 	private void plebmc$entityDistance(Entity entity, ICamera camera, double camX, double camY, double camZ,

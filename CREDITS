@@ -746,6 +746,18 @@
  
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+ Project Name: Noto Emoji
+ Project Author: Google
+ Project URL: https://github.com/googlefonts/noto-emoji
+
+ Used For: the emoji pictures drawn in chat (assets/plebitems/textures/gui/emoji.png),
+           taken from the emoji-datasource-google sprite sheet (MIT, https://github.com/iamcal/emoji-data)
+
+ * Noto Emoji images are licensed under the Apache License, Version 2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
+
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
  Make sure you also update the copy of this file in "sources/resources/assets/eagler/CREDITS.txt"
  
  The content of both files should match, but not include this notice in the resources one

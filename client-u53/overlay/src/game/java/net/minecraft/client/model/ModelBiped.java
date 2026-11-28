@@ -36,6 +36,8 @@ public class ModelBiped extends ModelBase {
 	public int heldItemRight;
 	public boolean isSneak;
 	public boolean aimedBow;
+	/** PlebClient: holding a gun (1.14+ loaded crossbow pose). */
+	public boolean plebGun;
 
 	public ModelBiped() {
 		this(0.0F);
@@ -223,6 +225,15 @@ public class ModelBiped extends ModelBase {
 			this.bipedLeftArm.rotateAngleX -= MathHelper.sin(f2 * 0.067F) * 0.05F;
 		}
 
+		if (this.plebGun) {
+			this.bipedRightArm.rotateAngleZ = 0.0F;
+			this.bipedLeftArm.rotateAngleZ = 0.0F;
+			this.bipedRightArm.rotateAngleY = -0.3F + this.bipedHead.rotateAngleY;
+			this.bipedLeftArm.rotateAngleY = 0.6F + this.bipedHead.rotateAngleY;
+			this.bipedRightArm.rotateAngleX = -1.5707964F + this.bipedHead.rotateAngleX + 0.1F;
+			this.bipedLeftArm.rotateAngleX = -1.5F + this.bipedHead.rotateAngleX;
+		}
+
 		copyModelAngles(this.bipedHead, this.bipedHeadwear);
 	}
 
@@ -234,6 +245,7 @@ public class ModelBiped extends ModelBase {
 			this.heldItemRight = modelbiped.heldItemRight;
 			this.isSneak = modelbiped.isSneak;
 			this.aimedBow = modelbiped.aimedBow;
+			this.plebGun = modelbiped.plebGun;
 		}
 
 	}

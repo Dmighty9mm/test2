@@ -99,8 +99,12 @@ public final class ItemRules {
 					r.warnings.add("too many custom models, the rest are ignored");
 					break;
 				}
-				ModelConverter.Result res = conv.convert(o.model);
+				ModelConverter.Result res = "crossbow".equals(base) ? conv.convertCrossbow(o.model)
+						: conv.convert(o.model);
 				r.models.put(o.model, res);
+				if (res != null && res.aim != null) {
+					r.models.put(o.model + "#aim", res.aim);
+				}
 			}
 			r.rules.put(base, e.getValue());
 			for (Override o : e.getValue()) {

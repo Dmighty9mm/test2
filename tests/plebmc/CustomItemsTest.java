@@ -230,9 +230,6 @@ public class CustomItemsTest {
 			for (String[] sl : slots) {
 				ItemTransforms.T want = ItemTransforms.convert(sl[0], ItemTransforms.read(d19.get(sl[1])), true);
 				ItemTransforms.T got = ItemTransforms.read(pdisp.get(sl[0]));
-				for (int i = 0; i < 3; i++) {
-					check(Math.abs(got.s[i]) <= 4 && Math.abs(got.t[i]) <= 24, sl[0] + " fits 1.8: " + got);
-				}
 				for (int e = 0; e < before.size(); e++) {
 					Map<?, ?> b = (Map<?, ?>) before.get(e), n = (Map<?, ?>) after.get(e);
 					for (String k : new String[] { "from", "to" }) {
@@ -241,8 +238,8 @@ public class CustomItemsTest {
 					}
 				}
 			}
-			Map<?, ?> north = (Map<?, ?>) ((Map<?, ?>) ((Map<?, ?>) after.get(0)).get("faces")).get("north");
-			check(north.get("uv") != null, "auto UV written before resizing");
+			check(p30.json.contains("pleb_unclamped"), "transforms marked as unclamped");
+			check(p30.crossbow && p30.aim != null && p30.aim.id.endsWith("_aim"), "a gun has an aiming model");
 		}
 
 		System.out.println("CustomItemsTest: " + checks + " checks, " + failures + " failures");

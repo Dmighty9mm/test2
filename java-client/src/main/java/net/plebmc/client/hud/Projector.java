@@ -43,8 +43,60 @@ final class Projector {
 		this.guiH = guiH;
 	}
 
+	// The world pass's own matrices (PlebEntities.renderGlow): exact in every
+	// camera mode (third person, view bobbing, zoom), relative to the render origin.
+	private static final float[] MV = new float[16];
+	private static final float[] PROJ = new float[16];
+	private static double originX, originY, originZ;
+	private static boolean captured;
+	private boolean matrices;
+
+	/** Called from the world pass with GL's column-major modelview and projection. */
+	static void capture(float[] modelview, float[] projection, double ox, double oy, double oz) {
+		System.arraycopy(modelview, 0, MV, 0, 16);
+		System.arraycopy(projection, 0, PROJ, 0, 16);
+		originX = ox;
+		originY = oy;
+		originZ = oz;
+		captured = true;
+	}
+
+	static boolean captured() {
+		return captured;
+	}
+
+	static void forget() {
+		captured = false;
+	}
+
+	/** Use the captured world matrices (when there are any) instead of the first person math. */
+	void useMatrices(boolean on) {
+		matrices = on && captured;
+	}
+
+	private boolean projectMatrices(double x, double y, double z) {
+		double dx = x - originX, dy = y - originY, dz = z - originZ;
+		double vx = MV[0] * dx + MV[4] * dy + MV[8] * dz + MV[12];
+		double vy = MV[1] * dx + MV[5] * dy + MV[9] * dz + MV[13];
+		double vz = MV[2] * dx + MV[6] * dy + MV[10] * dz + MV[14];
+		double vw = MV[3] * dx + MV[7] * dy + MV[11] * dz + MV[15];
+		double cx = PROJ[0] * vx + PROJ[4] * vy + PROJ[8] * vz + PROJ[12] * vw;
+		double cy = PROJ[1] * vx + PROJ[5] * vy + PROJ[9] * vz + PROJ[13] * vw;
+		double cw = PROJ[3] * vx + PROJ[7] * vy + PROJ[11] * vz + PROJ[15] * vw;
+		depth = (float) cw;
+		if (cw < 0.05) {
+			return false;
+		}
+		sx = (float) ((cx / cw * 0.5 + 0.5) * guiW);
+		sy = (float) ((1.0 - (cy / cw * 0.5 + 0.5)) * guiH);
+		return true;
+	}
+
 	/** Projects a world point; false when it is behind the camera. */
 	boolean project(double x, double y, double z) {
+		if (matrices) {
+			return projectMatrices(x, y, z);
+		}
 		double dx = x - eyeX;
 		double dy = y - eyeY;
 		double dz = z - eyeZ;

@@ -113,6 +113,7 @@ public class RenderPlayer extends RendererLivingEntity<AbstractClientPlayer> {
 			}
 			modelplayer.heldItemLeft = 0;
 			modelplayer.aimedBow = false;
+			modelplayer.plebGun = net.plebmc.client.itemrender.PlebItems.gunPose(itemstack);
 			modelplayer.isSneak = clientPlayer.isSneaking();
 			net.plebmc.client.hud.PlebEntities.applyLimbs(clientPlayer, modelplayer);
 			if (itemstack == null) {

@@ -153,6 +153,7 @@ public final class PlebClient {
 			mods.load(STORE);
 			net.plebmc.client.mods.FpsLarp.INSTANCE.load(STORE);
 			ClientPrefs.get().load(STORE);
+			net.plebmc.client.mods.OwnWaypoints.load(STORE);
 			net.plebmc.client.cosmetics.Cosmetics.loadSeen(STORE.get(QUESTS_SEEN_KEY));
 			net.plebmc.client.cosmetics.Cosmetics.loadLook(STORE.get(LOOK_KEY));
 			savedLook = net.plebmc.client.cosmetics.Cosmetics.lookVersion();
@@ -274,6 +275,7 @@ public final class PlebClient {
 				mods.load(STORE);
 				net.plebmc.client.mods.FpsLarp.INSTANCE.load(STORE);
 				ClientPrefs.get().load(STORE);
+			net.plebmc.client.mods.OwnWaypoints.load(STORE);
 				saveSettings();
 			}
 			return n;
@@ -288,6 +290,7 @@ public final class PlebClient {
 			mods.save(STORE);
 			net.plebmc.client.mods.FpsLarp.INSTANCE.save(STORE);
 			ClientPrefs.get().save(STORE);
+			net.plebmc.client.mods.OwnWaypoints.save(STORE);
 		} catch (Throwable t) {
 			LOG.warn("could not save mod settings: " + t);
 		}
@@ -358,8 +361,12 @@ public final class PlebClient {
 		if (key == mc.gameSettings.keyBindSprint.getKeyCode()) {
 			mods.toggleSprint.onSprintKey();
 		}
-		if (key == Keyboard.KEY_F && mc.gameSettings.keyBindSneak.isKeyDown()) {
+		if (key == mods.squadPing.keyCode() && mc.gameSettings.keyBindSneak.isKeyDown()) {
 			squadPing();
+		} else if (mods.waypoints.isActive() && key == mods.waypoints.keyCode()
+				&& !mc.gameSettings.keyBindSneak.isKeyDown()) {
+			mc.displayGuiScreen(new WaypointsScreen(null));
+			return true;
 		}
 		return false;
 	}
@@ -367,7 +374,7 @@ public final class PlebClient {
 	private static long lastPing;
 
 	/**
-	 * Sneak + F: PlebNite (and other modern servers) mark the block you look
+	 * Sneak + the ping key (F unless changed): PlebNite (and other modern servers) mark the block you look
 	 * at for your squad when you press the swap-hands key while sneaking.
 	 * 1.8 has no off hand, so this sends that action itself: the player
 	 * digging packet with action 6 (SWAP_ITEM_WITH_OFFHAND in 1.9+), which the
@@ -496,6 +503,15 @@ public final class PlebClient {
 		}
 	}
 
+	/**
+	 * Render: the tilt of a nametag toward the camera. The front-facing third
+	 * person view looks back at the player, so there the tilt is the other way
+	 * (vanilla 1.8 forgets this and names lean away from the camera).
+	 */
+	public static float nameTilt(float playerViewX) {
+		return mc != null && mc.gameSettings.thirdPersonView == 2 ? -playerViewX : playerViewX;
+	}
+
 	public static String filterText(String text) {
 		if (text == null || mc == null || mc.thePlayer == null) {
 			return text;
@@ -512,6 +528,31 @@ public final class PlebClient {
 	/** GuiIngame.renderGameOverlay end: Apollo overlays then HUD mods. */
 	/** The partial tick of the frame being drawn (HUD mods read the camera with it). */
 	static float framePartialTicks = 1f;
+
+	/**
+	 * EntityRenderer, every frame after the world: the markers that follow the
+	 * world (the HUD itself is only redrawn a few times a second on the web client).
+	 */
+	public static void renderWorldMarkers(int guiW, int guiH, float partialTicks) {
+		if (mc == null || mc.theWorld == null) {
+			return;
+		}
+		try {
+			Entity cam = mc.getRenderViewEntity();
+			if (cam == null) {
+				return;
+			}
+			double ex = cam.prevPosX + (cam.posX - cam.prevPosX) * partialTicks;
+			double ey = cam.prevPosY + (cam.posY - cam.prevPosY) * partialTicks + cam.getEyeHeight();
+			double ez = cam.prevPosZ + (cam.posZ - cam.prevPosZ) * partialTicks;
+			float yaw = cam.prevRotationYaw + (cam.rotationYaw - cam.prevRotationYaw) * partialTicks;
+			float pitch = cam.prevRotationPitch + (cam.rotationPitch - cam.prevRotationPitch) * partialTicks;
+			ApolloOverlay.INSTANCE.renderWorld(guiW, guiH, mc.gameSettings.thirdPersonView == 0, ex, ey, ez, yaw, pitch,
+					mc.gameSettings.fovSetting, mc.displayWidth, mc.displayHeight, partialTicks);
+		} catch (Throwable t) {
+			// drawing must never break the frame
+		}
+	}
 
 	public static void renderHud(ScaledResolution res, float partialTicks) {
 		if (mc == null) {

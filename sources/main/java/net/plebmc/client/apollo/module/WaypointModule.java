@@ -20,7 +20,7 @@ public final class WaypointModule extends ApolloModule {
                 public final boolean preventRemoval;
                 public boolean hidden;
 
-                Waypoint(String name, Ids.Pos pos, int argb, boolean preventRemoval, boolean hidden) {
+                public Waypoint(String name, Ids.Pos pos, int argb, boolean preventRemoval, boolean hidden) {
                         this.name = name;
                         this.pos = pos;
                         this.argb = argb;

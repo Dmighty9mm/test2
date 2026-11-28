@@ -11,6 +11,7 @@ import net.lax1dude.eaglercraft.v1_8.log4j.LogManager;
 import net.lax1dude.eaglercraft.v1_8.log4j.Logger;
 import net.lax1dude.eaglercraft.v1_8.minecraft.EaglerFolderResourcePack;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.resources.model.IBakedModel;
 import net.minecraft.client.resources.model.ModelManager;
@@ -72,7 +73,15 @@ public final class PlebItems {
 		boolean onHome;
 		IBakedModel model;
 		String newItem;
+		/** A gun (a model on a crossbow), and the same model in the aiming position. */
+		boolean gun;
+		IBakedModel aimModel;
+		/** The stand-in a gun plugin puts in the main hand while the gun is aimed. */
+		boolean aiming;
 	}
+
+	/** The aiming model of the gun the player held last. */
+	private static IBakedModel lastGunAim;
 
 	private static final Map<ItemStack, Hit> cache = new IdentityHashMap<>();
 	private static final int CACHE_MAX = 2048;
@@ -223,9 +232,50 @@ public final class PlebItems {
 		}
 		try {
 			Hit h = hit(stack, models);
-			return h == null ? null : h.model;
+			if (h == null) {
+				return null;
+			}
+			if (h.gun || h.aiming) {
+				EntityPlayerSP me = Minecraft.getMinecraft().thePlayer;
+				if (me != null && me.inventory.getCurrentItem() == stack) {
+					if (h.aiming) {
+						// 1.9+ moves the gun to the off hand to aim; 1.8 only gets the stand-in
+						return lastGunAim != null ? lastGunAim : h.model;
+					}
+					lastGunAim = h.aimModel;
+				}
+			}
+			return h.model;
 		} catch (Throwable t) {
 			return null;
+		}
+	}
+
+	/** RenderPlayer: a gun (or its aiming stand-in) is held with both arms up, like a loaded crossbow. */
+	public static boolean gunPose(ItemStack stack) {
+		if (stack == null || stack.getTagCompound() == null || !enabled()) {
+			return false;
+		}
+		try {
+			Hit h = hit(stack, Minecraft.getMinecraft().getRenderItem().getItemModelMesher().getModelManager());
+			return h != null && h.model != null && (h.gun || h.aiming);
+		} catch (Throwable t) {
+			return false;
+		}
+	}
+
+	/** ItemRenderer: going between a gun and its aiming stand-in doesn't lower the hand. */
+	public static boolean aimSwap(ItemStack a, ItemStack b) {
+		if (a == null || b == null || a == b || a.getTagCompound() == null || b.getTagCompound() == null
+				|| !enabled()) {
+			return false;
+		}
+		try {
+			ModelManager mm = Minecraft.getMinecraft().getRenderItem().getItemModelMesher().getModelManager();
+			Hit x = hit(a, mm), y = hit(b, mm);
+			return x != null && y != null && ((x.gun && y.aiming) || (x.aiming && y.gun));
+		} catch (Throwable t) {
+			return false;
 		}
 	}
 
@@ -337,6 +387,15 @@ public final class PlebItems {
 		if (id != null) {
 			IBakedModel m = models.getModel(new ModelResourceLocation(ModelConverter.DOMAIN + ":" + id, "inventory"));
 			h.model = m == null || m == models.getMissingModel() ? null : m;
+		}
+		if (r != null && r.crossbow && h.model != null) {
+			h.aiming = r.id.endsWith("/aiming");
+			h.gun = !h.aiming;
+			if (h.gun && r.aim != null) {
+				IBakedModel m = models
+						.getModel(new ModelResourceLocation(ModelConverter.DOMAIN + ":" + r.aim.id, "inventory"));
+				h.aimModel = m == null || m == models.getMissingModel() ? null : m;
+			}
 		}
 		if (cache.size() >= CACHE_MAX) {
 			cache.clear();
