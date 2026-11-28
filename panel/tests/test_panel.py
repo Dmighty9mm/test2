@@ -528,6 +528,22 @@ class PanelLogic(unittest.TestCase):
         self.clock.t += 600
         self.assertFalse(self.p.punishments_page()["source"]["connected"])
 
+    def test_client_comparison(self):
+        owner = {"name": "Boss", "role": "owner"}
+        c = self.p.site_content()
+        self.assertFalse(c["compare"]["show"])
+        self.assertEqual(c["compare"]["clients"][0], "PlebClient")
+        with self.assertRaises(app.ApiError):       # not while a "?" is left
+            self.p.set_site_content(owner, dict(c, compare=dict(c["compare"], show=True)))
+        with self.assertRaises(app.ApiError):
+            self.p.set_site_content(owner, dict(c, compare={"clients": ["Solo"], "rows": []}))
+        got = self.p.set_site_content(owner, dict(c, compare={"show": False, "clients": ["PlebClient", "Other "], "rows": [
+            {"feature": " Zoom ", "values": ["yes", "no", "extra"]}, {"feature": "", "values": ["yes", "yes"]}, {"feature": "HUD", "values": ["yes"]}]}))["content"]["compare"]
+        self.assertEqual(got, {"show": False, "clients": ["PlebClient", "Other"], "rows": [
+            {"feature": "Zoom", "values": ["yes", "no"]}, {"feature": "HUD", "values": ["yes", "?"]}]})
+        got["rows"][1]["values"][1] = "part"
+        self.assertTrue(self.p.set_site_content(owner, dict(c, compare=dict(got, show=True)))["content"]["compare"]["show"])
+
     def test_coin_gift_says_who_gets_it(self):
         owner = {"name": "Boss", "role": "owner"}
         for flag, args in ((True, [50, "client"]), (False, [50, "all"]), (None, [50])):

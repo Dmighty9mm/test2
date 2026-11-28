@@ -194,6 +194,20 @@ SITE_DEFAULTS = {
         {"title": "Shop and cosmetics", "text": "Hats, cloaks, wings and trails everyone on PlebMc can see. Try them on in 3D, buy them "
          "with PlebMc Coins.", "image": "/static/home/shop.jpg"},
     ],
+    # PlebClient next to other clients. Hidden from visitors until an owner checked the other columns.
+    "compare": {"show": False, "clients": ["PlebClient", "Resent", "Astra"], "rows": [
+        {"feature": "Plays in your browser", "values": ["yes", "?", "?"]},
+        {"feature": "Windows app", "values": ["yes", "?", "?"]},
+        {"feature": "Forge 1.8.9 version", "values": ["yes", "?", "?"]},
+        {"feature": "30+ mods with a HUD editor", "values": ["yes", "?", "?"]},
+        {"feature": "Cosmetics shop: hats, cloaks, wings, trails", "values": ["yes", "?", "?"]},
+        {"feature": "Coins, quests and daily rewards", "values": ["yes", "?", "?"]},
+        {"feature": "Account that protects your name", "values": ["yes", "?", "?"]},
+        {"feature": "Built for PlebNite: squads and gun models", "values": ["yes", "?", "?"]},
+        {"feature": "RGB chat colors and gradients", "values": ["yes", "?", "?"]},
+        {"feature": "Tells you when an update is out", "values": ["yes", "?", "?"]},
+        {"feature": "Free", "values": ["yes", "?", "?"]},
+    ]},
     "faq": [
         {"q": "How do I join?", "a": "Get PlebClient from the Downloads page (or use any Eaglercraft 1.8 client), add the server "
          "play.plebmc.top and jump in."},
@@ -208,6 +222,7 @@ SITE_DEFAULTS = {
     "voteReward": 100,
     "mascot": True,
     "mojangSkins": True,
+    "statStyle": "strip",
     "voteText": "Votes push PlebMc up the server lists so more players find us. You can vote once a day on each site.",
     "ctaTitle": "Ready to play?",
     "ctaText": "Grab PlebClient, make your account on the start screen and see you on play.plebmc.top.",
@@ -1618,6 +1633,19 @@ class Panel:
             q, a = str(f.get("q") or "").strip()[:150], str(f.get("a") or "").strip()[:600]
             if q and a:
                 out["faq"].append({"q": q, "a": a})
+        cmp_in = body.get("compare") if isinstance(body.get("compare"), dict) else SITE_DEFAULTS["compare"]
+        clients = [str(c).strip()[:24] for c in (cmp_in.get("clients") or []) if str(c).strip()][:5]
+        if len(clients) < 2:
+            raise ApiError(400, "The comparison needs at least two clients.")
+        rows = []
+        for r in (cmp_in.get("rows") or [])[:30]:
+            if not isinstance(r, dict) or not str(r.get("feature") or "").strip():
+                continue
+            vals = [str(v).strip()[:24] for v in (r.get("values") or [])][:len(clients)]
+            rows.append({"feature": str(r["feature"]).strip()[:80], "values": vals + ["?"] * (len(clients) - len(vals))})
+        out["compare"] = {"show": bool(cmp_in.get("show")), "clients": clients, "rows": rows}
+        if out["compare"]["show"] and any(v == "?" for r in rows for v in r["values"]):
+            raise ApiError(400, "Fill in every \"?\" in the comparison before you show it to visitors.")
         votes = body.get("voteLinks") if isinstance(body.get("voteLinks"), list) else SITE_DEFAULTS["voteLinks"]
         out["voteLinks"] = []
         for v in votes[:8]:
@@ -1635,6 +1663,7 @@ class Panel:
             raise ApiError(400, "The vote reward must be a number.")
         out["mascot"] = bool(body.get("mascot", SITE_DEFAULTS["mascot"]))
         out["mojangSkins"] = bool(body.get("mojangSkins", SITE_DEFAULTS["mojangSkins"]))
+        out["statStyle"] = body.get("statStyle") if body.get("statStyle") in ("strip", "board", "hotbar") else SITE_DEFAULTS["statStyle"]
         self.db.set_kv("site_content", out)
         # forget uploads nothing uses any more (a day later, so a page being edited keeps its new pictures)
         used = {v.rsplit("/", 1)[-1] for v in [out[k] for k in SITE_IMAGES] + [f["image"] for f in out["features"]]
