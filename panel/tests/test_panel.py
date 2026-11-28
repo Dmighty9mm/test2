@@ -635,6 +635,137 @@ class FakeGitHub:
         return self.files[urllib.parse.unquote(url.split("/" + "c" * 40 + "/panel/", 1)[1])]
 
 
+class PanelSkins(unittest.TestCase):
+    def setUp(self):
+        self.p, self.clock = make_panel()
+        self.p.create_account("Steve_1", "password1")
+        self.png = app.png_from_rgba(bytes([10, 20, 30, 255]) * (64 * 64))
+        self.asked = []
+
+    def b64(self, data):
+        return __import__("base64").b64encode(data).decode()
+
+    def fake_mojang(self, skin_url="http://textures.minecraft.net/texture/" + "ab" * 20):
+        def fetch(url, limit=0):
+            self.asked.append(url)
+            if url.startswith(app.MOJANG_PROFILE):
+                return json.dumps({"id": "0" * 32, "name": "Steve_1"}).encode() if url.lower().endswith("steve_1") else None
+            if url.startswith(app.MOJANG_SESSION):
+                tex = json.dumps({"textures": {"SKIN": {"url": skin_url}} if skin_url else {}}).encode()
+                return json.dumps({"properties": [{"name": "textures", "value": self.b64(tex)}]}).encode()
+            return self.png
+        self.p.skin_fetch = fetch
+
+    def test_only_real_skins_are_taken(self):
+        self.assertIsNone(app.skin_problem(self.png))
+        self.assertTrue(app.skin_problem(b"GIF89a"))
+        self.assertTrue(app.skin_problem(self.png[:-5]))
+        self.assertTrue(app.skin_problem(self.png + b"<script>"))
+        self.assertTrue(app.skin_problem(app.png_from_rgba(bytes(4 * 32 * 32), 32, 32)))
+        self.assertIsNone(app.skin_problem(app.png_from_rgba(bytes(4 * 64 * 32), 64, 32)))
+        with self.assertRaises(app.ApiError):
+            self.p.set_skin("Steve_1", png="not base64!")
+        with self.assertRaises(app.ApiError):
+            self.p.set_skin("Nobody", png=self.b64(self.png))
+
+    def test_own_skin_from_png_or_pixels(self):
+        self.p.skin_queue.extend(["x"] * 500)          # no lookups in this test
+        self.assertIsNone(self.p.skin("Steve_1"))
+        self.p.set_skin("steve_1", png="data:image/png;base64," + self.b64(self.png))
+        self.assertEqual(self.p.skin("STEVE_1"), self.png)
+        self.p.set_skin("Steve_1", pixels=self.b64(bytes([1, 2, 3, 255]) * 4096))
+        self.assertIsNone(app.skin_problem(self.p.skin("Steve_1")))
+        self.assertNotEqual(self.p.skin("Steve_1"), self.png)
+        self.p.clear_skin("Steve_1")
+        self.assertIsNone(self.p.skin("Steve_1"))
+
+    def test_minecraft_lookup(self):
+        self.fake_mojang()
+        self.assertTrue(self.p.lookup_skin("steve_1"))
+        self.assertEqual(self.p.skin("Steve_1"), self.png)
+        self.assertTrue(self.asked[-1].startswith("https://textures.minecraft.net/texture/"))
+        # the player's own skin wins and a later lookup leaves it alone
+        mine = app.png_from_rgba(bytes([9, 9, 9, 255]) * 4096)
+        self.p.set_skin("Steve_1", png=self.b64(mine))
+        self.p.lookup_skin("steve_1")
+        self.assertEqual(self.p.skin("Steve_1"), mine)
+
+    def test_lookup_misses_and_outages(self):
+        self.fake_mojang(skin_url="")
+        self.assertTrue(self.p.lookup_skin("steve_1"))
+        self.assertEqual(self.p.db.one("SELECT source FROM skins WHERE name_key='steve_1'")["source"], "none")
+        self.fake_mojang(skin_url="https://evil.test/texture/" + "ab" * 20)
+        self.p.lookup_skin("steve_1")
+        self.assertFalse(any("evil" in u for u in self.asked))
+        def down(url, limit=0):
+            raise OSError("no network")
+        self.p.skin_fetch = down
+        self.p.clear_skin("Steve_1")
+        self.assertFalse(self.p.lookup_skin("steve_1"))
+        self.assertIsNone(self.p.db.one("SELECT 1 FROM skins WHERE name_key='steve_1'"))
+
+    def test_lookups_only_for_known_names_and_when_on(self):
+        self.fake_mojang()
+        self.p.skin_pause = 0
+        self.p.skin("Stranger")
+        self.p.skin("../etc")
+        self.assertEqual(self.p.skin_queue, [])
+        self.p.set_site_content({"name": "Owner"}, dict(self.p.site_content(), mojangSkins=False))
+        self.p.skin("Steve_1")
+        self.assertEqual(self.p.skin_queue, [])
+        self.p.set_site_content({"name": "Owner"}, dict(self.p.site_content(), mojangSkins=True))
+        self.p.skin("Steve_1")
+        for _ in range(100):
+            if self.p.skin("Steve_1"):
+                break
+            __import__("time").sleep(0.02)
+        self.assertEqual(self.p.skin("Steve_1"), self.png)
+        # fresh for a day, then asked again
+        n = len(self.asked)
+        self.p.skin("Steve_1")
+        self.assertEqual(len(self.asked), n)
+
+
+class PanelRename(unittest.TestCase):
+    def setUp(self):
+        self.p, self.clock = make_panel()
+        self.acc = self.p.create_account("OldName", "password1")
+        self.p.create_account("Taken", "password1")
+        self.p.sync({"players": [{"uuid": "u1", "name": "OldName", "coins": 50, "owned": [], "equipped": {}},
+                                 {"uuid": "u2", "name": "Drifter", "coins": 5, "owned": [], "equipped": {}}]})
+        self.p.put_stats({"game": "plebmc", "players": [{"name": "OldName", "stats": {"kills": 9}}]})
+        self.p.set_skin("OldName", png=__import__("base64").b64encode(app.png_from_rgba(bytes(16384))).decode())
+
+    def test_rename_moves_everything_and_tells_the_game(self):
+        for bad in ("Taken", "taken", "Drifter", "x", "OldName", "bad name"):
+            with self.assertRaises(app.ApiError):
+                self.p.rename_account(self.p.account("OldName"), bad, "OldName")
+        acc = self.p.rename_account(self.p.account("OldName"), "NewName", "OldName")
+        self.assertEqual((acc["name"], acc["name_key"]), ("NewName", "newname"))
+        self.assertIsNone(self.p.account("OldName"))
+        self.assertTrue(self.p.skin("NewName"))
+        self.assertEqual(self.p.db.one("SELECT name FROM stats WHERE name_key='newname'")["name"], "NewName")
+        cmd = self.p.pending()[-1]
+        self.assertEqual((cmd["target"], cmd["action"], cmd["args"]), ("OldName", "rename", ["NewName"]))
+        self.p.ack(cmd["id"], True, "moved")
+        self.assertIsNone(self.p.db.one("SELECT 1 FROM players WHERE name_key='oldname'"))
+        self.assertEqual(self.p.web_login("NewName", "password1", "1.1.1.1")[1]["name"], "NewName")
+
+    def test_seven_day_cooldown_for_players_not_admins(self):
+        self.p.rename_account(self.p.account("OldName"), "NewName", "OldName")
+        with self.assertRaises(app.ApiError) as e:
+            self.p.rename_account(self.p.account("NewName"), "Third_1", "NewName")
+        self.assertEqual(e.exception.status, 429)
+        self.assertIn("7 days", e.exception.message)
+        owner = self.p.create_account("Boss", "password1", "owner")
+        self.p.admin_account(owner, {"name": "NewName", "action": "rename", "newName": "ByAdmin"})
+        self.assertTrue(self.p.account("ByAdmin"))
+        self.assertGreater(self.p.rename_wait(self.p.account("ByAdmin")), 6 * 86400)
+        self.clock.t += 7 * 86400 + 1
+        self.p.rename_account(self.p.account("ByAdmin"), "byadmin", "ByAdmin")      # only the capitals
+        self.assertEqual(self.p.account("BYADMIN")["name"], "byadmin")
+
+
 class PanelUpdater(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -726,6 +857,29 @@ class PanelHttp(unittest.TestCase):
 
     def server(self, path, body=None):
         return self.call("/api/server/" + path, body, {"Authorization": "Bearer " + KEY})
+
+    def test_skin_over_http(self):
+        self.p.skin_queue.extend(["x"] * 500)          # no lookups from the test server
+        self.p.create_account("Skin_Kid", "kidpass99")
+        png = app.png_from_rgba(bytes([5, 6, 7, 255]) * 4096)
+        b64 = __import__("base64").b64encode(png).decode()
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(self.base + "/api/skin/Skin_Kid", timeout=5) as r:
+            self.assertEqual(r.status, 204)
+        s, j, _ = self.call("/api/client/skin", {"name": "Skin_Kid", "token": "wrong", "png": b64})
+        self.assertFalse(j["ok"])
+        s, j, _ = self.call("/api/client/login", {"name": "Skin_Kid", "password": "kidpass99"})
+        s, j, _ = self.call("/api/client/skin", {"name": "Skin_Kid", "token": j["token"], "png": b64})
+        self.assertTrue(j["ok"], j)
+        with opener.open(self.base + "/api/skin/skin_kid", timeout=5) as r:
+            self.assertEqual((r.status, r.headers["Content-Type"], r.read()), (200, "image/png", png))
+            tag = r.headers["ETag"]
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            opener.open(urllib.request.Request(self.base + "/api/skin/skin_kid", headers={"If-None-Match": tag}), timeout=5)
+        self.assertEqual(e.exception.code, 304)
+        s, j, _ = self.call("/api/me/skin", {"remove": True})
+        self.assertEqual(s, 401)
+        self.p.skin_queue.clear()
 
     def test_server_key_required(self):
         s, _, _ = self.call("/api/server/account?name=Bob")

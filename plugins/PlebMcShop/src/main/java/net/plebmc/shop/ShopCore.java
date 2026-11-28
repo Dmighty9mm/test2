@@ -1317,6 +1317,52 @@ final class ShopCore {
 	}
 
 	/** Finds a player by name: online first, then players.yml. */
+	/**
+	 * A PlebMc account got a new name on the website. An offline-mode player is their
+	 * name, so the new name is a new player: this carries the coins, cosmetics, streak
+	 * and quest progress over to it. Returns the two players (old, new), or null when
+	 * the old name never joined.
+	 */
+	synchronized UUID[] rename(String from, String to) {
+		UUID old = resolve(from);
+		UUID neu = null;
+		for (UUID o : net.online()) {
+			if (to.equals(net.name(o))) {
+				neu = o;
+			}
+		}
+		if (neu == null) {
+			neu = StaffLock.offlineUuid(to);
+		}
+		if (old == null || old.equals(neu)) {
+			return null;
+		}
+		Store.Data a = store.get(old);
+		Store.Data b = store.get(neu);
+		b.name = to;
+		b.coins += a.coins;
+		b.owned.addAll(a.owned);
+		for (Map.Entry<String, String> e : a.equipped.entrySet()) {
+			b.equipped.putIfAbsent(e.getKey(), e.getValue());
+		}
+		if (a.lastLogin > b.lastLogin) {
+			b.lastLogin = a.lastLogin;
+			b.streak = a.streak;
+		}
+		b.seen = Math.max(a.seen, b.seen);
+		b.playMinutes += a.playMinutes;
+		if (b.progress.isEmpty() && b.done.isEmpty()) {
+			b.dailyKey = a.dailyKey;
+			b.weeklyKey = a.weeklyKey;
+			b.progress.putAll(a.progress);
+			b.done.addAll(a.done);
+		}
+		store.remove(old);
+		store.changed();
+		store.save();
+		return new UUID[] { old, neu };
+	}
+
 	private UUID resolve(String name) {
 		for (UUID o : net.online()) {
 			if (name.equalsIgnoreCase(net.name(o))) {
