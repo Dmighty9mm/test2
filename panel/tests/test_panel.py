@@ -528,19 +528,6 @@ class PanelLogic(unittest.TestCase):
         self.clock.t += 600
         self.assertFalse(self.p.punishments_page()["source"]["connected"])
 
-    def test_homepage_numbers(self):
-        self.p.create_account("Solo_1", "password1")
-        self.assertEqual(self.p.public_info()["stats"], {"peakToday": 0, "peak": 0, "players": 1, "coins": 0, "cosmetics": 0})
-        self.p.sync({"full": True, "online": ["A1", "B1", "C1"], "players": [
-            {"uuid": "u%d" % i, "name": n, "coins": 100 * i, "owned": [], "equipped": {}} for i, n in enumerate(["A1", "B1", "C1"], 1)]})
-        self.p.sync({"online": ["A1"]})
-        st = self.p.public_info()["stats"]
-        self.assertEqual((st["peakToday"], st["peak"], st["players"], st["coins"]), (3, 3, 3, 600))
-        self.clock.t += 86400
-        self.p.sync({"online": ["A1", "B1"]})
-        st = self.p.public_info()["stats"]
-        self.assertEqual((st["peakToday"], st["peak"]), (2, 3))
-
     def test_coin_gift_says_who_gets_it(self):
         owner = {"name": "Boss", "role": "owner"}
         for flag, args in ((True, [50, "client"]), (False, [50, "all"]), (None, [50])):

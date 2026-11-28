@@ -206,7 +206,7 @@ function empty(iconName, text) {
 // ==================== Plebio, the mascot ====================
 
 /** Each pose's picture size, so the page keeps its shape while the picture loads. */
-const PLEBIO = { idle: [70, 80], idlesway: [76, 80], sit: [70, 78], bow: [60, 80], celebrate: [98, 80], hurt: [82, 84], love: [110, 122],
+const PLEBIO = { wave: [70, 80], cheer: [72, 81], clap: [60, 80], dance: [70, 81], joy: [68, 82], nod: [60, 80], levelup: [109, 109], mine: [86, 80], idle: [70, 80], idlesway: [76, 80], sit: [70, 78], bow: [60, 80], celebrate: [98, 80], hurt: [82, 84], love: [110, 122],
   mcdeath: [103, 89], mcjump: [70, 136], onfire: [70, 114], shake: [70, 80], shiver: [72, 80], sneakspam: [76, 80], spotlight: [134, 138],
   sprint: [70, 83], totem: [70, 82], vanish: [96, 88] };
 const stillOnly = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -774,7 +774,7 @@ async function homeView() {
       h("a", { class: "btn primary big", href: dl }, icon("download"), "Download PlebClient"),
       c.serverIp ? h("button", { class: "server", onclick: () => copyIp(c.serverIp), title: "Copy the server address" },
         h("img", { src: siteLogo(), alt: "" }),
-        h("span", {}, h("b", {}, c.serverIp), h("small", {}, s.connected ? "Server online · click to copy" : "Click to copy the address")), ping) : null),
+        h("span", {}, h("b", {}, c.serverIp), h("small", {}, s.connected ? fmt(s.online) + " playing now · click to copy" : "Click to copy the address")), ping) : null),
     ann ? h("div", { style: "width:100%;max-width:760px;margin-top:10px;text-align:left" }, ann) : null,
     statBar(s, cl))));
 
@@ -2401,6 +2401,7 @@ async function siteView() {
 
   const mascot = h("input", { type: "checkbox", id: "s-mascot" });
   mascot.checked = c.mascot !== false;
+  const statSel = select("s-stats", [["strip", "Open strip"], ["board", "Scoreboard"], ["hotbar", "Hotbar (the first look)"]], c.statStyle || "strip");
   const mojang = h("input", { type: "checkbox", id: "s-mojang" });
   mojang.checked = c.mojangSkins !== false;
   const saveBtn = h("button", { class: "primary", onclick: async () => {
@@ -2410,7 +2411,7 @@ async function siteView() {
       features: feats.map((f) => ({ title: (f.title || "").trim(), text: (f.text || "").trim(), image: f.image || "" })),
       faq: faqs.map((f) => ({ q: (f.q || "").trim(), a: (f.a || "").trim() })).filter((f) => f.q && f.a),
       voteLinks: votes.map((v) => ({ name: (v.name || "").trim(), url: (v.url || "").trim() })).filter((v) => v.name || v.url),
-      voteReward: Math.max(0, parseInt(reward.value, 10) || 0), mascot: mascot.checked, mojangSkins: mojang.checked });
+      voteReward: Math.max(0, parseInt(reward.value, 10) || 0), mascot: mascot.checked, mojangSkins: mojang.checked, statStyle: statSel.value });
     saveBtn.disabled = true;
     try {
       const r = await api("admin/site", body);
@@ -2430,6 +2431,7 @@ async function siteView() {
           h("button", { type: "button", class: "ghost small", onclick: () => { accent.value = v; setAccent(v); } }, n))),
       ...F.serverIp.el, ...F.discordUrl.el, ...F.footer.el,
       h("label", { class: "check", for: "s-mascot" }, mascot, " Show Plebio around the site"),
+      h("label", { for: "s-stats" }, "Look of the numbers on the homepage"), statSel,
       h("label", { class: "check", for: "s-mojang" }, mojang, " Look up the Minecraft skin of players who have not set their own")),
       card("Under the big picture", ...F.badge.el, ...F.title1.el, ...F.title2.el, ...F.subtitle.el)),
     h("div", { class: "grid g2" }, card("Pictures", hero.el, show.el), card("TNT banner at the bottom", ...F.ctaTitle.el, ...F.ctaText.el)),
@@ -2494,7 +2496,7 @@ function animate(root) {
     else el.style.transitionDelay = Math.min(i, 5) * 70 + "ms";
     revealer.observe(el);
   });
-  root.querySelectorAll(".stat-tile b").forEach((b) => {
+  root.querySelectorAll(".slot b, .ss b, .sb-row b").forEach((b) => {
     const to = parseInt(b.textContent.replace(/,/g, ""), 10);
     if (!/^[\d,]+$/.test(b.textContent) || to < 2) return;
     const t0 = performance.now();
@@ -2507,23 +2509,29 @@ function animate(root) {
   });
 }
 
-/** The homepage's numbers: who is on, how big the network is, and where to go next. Every tile is a link. */
+/** The homepage's numbers, in the look the owners picked: an open strip, an in-game scoreboard, or the hotbar. */
 function statBar(s, cl) {
-  const st = info.stats || {};
-  const big = (n) => (n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M" : n >= 1e5 ? Math.round(n / 1e3) + "K" : fmt(n));
-  const tile = (cls, href, ic, value, label, sub) => h("a", { class: "stat-tile " + cls, href },
-    h("span", { class: "stat-ico", "aria-hidden": "true" }, icon(ic)),
-    h("b", {}, value), h("span", { class: "stat-label" }, label), h("small", {}, sub));
+  const style = ["strip", "board", "hotbar"].includes(content().statStyle) ? content().statStyle : "strip";
   const on = s.connected ? s.online || 0 : null;
-  return h("div", { class: "statbar" },
-    plebio("idlesway", { cls: "hot-pal", scale: 1.5 }),
-    tile("live" + (on ? " on" : ""), "#leaderboard", "users", on == null ? "–" : fmt(on),
-      ["Playing now", on ? h("i", { class: "live-dot", "aria-hidden": "true" }) : null],
-      on == null ? "Server is starting up" : st.peakToday > on ? "Peak today: " + fmt(st.peakToday) : st.peak > on ? "Record: " + fmt(st.peak) + " at once" : on ? "Come join them" : "Be the first one on"),
-    tile("", "#stats", "trophy", fmt(st.players || info.accounts || 0), "Players", "have joined PlebMc"),
-    tile("gold", "#leaderboard", "coin", big(st.coins || 0), coinName(), "earned so far"),
-    tile("", "#shop", "bag", fmt(st.cosmetics || 0), "Cosmetics", "hats, cloaks, wings, trails"),
-    tile("accent", "#downloads", "download", cl.latest ? "v" + cl.latest : "Free", "PlebClient", cl.latest ? "Free · browser or Windows" : "Browser or Windows"));
+  const stats = [
+    ["live" + (on ? " on" : ""), on == null ? "–" : fmt(on), "Playing now"],
+    ["", fmt(info.accounts), "Accounts"],
+    ["", "3", "Games"],
+    ["accent", cl.latest ? "v" + cl.latest : "Free", cl.latest ? "PlebClient" : "To play"]];
+  if (style === "hotbar") {
+    return h("div", { class: "hotbar" }, plebio("idlesway", { cls: "hot-pal", scale: 1.5 }),
+      stats.map(([, v, l]) => h("div", { class: "slot" }, h("b", {}, v), h("span", {}, l))));
+  }
+  if (style === "board") {
+    return h("div", { class: "scoreboard-wrap" }, plebio("wave", { cls: "board-pal", scale: 2 }),
+      h("div", { class: "scoreboard" }, h("div", { class: "sb-title" }, info.site),
+        stats.map(([cls, v, l]) => h("div", { class: "sb-row " + cls }, h("span", {}, l), h("b", {}, v))),
+        h("div", { class: "sb-foot" }, content().serverIp || "")));
+  }
+  return h("div", { class: "statstrip" },
+    stats.map(([cls, v, l]) => h("div", { class: "ss " + cls }, h("b", {}, v),
+      h("span", {}, cls.startsWith("live") && on ? h("i", { class: "live-dot", "aria-hidden": "true" }) : null, l))),
+    plebio("wave", { cls: "strip-pal", scale: 1.5 }));
 }
 
 /** Who stands next to each page's heading. */
