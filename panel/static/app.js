@@ -774,14 +774,9 @@ async function homeView() {
       h("a", { class: "btn primary big", href: dl }, icon("download"), "Download PlebClient"),
       c.serverIp ? h("button", { class: "server", onclick: () => copyIp(c.serverIp), title: "Copy the server address" },
         h("img", { src: siteLogo(), alt: "" }),
-        h("span", {}, h("b", {}, c.serverIp), h("small", {}, s.connected ? fmt(s.online) + " playing now · click to copy" : "Click to copy the address")), ping) : null),
+        h("span", {}, h("b", {}, c.serverIp), h("small", {}, s.connected ? "Server online · click to copy" : "Click to copy the address")), ping) : null),
     ann ? h("div", { style: "width:100%;max-width:760px;margin-top:10px;text-align:left" }, ann) : null,
-    h("div", { class: "hotbar" },
-      plebio("idlesway", { cls: "hot-pal", scale: 1.5 }),
-      h("div", { class: "slot" }, h("b", {}, s.connected ? fmt(s.online) : "–"), h("span", {}, "Playing now")),
-      h("div", { class: "slot" }, h("b", {}, fmt(info.accounts)), h("span", {}, "Accounts")),
-      h("div", { class: "slot" }, h("b", {}, "3"), h("span", {}, "Games")),
-      h("div", { class: "slot" }, h("b", {}, cl.latest ? "v" + cl.latest : "Free"), h("span", {}, cl.latest ? "PlebClient" : "To play"))))));
+    statBar(s, cl))));
 
   // the newest posts
   const news = info.latestPosts || [];
@@ -2499,7 +2494,7 @@ function animate(root) {
     else el.style.transitionDelay = Math.min(i, 5) * 70 + "ms";
     revealer.observe(el);
   });
-  root.querySelectorAll(".slot b").forEach((b) => {
+  root.querySelectorAll(".stat-tile b").forEach((b) => {
     const to = parseInt(b.textContent.replace(/,/g, ""), 10);
     if (!/^[\d,]+$/.test(b.textContent) || to < 2) return;
     const t0 = performance.now();
@@ -2510,6 +2505,25 @@ function animate(root) {
     };
     requestAnimationFrame(step);
   });
+}
+
+/** The homepage's numbers: who is on, how big the network is, and where to go next. Every tile is a link. */
+function statBar(s, cl) {
+  const st = info.stats || {};
+  const big = (n) => (n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M" : n >= 1e5 ? Math.round(n / 1e3) + "K" : fmt(n));
+  const tile = (cls, href, ic, value, label, sub) => h("a", { class: "stat-tile " + cls, href },
+    h("span", { class: "stat-ico", "aria-hidden": "true" }, icon(ic)),
+    h("b", {}, value), h("span", { class: "stat-label" }, label), h("small", {}, sub));
+  const on = s.connected ? s.online || 0 : null;
+  return h("div", { class: "statbar" },
+    plebio("idlesway", { cls: "hot-pal", scale: 1.5 }),
+    tile("live" + (on ? " on" : ""), "#leaderboard", "users", on == null ? "–" : fmt(on),
+      ["Playing now", on ? h("i", { class: "live-dot", "aria-hidden": "true" }) : null],
+      on == null ? "Server is starting up" : st.peakToday > on ? "Peak today: " + fmt(st.peakToday) : st.peak > on ? "Record: " + fmt(st.peak) + " at once" : on ? "Come join them" : "Be the first one on"),
+    tile("", "#stats", "trophy", fmt(st.players || info.accounts || 0), "Players", "have joined PlebMc"),
+    tile("gold", "#leaderboard", "coin", big(st.coins || 0), coinName(), "earned so far"),
+    tile("", "#shop", "bag", fmt(st.cosmetics || 0), "Cosmetics", "hats, cloaks, wings, trails"),
+    tile("accent", "#downloads", "download", cl.latest ? "v" + cl.latest : "Free", "PlebClient", cl.latest ? "Free · browser or Windows" : "Browser or Windows"));
 }
 
 /** Who stands next to each page's heading. */

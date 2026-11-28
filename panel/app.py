@@ -1027,6 +1027,7 @@ class Panel:
         if isinstance(body.get("online"), list):
             names = [str(n) for n in body["online"]][:5000]
             self.db.set_kv("online", {"at": now, "players": names})
+            self.note_peak(len(names))
             for n in names:  # online right now = seen now
                 self.db.run("UPDATE players SET last_seen=? WHERE name_key=?", now, n.lower()[:32])
         if body.get("currency"):
@@ -1123,6 +1124,25 @@ class Panel:
         o = self.db.get_kv("online", {"at": 0, "players": []})
         # the proxy syncs every minute; older than 3 minutes means it isn't connected
         return o["players"] if self.now() - o["at"] < 180 else []
+
+    def note_peak(self, online):
+        """Remembers the most players seen on at once today (UTC) and ever, for the homepage."""
+        day = self.now() // 86400
+        pk = self.db.get_kv("online_peak", None) or {}
+        today = max(online, pk.get("today", 0) if pk.get("day") == day else 0)
+        best = max(online, pk.get("best", 0))
+        if pk.get("day") != day or today != pk.get("today") or best != pk.get("best"):
+            self.db.set_kv("online_peak", {"day": day, "today": today, "best": best})
+
+    def home_stats(self):
+        """The numbers under the homepage's buttons."""
+        online = len(self.online())
+        pk = self.db.get_kv("online_peak", None) or {}
+        today = pk.get("today", 0) if pk.get("day") == self.now() // 86400 else 0
+        pl = self.db.one("SELECT COUNT(*) n, COALESCE(SUM(coins), 0) coins FROM players")
+        return {"peakToday": max(today, online), "peak": max(pk.get("best", 0), online),
+                "players": max(pl["n"], self.db.one("SELECT COUNT(*) n FROM accounts")["n"]),
+                "coins": pl["coins"], "cosmetics": len([i for i in self.catalog() if i.get("forSale", True)])}
 
     def server_status(self):
         last = self.db.get_kv("last_sync", 0)
@@ -1529,6 +1549,7 @@ class Panel:
                 "client": self.client_release(), "announcement": discord_links(self.db.get_kv("announcement", None)),
                 "downloads": [d for d in self.downloads() if d["url"]], "content": self.site_content(),
                 "accounts": self.db.one("SELECT COUNT(*) n FROM accounts")["n"],
+                "stats": self.home_stats(),
                 "latestPosts": self.db.all("SELECT id, title, tag, created_at AS at FROM posts ORDER BY pinned DESC, created_at DESC, id DESC LIMIT 3"),
                 # the newest post of the last week, for the homepage's "new post" notice
                 "newPost": self.db.one("SELECT id, title, tag, created_at AS at FROM posts WHERE created_at > ? "
