@@ -7,16 +7,23 @@ import net.plebmc.client.apollo.proto.Json;
 import net.plebmc.client.mods.SettingsStore;
 
 /**
- * The PlebMc account this client is signed in to. The client can't be used
- * until you sign in or create an account (the start screen), and you always
- * play under your account's name. The panel hands back a sign-in token that is
- * kept in this browser (never the password); the server checks the same token
- * when you join, so nobody can play or spend coins as you.
+ * The PlebMc account this client is signed in to. The start screen asks you to
+ * sign in or create an account, and you then play under your account's name.
+ * The panel hands back a sign-in token that is kept in this browser (never the
+ * password); the server checks the same token when you join, so nobody can play
+ * or spend coins as you.
+ *
+ * <p>Or you play as a guest: the client and its mods work, under any name, but
+ * nothing that belongs to an account does (coins, quests, the shop, cosmetics).
+ * A guest never talks to the server's shop channel, so the server sees an
+ * ordinary client.</p>
  */
 public final class ClientSession {
 
 	/** Where the account panel lives. A server can't change it. */
-	public static final String DEFAULT_PANEL = "https://client.plebmc.top";
+	public static final String DEFAULT_PANEL = "https://plebmc.top";
+	/** Where it used to live: a saved copy of this address moves to the new one. */
+	private static final String OLD_PANEL = "https://client." + "plebmc.top";
 
 	public enum State {
 		/** Not signed in: the start screen shows. */
@@ -47,6 +54,8 @@ public final class ClientSession {
 	private static String role = "player";
 	private static String panel = DEFAULT_PANEL;
 	private static boolean loaded;
+	/** "Play without an account" was picked (kept between launches until you sign in). */
+	private static boolean guest;
 	/**
 	 * Set on clients that can't change the player's name (Forge: the name comes
 	 * from the Minecraft launcher). Only that name's account can be signed in.
@@ -80,7 +89,9 @@ public final class ClientSession {
 		}
 		loaded = true;
 		String p = store.get("account.panel");
-		panel = p == null || p.trim().isEmpty() ? DEFAULT_PANEL : p.trim();
+		panel = p == null || p.trim().isEmpty() || OLD_PANEL.equalsIgnoreCase(p.trim().replaceAll("/+$", "")) ? DEFAULT_PANEL
+				: p.trim();
+		guest = "1".equals(store.get("account.guest"));
 		String n = store.get("account.name");
 		String t = store.get("account.token");
 		if (n == null || t == null || n.isEmpty() || t.isEmpty()
@@ -129,6 +140,34 @@ public final class ClientSession {
 	public static synchronized boolean signedIn() {
 		load();
 		return state == State.SIGNED_IN;
+	}
+
+	/** Playing without an account: mods only, nothing that belongs to an account. */
+	public static synchronized boolean guest() {
+		load();
+		return state != State.SIGNED_IN && guest;
+	}
+
+	/** May the client be used? Yes when signed in or playing as a guest. */
+	public static synchronized boolean usable() {
+		load();
+		return state == State.SIGNED_IN || guest;
+	}
+
+	/** Picks guest mode (the start screen's "Play without an account"). Signing in ends it. */
+	public static void playAsGuest() {
+		synchronized (ClientSession.class) {
+			load();
+			if (state == State.SIGNED_IN) {
+				return;
+			}
+			guest = true;
+			store.set("account.guest", "1");
+			message = null;
+			version++;
+		}
+		// drop anything an account left behind (coins, what was worn)
+		Cosmetics.reset();
 	}
 
 	/** Puts the account's name back as the username (in case it was changed in the profile screen). */
@@ -183,6 +222,7 @@ public final class ClientSession {
 		message = null;
 		version++;
 		post(route, body("name", n, "password", password), (status, r) -> {
+			boolean wasGuest = false;
 			synchronized (ClientSession.class) {
 				pending = false;
 				if (r == null) {
@@ -200,11 +240,18 @@ public final class ClientSession {
 					store.set("account.token", token);
 					store.set("account.role", role);
 					state = State.SIGNED_IN;
+					wasGuest = guest;
+					guest = false;
+					store.set("account.guest", null);
 					message = "register".equals(route) ? "Account made. Welcome, " + name + "!" : "Signed in as " + name + ".";
 					messageOk = true;
 					profileName.accept(name);
 				}
 				version++;
+			}
+			if (wasGuest) {
+				// already on a server as a guest: say hello to its shop now
+				Cosmetics.resync();
 			}
 		});
 	}
@@ -215,6 +262,8 @@ public final class ClientSession {
 		synchronized (ClientSession.class) {
 			t = token;
 			clear();
+			guest = false;
+			store.set("account.guest", null);
 			message = "Signed out.";
 			messageOk = true;
 			version++;
@@ -309,6 +358,7 @@ public final class ClientSession {
 		role = "player";
 		panel = DEFAULT_PANEL;
 		fixedName = null;
+		guest = false;
 		loaded = false;
 		pending = false;
 		message = null;

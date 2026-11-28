@@ -35,8 +35,10 @@ public final class PlebMenu {
 			Minecraft.getMinecraft().displayGuiScreen(new UpdateScreen(screen));
 			return;
 		}
-		if (!net.plebmc.client.cosmetics.ClientSession.signedIn()) {
-			// no PlebMc account signed in: the start screen comes first, and there's no way past it
+		// the title screen only opens after the saved profile (name, skin, cape) was read
+		PlebClient.profileLoaded();
+		if (!net.plebmc.client.cosmetics.ClientSession.usable()) {
+			// not signed in and not a guest yet: the start screen comes first
 			Minecraft.getMinecraft().displayGuiScreen(new LoginGateScreen(screen));
 			return;
 		}
@@ -53,7 +55,7 @@ public final class PlebMenu {
 
 	/** True when the button was one of ours (and has been handled). */
 	public static boolean mainMenuAction(GuiScreen screen, GuiButton b) {
-		if (!net.plebmc.client.cosmetics.ClientSession.signedIn()) {
+		if (!net.plebmc.client.cosmetics.ClientSession.usable()) {
 			Minecraft.getMinecraft().displayGuiScreen(new LoginGateScreen(screen));
 			return true;
 		}

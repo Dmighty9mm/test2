@@ -80,7 +80,7 @@ public class GuiButton extends Gui {
 	 * Draws this button to the screen.
 	 */
 	public void drawButton(Minecraft mc, int mouseX, int mouseY) {
-		if (this.visible && net.plebmc.client.hud.PlebTheme.enabled()) {
+		if (this.visible && net.plebmc.client.hud.PlebTheme.buttons()) {
 			this.hovered = mouseX >= this.xPosition && mouseY >= this.yPosition && mouseX < this.xPosition + this.width
 					&& mouseY < this.yPosition + this.height;
 			if (this.enabled && this.hovered) {

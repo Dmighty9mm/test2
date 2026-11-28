@@ -146,19 +146,55 @@ public class ClientSessionTest {
 		ClientSession.fixName("Alex");
 		check(!ClientSession.signedIn(), "saved sign-in for another launcher name is not used");
 
+		// guest mode: usable without an account, kept between launches, ended by signing in
+		ClientSession.fixName(null);
+		start(store());
+		profile = null;
+		check(!ClientSession.usable() && !ClientSession.guest(), "a new client is neither signed in nor a guest");
+		ClientSession.playAsGuest();
+		check(ClientSession.usable() && ClientSession.guest() && !ClientSession.signedIn(), "guest: usable, not signed in");
+		check(profile == null, "a guest keeps their own name");
+		check(ClientSession.tokenFor("Pleb") == null, "a guest has no token for the server");
+		check(net.plebmc.client.cosmetics.Cosmetics.lastCoins() < 0
+				&& net.plebmc.client.cosmetics.Cosmetics.lastWorn(net.plebmc.client.cosmetics.Cosmetics.HAT) == null,
+				"a guest has no coins and wears nothing");
+		net.plebmc.client.cosmetics.Cosmetics.handle("{\"type\":\"state\",\"coins\":500}");
+		check(net.plebmc.client.cosmetics.Cosmetics.coins() < 0, "a guest ignores the server's shop messages");
+		check(!net.plebmc.client.cosmetics.Cosmetics.requestState() && !net.plebmc.client.cosmetics.Cosmetics.buy("gold_tophat"),
+				"a guest sends nothing to the shop");
+		Map<String, String> guestData = data;
+		start(null);
+		data = guestData;
+		check(ClientSession.guest() && ClientSession.usable(), "guest choice survives a restart");
+		status = 200;
+		reply = "{\"ok\":true,\"name\":\"Pleb\",\"token\":\"tok9\"}";
+		ClientSession.signIn("Pleb", "hunter2hunter2");
+		check(ClientSession.signedIn() && !ClientSession.guest() && data.get("plebmc.account.guest") == null
+				&& data.get("account.guest") == null, "signing in ends guest mode");
+		check("Pleb".equals(profile), "signed in: plays under the account's name");
+		ClientSession.signOut();
+		check(!ClientSession.usable(), "signing out goes back to the start screen");
+		// a saved address of the old website moves to the new one
+		start(store());
+		data.put("account.panel", "https://client." + "plebmc.top/");
+		start(null);
+		check("https://plebmc.top".equals(ClientSession.panel()), "old panel address moves to plebmc.top");
+
 		// update checker: asks once, with this version and the platform
 		ClientSession.fixName(null);
 		start(store());
 		UpdateCheck.reset();
 		posts.clear();
 		status = 200;
-		reply = "{\"ok\":true,\"latest\":\"9.0\",\"minimum\":\"1.0\",\"url\":\"https://client.plebmc.top/download\",\"message\":\"New!\",\"outdated\":true,\"required\":false}";
+		reply = "{\"ok\":true,\"latest\":\"9.0\",\"minimum\":\"1.0\",\"url\":\"https://plebmc.top/download\",\"message\":\"New!\",\"outdated\":true,\"required\":false}";
 		UpdateCheck.check("web");
 		check(posts.size() == 1 && posts.get(0)[0].endsWith("/api/client/version"), "update check posts to the panel");
 		check(posts.get(0)[1].contains("\"version\":\"" + ClientInfo.VERSION + "\"") && posts.get(0)[1].contains("\"platform\":\"web\""),
 				"update check sends version and platform");
 		check(UpdateCheck.outdated && !UpdateCheck.required && UpdateCheck.shouldShow(), "outdated client is told");
-		check("9.0".equals(UpdateCheck.latest) && "https://client.plebmc.top/download".equals(UpdateCheck.url), "latest and link kept");
+		check("9.0".equals(UpdateCheck.latest) && "https://plebmc.top/download".equals(UpdateCheck.url) && !UpdateCheck.direct,
+				"latest and the owner's own link kept");
+		check("https://plebmc.top/#downloads".equals(UpdateCheck.site), "the website's Downloads page is known");
 		UpdateCheck.check("web");
 		check(posts.size() == 1, "asks only once per start");
 		UpdateCheck.dismissed = true;
@@ -168,7 +204,19 @@ public class ClientSessionTest {
 		UpdateCheck.check("wasm");
 		UpdateCheck.dismissed = true;
 		check(UpdateCheck.required && UpdateCheck.shouldShow(), "required update can't be dismissed");
-		check(UpdateCheck.url.startsWith("https://client.plebmc.top"), "non-web link replaced with the panel");
+		check(UpdateCheck.url.startsWith("https://plebmc.top") && !UpdateCheck.direct, "non-web link replaced with the website");
+		// no link of the owner's own: the update is this platform's download on the website
+		String[][] kinds = { { "web", "offline" }, { "js", "offline" }, { "wasm", "wasm" }, { "forge", "forge-1.8.9" } };
+		for (String[] k : kinds) {
+			UpdateCheck.reset();
+			reply = "{\"ok\":true,\"latest\":\"9.0\",\"url\":\"https://plebmc.top/#downloads\",\"outdated\":true}";
+			UpdateCheck.check(k[0]);
+			check(UpdateCheck.direct && ("https://plebmc.top/api/dl/" + k[1]).equals(UpdateCheck.url),
+					k[0] + " updates from the website's " + k[1] + " download");
+		}
+		UpdateCheck.reset();
+		UpdateCheck.check("desktop");
+		check(!UpdateCheck.direct && "https://plebmc.top/#downloads".equals(UpdateCheck.url), "desktop opens the Downloads page");
 		UpdateCheck.reset();
 		status = 0;
 		reply = null;

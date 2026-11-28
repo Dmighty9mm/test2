@@ -128,7 +128,7 @@ public class GuiScreenOptionsSounds extends GuiScreen {
 							+ GuiScreenOptionsSounds.this.getSoundVolume(this.field_146153_r);
 				}
 
-				if (net.plebmc.client.hud.PlebTheme.enabled()) {
+				if (net.plebmc.client.hud.PlebTheme.buttons()) {
 					net.plebmc.client.hud.PlebTheme.sliderKnob(this,
 							this.xPosition + (int) (this.field_146156_o * (float) (this.width - 8)), this.field_146155_p);
 					return;

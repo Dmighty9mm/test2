@@ -68,7 +68,7 @@ public class GuiSlider2 extends GuiButton {
 				this.displayString = updateDisplayString();
 			}
 
-			if(this.enabled && net.plebmc.client.hud.PlebTheme.enabled()) {
+			if(this.enabled && net.plebmc.client.hud.PlebTheme.buttons()) {
 				net.plebmc.client.hud.PlebTheme.sliderKnob(this, this.xPosition + (int) (this.sliderValue * (float) (this.width - 8)), this.dragging);
 				return;
 			}

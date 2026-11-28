@@ -466,16 +466,31 @@ class PanelLogic(unittest.TestCase):
         self.p.reset_site_content(owner)
         self.assertEqual(self.p.public_info()["content"]["logo"], "/static/logo.png")
 
+    def test_client_versions_start_over_at_1_0(self):
+        owner = self.p.create_account("Owner", "password1", "owner")
+        self.p.set_client_release(owner, {"latest": "2.1", "minimum": "2.0", "message": "hi"})
+        for v in ("2.0", "2.1", "1.0"):
+            self.p.client_version(v, "wasm")
+        self.p.db.set_kv("client_versions_reset_1_0", None)  # as on a panel from before the reset
+        p2 = app.Panel(self.p.db, self.p.cfg, self.p.clock)
+        self.assertEqual([r["version"] for r in p2.client_versions()], ["1.0"])
+        rel = p2.client_release()
+        self.assertEqual((rel["latest"], rel["minimum"], rel["message"]), ("1.0", "", "hi"))
+        self.assertFalse(p2.client_version("1.0", "wasm")["outdated"])
+        # only once: a later 2.x setting of the owner's own is left alone
+        p2.set_client_release(owner, {"latest": "2.5"})
+        self.assertEqual(app.Panel(self.p.db, self.p.cfg, self.p.clock).client_release()["latest"], "2.5")
+
     def test_client_update_checker(self):
         owner = self.p.create_account("Owner", "password1", "owner")
         r = self.p.client_version("2.0", "web")
         self.assertFalse(r["outdated"] or r["required"])
-        self.p.set_client_release(owner, {"latest": "2.1", "minimum": "1.10", "url": "https://client.plebmc.top/dl",
+        self.p.set_client_release(owner, {"latest": "2.1", "minimum": "1.10", "url": "https://plebmc.top/dl",
                                           "message": "New cloaks"})
         r = self.p.client_version("2.0", "wasm")
         self.assertTrue(r["outdated"])
         self.assertFalse(r["required"])
-        self.assertEqual((r["latest"], r["url"], r["message"]), ("2.1", "https://client.plebmc.top/dl", "New cloaks"))
+        self.assertEqual((r["latest"], r["url"], r["message"]), ("2.1", "https://plebmc.top/dl", "New cloaks"))
         self.assertTrue(self.p.client_version("1.9", "forge")["required"])  # 1.9 < 1.10
         self.assertFalse(self.p.client_version("2.1", "web")["outdated"])
         self.assertFalse(self.p.client_version("10.0", "web")["outdated"])

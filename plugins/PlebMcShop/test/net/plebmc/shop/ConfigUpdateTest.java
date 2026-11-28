@@ -31,7 +31,7 @@ public class ConfigUpdateTest {
 		check(r.text.startsWith(old.trim().substring(0, 40)), "the file still starts the same");
 		check("Pleb Coins".equals(c.str("currency-name", "")), "your currency name kept");
 		check("test-key".equals(c.section("website").str("api-key", "")), "your website key kept");
-		check(c.section("accounts") != null && "https://client.plebmc.top".equals(c.section("accounts").str("url", "")),
+		check(c.section("accounts") != null && "https://plebmc.top".equals(c.section("accounts").str("url", "")),
 				"accounts section added");
 		check(c.section("admin-menu") != null && c.section("staff-lock") != null, "admin-menu and staff-lock added");
 		check(c.bool("plebclient-only", false), "plebclient-only added");

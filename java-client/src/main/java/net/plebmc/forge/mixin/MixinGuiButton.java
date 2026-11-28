@@ -27,7 +27,7 @@ public abstract class MixinGuiButton extends Gui {
 	@Inject(method = "drawButton", at = @At("HEAD"), cancellable = true)
 	private void plebmc$drawButton(Minecraft mc, int mouseX, int mouseY, CallbackInfo ci) {
 		GuiButton self = (GuiButton) (Object) this;
-		if (!self.visible || !PlebTheme.enabled()) {
+		if (!self.visible || !PlebTheme.buttons()) {
 			return;
 		}
 		this.hovered = mouseX >= self.xPosition && mouseY >= self.yPosition && mouseX < self.xPosition + self.width

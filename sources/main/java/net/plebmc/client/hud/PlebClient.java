@@ -78,6 +78,19 @@ public final class PlebClient {
 	private PlebClient() {
 	}
 
+	/** The saved Eaglercraft profile (name, skin, cape) has been read from storage. */
+	private static volatile boolean profileLoaded;
+
+	/**
+	 * Call once the saved profile is loaded (the title screen does): from here on the
+	 * account's name may be written into it. Returns true the first time.
+	 */
+	public static boolean profileLoaded() {
+		boolean first = !profileLoaded;
+		profileLoaded = true;
+		return first;
+	}
+
 	public static void init(Minecraft minecraft) {
 		if (mc != null) {
 			return;
@@ -111,7 +124,10 @@ public final class PlebClient {
 			// the PlebMc account this client plays as (the start screen signs in or makes one)
 			net.plebmc.client.cosmetics.ClientSession.setup((url, json, done) -> net.lax1dude.eaglercraft.v1_8.internal.PlatformPlebHttp
 					.post(url, json, (status, body) -> done.done(status, body)), STORE, name -> {
-						if (!name.equals(net.lax1dude.eaglercraft.v1_8.profile.EaglerProfile.getName())) {
+						// Not before the saved profile has been read: this runs at start-up, ahead of
+						// EaglerProfile.read(), and saving then would write the default skin and cape
+						// over the player's own. profileLoaded() sets the name once the profile is in.
+						if (profileLoaded && !name.equals(net.lax1dude.eaglercraft.v1_8.profile.EaglerProfile.getName())) {
 							net.lax1dude.eaglercraft.v1_8.profile.EaglerProfile.setName(name);
 							net.lax1dude.eaglercraft.v1_8.profile.EaglerProfile.save();
 						}
@@ -182,9 +198,9 @@ public final class PlebClient {
 		case 1:
 			return new ModsScreen(null);
 		case 2:
-			return new QuestsScreen(null);
+			return LoginGateScreen.orSignIn(null, () -> new QuestsScreen(null));
 		case 3:
-			return new ShopScreen(null);
+			return LoginGateScreen.orSignIn(null, () -> new ShopScreen(null));
 		default:
 			return new LauncherScreen(null);
 		}
@@ -550,9 +566,7 @@ public final class PlebClient {
 			LOG.warn("HUD render failed: " + t);
 		}
 		try {
-			if (mc.currentScreen == null) {
-				SecretMods.hud(guiW, guiH);
-			}
+			SecretMods.hud(guiW, guiH);
 			VoteAlert.render(guiW, guiH);
 			if (!(mc.currentScreen instanceof PlebScreen)) {
 				EasterEggs.overlay(guiW, guiH);

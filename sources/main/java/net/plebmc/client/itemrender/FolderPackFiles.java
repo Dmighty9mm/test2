@@ -34,9 +34,18 @@ final class FolderPackFiles implements PackFiles {
 	public List<String> list(String folder) {
 		List<String> out = new ArrayList<>();
 		try {
-			for (String full : new VFile2(pack.plebPrefix(), pack.plebFolder(), folder).listFilenames(false)) {
-				int i = full.lastIndexOf('/');
-				out.add(i < 0 ? full : full.substring(i + 1));
+			// Listed with everything below it and cut down here: the WASM build's own
+			// "this folder only" listing returns nothing for a folder path, which left
+			// WASM clients without any custom item models.
+			VFile2 dir = new VFile2(pack.plebPrefix(), pack.plebFolder(), folder);
+			String base = dir.getPath();
+			if (!base.endsWith("/")) {
+				base += "/";
+			}
+			for (String full : dir.listFilenames(true)) {
+				if (full.startsWith(base) && full.indexOf('/', base.length()) < 0 && full.length() > base.length()) {
+					out.add(full.substring(base.length()));
+				}
 			}
 		} catch (Throwable t) {
 			// an unreadable folder lists as empty

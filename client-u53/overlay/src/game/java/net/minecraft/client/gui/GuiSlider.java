@@ -96,7 +96,7 @@ public class GuiSlider extends GuiButton {
 				this.responder.onTick(this.id, this.func_175220_c());
 			}
 
-			if (net.plebmc.client.hud.PlebTheme.enabled()) {
+			if (net.plebmc.client.hud.PlebTheme.buttons()) {
 				net.plebmc.client.hud.PlebTheme.sliderKnob(this,
 						this.xPosition + (int) (this.sliderPosition * (float) (this.width - 8)), this.isMouseDown);
 				return;

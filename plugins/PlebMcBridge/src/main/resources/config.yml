@@ -3,7 +3,7 @@
 # stats: send this server's game stats to the PlebMc Panel, which shows each
 # player's stats and a leaderboard for every stat.
 #   game:      plebnite, plebrpg, or another short name (one per server)
-#   panel-url: the panel's address, like https://client.plebmc.top
+#   panel-url: the panel's address, like https://plebmc.top
 #   key:       the panel's PANEL_STATS_KEY (it can only send stats)
 #   values:    stat id: where its number comes from
 #              '%placeholder%'        a PlaceholderAPI placeholder
@@ -15,7 +15,7 @@
 stats:
   enabled: false
   game: plebnite
-  panel-url: https://client.plebmc.top
+  panel-url: https://plebmc.top
   key: ''
   every-seconds: 300
   values:

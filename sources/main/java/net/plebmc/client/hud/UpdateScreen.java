@@ -26,10 +26,19 @@ public final class UpdateScreen extends PlebScreen {
 		wy = (this.height - wh) / 2;
 		int x = wx + 14, w = ww - 28;
 		int by = wy + wh - 26;
-		Button go = button("Update now", x + w - 120, by, 120, 18, () -> EagRuntime.openLink(UpdateCheck.url));
-		go.style(Style.PRIMARY).icon("link").tip = UpdateCheck.url;
+		Button go = button(UpdateCheck.direct ? "Download update" : "Update now", x + w - 120, by, 120, 18,
+				() -> EagRuntime.openLink(UpdateCheck.url));
+		go.style(Style.PRIMARY).icon("link").tip = UpdateCheck.direct
+				? "Downloads the new " + ClientInfo.NAME + " from " + UpdateCheck.site.replaceAll("^https?://|/#.*$", "")
+				: UpdateCheck.url;
+		int lx = x;
 		if (!UpdateCheck.required) {
-			button("Later", x, by, 80, 18, this::later).icon("clock");
+			button("Later", x, by, 60, 18, this::later).icon("clock");
+			lx += 64;
+		}
+		if (UpdateCheck.direct && !UpdateCheck.site.isEmpty()) {
+			// every build and what's new, on the website
+			button("Website", lx, by, 70, 18, () -> EagRuntime.openLink(UpdateCheck.site)).icon("link").tip = UpdateCheck.site;
 		}
 	}
 
@@ -65,7 +74,8 @@ public final class UpdateScreen extends PlebScreen {
 				"A new " + ClientInfo.NAME + " is out", false);
 		int x = wx + 14, w = ww - 28;
 		int y = wy + 44;
-		Ui.text("Your " + ClientInfo.NAME + " is out of date.", x, y, Ui.MUTED);
+		String have = "Your " + ClientInfo.NAME + " " + UpdateCheck.VERSION + " is out of date.";
+		Ui.text(UpdateCheck.latest.isEmpty() ? have : Ui.fit(have + " Newest: " + UpdateCheck.latest, w), x, y, Ui.MUTED);
 		y += 14;
 		String m = UpdateCheck.message;
 		if (m == null || m.isEmpty()) {

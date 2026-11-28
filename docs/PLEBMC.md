@@ -53,7 +53,7 @@ other. Merge them in this order for the smallest diffs:
 | #6 (merged into #5) | `claude/project-thread-kwi4dk` | Model hats like cloaks, Owner admin menu, menu theme, Storm Tracker off by default |
 | #8 | `claude/project-thread-kwi4dk` | New title screen, shop collections, trails removed, animated cloaks, EaglercraftX u53 port (with WASM), 20 more mods, web tools |
 | #7 | `claude/project-thread-c0rppo` | Admin menu needs nLogin `/login` and a separate `/adminlogin` password |
-| #9 | `claude/project-thread-d65x79` | PlebMc accounts: self-hosted panel at `client.plebmc.top`, sign-in required on the client, PlebClient-only coins (builds on #7) |
+| #9 | `claude/project-thread-d65x79` | PlebMc accounts: self-hosted panel at `plebmc.top`, sign-in required on the client, PlebClient-only coins (builds on #7) |
 
 #7 and #9 branch off the #5 branch, not off #8, so they will need merging with #8.
 None of this has been tested against the live servers, because the build machine can't reach
@@ -379,12 +379,46 @@ On an offline-mode server anyone can join with anyone's name. Two open PRs close
   10 minutes. Without nLogin, a staff lock (`plebshop staff set <name> <password>`) makes
   protected names enter a password on Eaglercraft's own login screen (needs EaglerXBungee).
 - **PR #9 (PlebMc accounts).** A self-hosted **PlebMc Panel** (`panel/`, Python + SQLite,
-  Docker + Caddy, hosted at `client.plebmc.top`). Every name can have a password account.
-  PlebClient opens on a Sign in / Create account screen and can't be used until you sign in;
-  you then play under that account's name. Other clients sign in with
+  Docker + Caddy, hosted at `plebmc.top`). Every name can have a password account.
+  PlebClient opens on a Sign in / Create / Guest screen. Signed in, you play under that
+  account's name. As a **guest** you get the client and its mods only (see
+  [Guest mode](#guest-mode)). Other clients sign in with
   `/account login <password>`. A name with an account that doesn't sign in within 90 seconds
   is kicked. Admins manage coins, cosmetics, kicks, locks and password resets on the website.
   Coins still live in PlebioAPI. Setup steps are in `panel/README.md` on that branch.
+
+### Guest mode
+
+The start screen's **Guest** tab lets someone use PlebClient without a PlebMc account. A guest
+gets every mod, the HUD editor and all client settings, keeps their own name and skin, and can
+join any server. Nothing that belongs to an account works: no coins, quests or daily rewards,
+no shop or locker, and no hats, cloaks or wings are drawn (their own or other players').
+
+- The client never talks to the server's shop channel as a guest, so with `plebclient-only:
+  true` the proxy pays them no coins, exactly like a player on another client.
+- A guest who joins under a name that has a PlebMc account is still asked to
+  `/account login` by the server, like on any other client.
+- Signing in later: **Sign in** at the bottom of the title screen's sidebar (where Log out is
+  for accounts), the Guest chip in the top right, the **Sign in** door on the Right Shift
+  screen, or by opening the Shop, Locker or Quests. Signing in ends guest mode; logging out
+  goes back to the start screen. The choice is remembered between launches.
+
+### Client updates come from the website
+
+At start-up the client asks the website (`https://plebmc.top/api/client/version`) whether a
+newer version is out; the owner sets **Latest version** and **Minimum version** under Client
+updates on the website. "Download update" on the client's update screen fetches that
+platform's build from the website's Downloads page (`/api/dl/offline`, `/api/dl/wasm` or
+`/api/dl/forge-1.8.9`), and **Website** opens the Downloads page. If the owner typed a link
+of their own under Client updates, the button opens that link instead. The Windows app opens
+the Downloads page. Each build's version is `UpdateCheck.VERSION` (1.0 for the first public release; raise it per release, together with `projectForkVersion` in `client-u53/overlay/.../EaglercraftVersion.java`). The browser client reports the brand string **PlebClient 1.0** (name and PlebClient version; the Eagler client version stays `u53`) to Eaglercraft servers, with its own brand UUID `a8621e2b-c62f-3e4f-b5e0-682d06aa1a61` (made from `PlebClient`, the same in every release), so EaglerXServer and EaglerXPlan no longer list it as vanilla Eagler. EaglercraftX's own update checker is off (`enableUpdateService = false`): PlebClient has its own. Version numbers started over at 1.0: the website drops its records of 2.x clients once, and a Latest or Minimum version of 2.0 or above goes back to 1.0 (`reset_client_versions` in `panel/app.py`).
+
+### Skin and cape are kept
+
+Signed-in clients used to write the account's name into the Eaglercraft profile at start-up,
+before the saved profile had been read, which saved the default skin and cape over the
+player's own on every launch. The name is now only written once the profile is loaded
+(`PlebClient.profileLoaded()`, called when the title screen opens).
 
 ## Apollo server features (waypoints come from the server)
 
@@ -562,7 +596,7 @@ Nothing PlebClient-specific is needed. To test on a fresh server, see
   they type `/adminlogin <password>` in game after `/login`.
 - **#9:** host the panel (`panel/README.md`: Docker on a small VPS, DNS `client` record,
   `.env` with `PANEL_DOMAIN`, `PANEL_PUBLIC_URL`, `PANEL_SERVER_KEY`), then set `accounts:` in
-  `plugins/PlebioAPI/config.yml` (`enabled: true`, `url: 'https://client.plebmc.top'`,
+  `plugins/PlebioAPI/config.yml` (`enabled: true`, `url: 'https://plebmc.top'`,
   `server-key:` the same key) and `/plebshop reload`.
 
 # Part 3: Developer reference
@@ -726,9 +760,9 @@ Cosmetics (hats and cloaks) are bought with the server's coins (on PlebMc: PlebM
 
 **Website login (plebmc.top).** `{"type":"account"}` asks for the player's website login; `{"type":"link","code":"ABC123"}` links the Minecraft account with a code from the website's Connections page. The server answers `{"type":"account","enabled":true,"linked":true,"username":"Master","displayName":"Master","groups":["Owner","Member"],"staff":true,"site":"https://plebmc.top","linkUrl":"https://plebmc.top/index.php?route=/user/connections","message":"Logged in as Master!","ok":true}` (`message`/`ok` only after a link attempt or an error). It also sends this on join once it has checked the website. `{"type":"logout"}` logs out: the server unlinks the Minecraft account on the website (`users/integration_id:minecraft:<uuid>/integrations/unlink`) and answers with `"linked":false`.
 
-**PlebMc account sign-in (the panel).** On join the client sends `{"type":"signin"}`; the server answers `{"type":"signin","enabled":true,"panel":"https://client.plebmc.top","known":true,"exists":true,"signedIn":false,"locked":false,"name":"Owner","role":"player","kickIn":88}`. The client signs in with `{"type":"signin","password":"...","remember":true}`, with a saved token `{"type":"signin","token":"..."}`, or makes an account with `{"type":"signin","register":true,"password":"...","remember":true}`. Answers are the same status plus `ok`, `message`, and `token` (keep it, only sent with `remember`) or `forget:true` (drop the saved token). `{"type":"signout","token":"..."}` signs out and revokes the token. While accounts are on, `buy`, `equip`, `link`, `logout` and `admin` are refused until `signedIn`. The proxy talks to the panel on `/api/server/*` with the server key (see `panel/app.py`).
+**PlebMc account sign-in (the panel).** On join the client sends `{"type":"signin"}`; the server answers `{"type":"signin","enabled":true,"panel":"https://plebmc.top","known":true,"exists":true,"signedIn":false,"locked":false,"name":"Owner","role":"player","kickIn":88}`. The client signs in with `{"type":"signin","password":"...","remember":true}`, with a saved token `{"type":"signin","token":"..."}`, or makes an account with `{"type":"signin","register":true,"password":"...","remember":true}`. Answers are the same status plus `ok`, `message`, and `token` (keep it, only sent with `remember`) or `forget:true` (drop the saved token). `{"type":"signout","token":"..."}` signs out and revokes the token. While accounts are on, `buy`, `equip`, `link`, `logout` and `admin` are refused until `signedIn`. The proxy talks to the panel on `/api/server/*` with the server key (see `panel/app.py`).
 
-**Start screen (client sign-in).** The client can't be used until it is signed in: `LoginGateScreen` posts to the panel's `/api/client/login` or `/api/client/register` (`{"name","password"}`, plain `text/plain` POST, CORS open, no cookies) and keeps the returned token in local storage (`account.name`, `account.token`). On start it re-checks it with `/api/client/check`; `/api/client/logout` revokes it. The username is forced to the account's name, and the same token is sent as the in-game `signin` token on join. Coins, quests and login rewards are only for players on the PlebMc client (`plebclient-only` in PlebioAPI).
+**Start screen (client sign-in).** The client opens on `LoginGateScreen` until it is signed in or the player picks Guest (`account.guest` in local storage; a guest never sends anything on `plebmc:shop`, so the proxy doesn't count them as a PlebClient player). To sign in, `LoginGateScreen` posts to the panel's `/api/client/login` or `/api/client/register` (`{"name","password"}`, plain `text/plain` POST, CORS open, no cookies) and keeps the returned token in local storage (`account.name`, `account.token`). On start it re-checks it with `/api/client/check`; `/api/client/logout` revokes it. The username is forced to the account's name, and the same token is sent as the in-game `signin` token on join. Coins, quests and login rewards are only for players on the PlebMc client (`plebclient-only` in PlebioAPI).
 
 Catalog items that are never sold (given by staff or events) carry `"forSale":false` (and, for older clients, a price nobody can reach); the shop shows them as Exclusive.
 
@@ -835,6 +869,12 @@ With the PlebClient menus on, `hud/TitleMenu.java` replaces the vanilla title sc
 **Settings > Title screen** (the sidebar's Customize entry) sets the sidebar (opens on hover, always open, icons only), the background (wallpaper or panorama), how much it is darkened, the mini mascot, the particles, the mascot head, a clock, the splash text and the accent color (12 colors). Turning the PlebClient menus off brings back the classic menu.
 
 ## Menu theme
+
+Buttons and sliders get the Pleb look everywhere, the pause menu included, unless a texture pack in use has its own `textures/gui/widgets.png` (`PlebTheme.buttons()`): then the pack's buttons show. The title screen is PlebClient's own and always keeps the Pleb look. Signed in, the title screen has a Sign out button next to the coins. In the tab list, players on PlebClient have the Pleb head before their name.
+
+The Vote button and `/vote` open the website's Vote page (`https://plebmc.top/#vote`), which lists the vote sites set in the website's admin (Site content), so vote sites are added there and nowhere else. `voting.url` in PlebioAPI's config can point somewhere else.
+
+PlebNite item models on WASM: the WASM build's file listing returns nothing for a non-recursive listing of a folder, so `FolderPackFiles.list` lists recursively and keeps the direct children.
 
 `hud/PlebTheme.java` restyles every vanilla menu (buttons, sliders, backgrounds, lists, the title screen wordmark) in the PlebClient look. **Settings > PlebClient menus** turns it off (on by default; `ClientPrefs.modernMenus`). The Forge port does the same with mixins (`MixinGuiButton`, `MixinGuiScreen`, `MixinGuiSlot`, `MixinGuiMainMenu`, the slider mixins).
 

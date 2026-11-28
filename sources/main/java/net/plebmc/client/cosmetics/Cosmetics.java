@@ -515,6 +515,9 @@ public final class Cosmetics {
 
 	/** One message from the server. Bad input is logged and ignored. */
 	public static void handle(String json) {
+		if (ClientSession.guest()) {
+			return; // guests have no coins, quests or cosmetics
+		}
 		Object o;
 		try {
 			o = Json.parse(json);
@@ -876,7 +879,17 @@ public final class Cosmetics {
 		return account;
 	}
 
+	/** Says hello to the server's shop again (after signing in while already on a server). */
+	public static void resync() {
+		if (send(obj("type", "open"))) {
+			send(obj("type", "signin"));
+		}
+	}
+
 	private static boolean send(Map<String, Object> m) {
+		if (ClientSession.guest()) {
+			return false; // guests never talk to the shop: the server sees an ordinary client
+		}
 		return PluginChannels.send(CHANNEL, Json.write(m).getBytes(StandardCharsets.UTF_8));
 	}
 
@@ -976,6 +989,9 @@ public final class Cosmetics {
 
 	/** The last balance a server sent (kept after leaving and across restarts), or -1. */
 	public static long lastCoins() {
+		if (ClientSession.guest()) {
+			return -1;
+		}
 		return coins >= 0 ? coins : lastCoins;
 	}
 
@@ -985,6 +1001,9 @@ public final class Cosmetics {
 
 	/** The hat or cloak the player last wore on a server, or null. */
 	public static Item lastWorn(String category) {
+		if (ClientSession.guest()) {
+			return null;
+		}
 		return HAT.equals(category) ? lastHat : CLOAK.equals(category) ? lastCloak : WINGS.equals(category) ? lastWings : null;
 	}
 
@@ -1211,6 +1230,9 @@ public final class Cosmetics {
 	 * then their equipped item; for others, what the server said they wear.
 	 */
 	public static Item shown(String uuid, String category) {
+		if (ClientSession.guest()) {
+			return null; // guests draw no cosmetics
+		}
 		String id;
 		if (uuid != null && uuid.equals(selfUuid)) {
 			id = preview.containsKey(category) ? preview.get(category) : equipped.get(category);
@@ -1236,9 +1258,12 @@ public final class Cosmetics {
 		return slots != null && slots.containsKey("pleb");
 	}
 
-	/** Where players vote for PlebMc (the server can change it; votes pay coins). */
-	public static final String VOTE_URL = "https://eaglercraftservers.com/server/plebmc";
-	private static String voteUrl = VOTE_URL;
+	/**
+	 * Where players vote for PlebMc: the website's Vote page, which lists the vote sites
+	 * set in the website's admin. A server can send another link (voting.url in PlebioAPI).
+	 */
+	private static final String OLD_VOTE_URL = "https://eaglercraftservers.com/server/plebmc";
+	private static String voteUrl = "";
 	private static long voteReward = 100;
 
 	private static long voteAlert = -1;
@@ -1256,7 +1281,8 @@ public final class Cosmetics {
 	}
 
 	public static String voteUrl() {
-		return voteUrl;
+		// one hardcoded site used to be the default everywhere: that now means the website's list
+		return voteUrl.isEmpty() || voteUrl.equals(OLD_VOTE_URL) ? ClientSession.panel() + "/#vote" : voteUrl;
 	}
 
 	/** Coins a vote pays (0 when the server doesn't pay for votes). */

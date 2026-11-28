@@ -1278,7 +1278,7 @@ async function dashboardView() {
     tile("image", "Designs saved", fmt(d.designs))));
   const max = Math.max(1, ...d.signups.map((x) => x.count));
   const bars = h("div", { class: "bars" }, d.signups.map((x) => {
-    const b = h("div", { title: new Date(x.day * 1000).toLocaleDateString() + ": " + x.count + " new" });
+    const b = h("div", { title: new Date(x.day * 1000).toLocaleDateString() + ": " + x.count + " new" }, h("b", { class: x.count ? "" : "zero" }, fmt(x.count)));
     b.style.height = Math.max(2, (x.count / max) * 100) + "%";
     return b;
   }));
@@ -1877,7 +1877,7 @@ async function clientView() {
   const ro = !isOwner();
   const latest = h("input", { id: "clatest", value: c.latest, placeholder: "2.0", disabled: ro });
   const minimum = h("input", { id: "cmin", value: c.minimum, placeholder: "optional, e.g. 1.9", disabled: ro });
-  const url = h("input", { id: "curl", value: c.url, placeholder: "https://client.plebmc.top/download", disabled: ro });
+  const url = h("input", { id: "curl", value: c.url, placeholder: "https://plebmc.top/download", disabled: ro });
   const msg = h("input", { id: "cmsg", value: c.message, maxlength: 200, placeholder: "New: faster loading and new cloaks", disabled: ro });
   const vbody = h("tbody", {}, r.versions.map((v) => h("tr", {}, h("td", {}, "PlebClient " + v.version), h("td", {}, v.platform), h("td", { class: "num" }, fmt(v.n)),
     h("td", {}, c.latest && olderVersion(v.version, c.latest) ? h("span", { class: "pill warn" }, "outdated") : h("span", { class: "pill good" }, "up to date")))));
