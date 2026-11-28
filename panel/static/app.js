@@ -33,6 +33,7 @@ const ICONS = {
   chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
   trophy: "M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4zM17 5h3v2a3 3 0 01-3 3M7 5H4v2a3 3 0 003 3",
   bag: "M6 7h12l1 14H5L6 7zM9 7V5a3 3 0 016 0v2",
+  x: "M6 6l12 12M18 6L6 18",
   check: "M5 12.5l4.5 4.5L19 7.5",
   image: "M4 4h16v16H4zM4 16l5-5 4 4 3-3 4 4M15 9h.01",
   hammer: "M14 4l6 6-3 3-6-6 3-3zM11 7l-8 8 3 3 8-8",
@@ -2160,6 +2161,28 @@ const DL_INFO = {
   "forge-1.8.9": { icon: "hammer", tag: "Java Edition", needs: "Minecraft Java with Forge 1.8.9", steps: ["Install Forge 1.8.9.", "Put the jar in your .minecraft/mods folder.", "Start Minecraft with the Forge profile."] },
 };
 
+/** PlebClient next to other clients. Visitors see it once an owner turned it on; owners always see the draft. */
+function compareBoard() {
+  const cmp = content().compare;
+  if (!cmp || !cmp.rows || !cmp.rows.length || (!cmp.show && !isOwner())) return null;
+  const cell = (v) => {
+    const k = String(v || "").toLowerCase();
+    if (k === "yes") return h("span", { class: "cmp-yes", title: "Yes" }, icon("check"), h("span", { class: "sr" }, "Yes"));
+    if (k === "no") return h("span", { class: "cmp-no", title: "No" }, icon("x"), h("span", { class: "sr" }, "No"));
+    if (k === "part") return h("span", { class: "cmp-part" }, "Partly");
+    return h("span", { class: "cmp-text" }, v || "–");
+  };
+  return h("section", { class: "cmp" },
+    h("h2", { class: "dl-h" }, "How " + cmp.clients[0] + " compares"),
+    cmp.show ? null : h("p", { class: "banner" }, h("b", {}, "Draft: only owners see this. "), "Fill in the other clients under ",
+      h("a", { href: "#site" }, "Site content"), " and tick \"Show the comparison\"."),
+    h("div", { class: "scroll" }, h("table", { class: "cmp-table" },
+      h("thead", {}, h("tr", {}, h("th", {}, ""), cmp.clients.map((n, i) => h("th", { class: i ? "" : "us" }, i ? n : [plebio("idle", { scale: 0.5 }), n])))),
+      h("tbody", {}, cmp.rows.map((r) => h("tr", {}, h("th", { scope: "row" }, r.feature),
+        cmp.clients.map((_, i) => h("td", { class: i ? "" : "us" }, cell(r.values[i])))))))),
+    h("p", { class: "faint", style: "font-size:12px;margin:8px 0 0" }, "The other clients are their own projects and not connected to PlebMc."));
+}
+
 async function downloadsView() {
   const list = info.downloads || [];
   if (!list.length) return card(null, empty("download", "Nothing to download yet. Check back soon."));
@@ -2183,6 +2206,7 @@ async function downloadsView() {
     h("h2", { class: "dl-h" }, "A look inside"),
     h("div", { class: "gallery" }, ...CLIENT_SHOTS.map(([src, title, text], i) => h("button", { class: "gshot", onclick: () => lightbox(i) },
       h("img", { src, alt: title, loading: "lazy" }), h("span", {}, h("b", {}, title), h("small", {}, text))))),
+    compareBoard(),
     rest.length ? h("h2", { class: "dl-h" }, "Other ways to play") : null,
     rest.length ? h("div", { class: "dl-grid" }, ...rest.map((d) => h("section", { class: "dl-card" },
       h("div", { class: "dl-ic" }, icon(meta(d).icon)),
@@ -2401,6 +2425,30 @@ async function siteView() {
 
   const mascot = h("input", { type: "checkbox", id: "s-mascot" });
   mascot.checked = c.mascot !== false;
+  const cmp = JSON.parse(JSON.stringify(c.compare || { show: false, clients: ["PlebClient", "Other"], rows: [] }));
+  const cmpShow = h("input", { type: "checkbox", id: "s-cmp-show" });
+  cmpShow.checked = !!cmp.show;
+  const cmpBox = h("div", { class: "stack" });
+  const CMP_VALUES = [["yes", "✓ Yes"], ["no", "✗ No"], ["part", "Partly"], ["?", "? Not checked"]];
+  const drawCmp = () => {
+    const head = h("tr", {}, h("th", {}, "Feature"), cmp.clients.map((n, i) => h("th", {},
+      h("input", { value: n, maxlength: 24, "aria-label": "Client " + (i + 1), oninput: (e) => { cmp.clients[i] = e.target.value; } }),
+      i > 0 && cmp.clients.length > 2 ? h("button", { type: "button", class: "ghost small", onclick: () => { cmp.clients.splice(i, 1); cmp.rows.forEach((r) => r.values.splice(i, 1)); drawCmp(); } }, "Remove") : null)), h("th", {}, ""));
+    const rows = cmp.rows.map((r, ri) => h("tr", {},
+      h("td", {}, h("input", { value: r.feature, maxlength: 80, "aria-label": "Feature", oninput: (e) => { r.feature = e.target.value; } })),
+      cmp.clients.map((_, i) => {
+        const known = CMP_VALUES.some(([v]) => v === r.values[i]);
+        const sel = h("select", { "aria-label": r.feature + ", " + cmp.clients[i], onchange: (e) => { r.values[i] = e.target.value; } },
+          CMP_VALUES.concat(known ? [] : [[r.values[i], r.values[i]]]).map(([v, t]) => h("option", { value: v, selected: v === r.values[i] }, t)));
+        return h("td", {}, sel);
+      }),
+      h("td", {}, h("button", { type: "button", class: "ghost small", "aria-label": "Remove " + r.feature, onclick: () => { cmp.rows.splice(ri, 1); drawCmp(); } }, icon("trash")))));
+    cmpBox.replaceChildren(h("div", { class: "scroll" }, h("table", { class: "cmp-edit" }, h("thead", {}, head), h("tbody", {}, rows))),
+      h("div", { class: "row" },
+        cmp.rows.length < 30 ? h("button", { type: "button", onclick: () => { cmp.rows.push({ feature: "", values: cmp.clients.map((_, i) => (i ? "?" : "yes")) }); drawCmp(); } }, icon("plus"), "Add a feature") : null,
+        cmp.clients.length < 5 ? h("button", { type: "button", onclick: () => { cmp.clients.push("Client " + (cmp.clients.length + 1)); cmp.rows.forEach((r) => r.values.push("?")); drawCmp(); } }, icon("plus"), "Add a client") : null));
+  };
+  drawCmp();
   const statSel = select("s-stats", [["strip", "Open strip"], ["board", "Scoreboard"], ["hotbar", "Hotbar (the first look)"]], c.statStyle || "strip");
   const mojang = h("input", { type: "checkbox", id: "s-mojang" });
   mojang.checked = c.mojangSkins !== false;
@@ -2411,7 +2459,8 @@ async function siteView() {
       features: feats.map((f) => ({ title: (f.title || "").trim(), text: (f.text || "").trim(), image: f.image || "" })),
       faq: faqs.map((f) => ({ q: (f.q || "").trim(), a: (f.a || "").trim() })).filter((f) => f.q && f.a),
       voteLinks: votes.map((v) => ({ name: (v.name || "").trim(), url: (v.url || "").trim() })).filter((v) => v.name || v.url),
-      voteReward: Math.max(0, parseInt(reward.value, 10) || 0), mascot: mascot.checked, mojangSkins: mojang.checked, statStyle: statSel.value });
+      voteReward: Math.max(0, parseInt(reward.value, 10) || 0), mascot: mascot.checked, mojangSkins: mojang.checked, statStyle: statSel.value,
+      compare: { show: cmpShow.checked, clients: cmp.clients.map((n) => n.trim()), rows: cmp.rows.filter((r) => (r.feature || "").trim()) } });
     saveBtn.disabled = true;
     try {
       const r = await api("admin/site", body);
@@ -2437,6 +2486,9 @@ async function siteView() {
     h("div", { class: "grid g2" }, card("Pictures", hero.el, show.el), card("TNT banner at the bottom", ...F.ctaTitle.el, ...F.ctaText.el)),
     card("Feature cards", ...F.featuresTitle.el, ...F.featuresText.el, h("div", { style: "height:14px" }), featBox),
     card("FAQ", faqBox),
+    card("Client comparison", h("p", { class: "muted" }, "A table on the Download page that puts PlebClient next to other clients. Set what each client has, then tick the box. ",
+      "Only say what you have checked yourself: it is shown to everyone."),
+      cmpBox, h("label", { class: "check", for: "s-cmp-show" }, cmpShow, " Show the comparison to visitors")),
     card("Voting", h("p", { class: "muted" }, "The server lists players vote on. With none, the Vote page and the reminder are hidden. The reward is only what the site says: PlebioAPI pays it (voting.reward in its config)."),
       h("label", { for: "s-voteReward" }, "Coins per vote shown on the site (0 hides it)"), reward, ...F.voteText.el, h("div", { style: "height:14px" }), voteBox),
     out,

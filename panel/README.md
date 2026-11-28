@@ -301,6 +301,13 @@ a priority (urgent, high, medium, low) and a status (idea, planned, working on i
 dropped). The most urgent ideas come first, finished ones last, and "Hide finished ideas"
 tucks them away. Sections can be renamed, reordered and deleted.
 
+## Client comparison (Download page)
+
+**Site content > Client comparison** is a table that puts PlebClient next to other clients
+(it starts with Resent and Astra as columns). Each cell is Yes, No, Partly or "Not checked".
+The table is a draft only owners can see until every "Not checked" is filled in and "Show the
+comparison to visitors" is ticked. The homepage numbers have three looks, picked under Brand.
+
 ## Stats and leaderboards
 
 **Stats**: type a player's name to see their stats, one game at a time: PlebMc

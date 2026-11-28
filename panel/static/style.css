@@ -803,3 +803,33 @@ tr.pun.s-expired td, tr.pun.s-removed td { opacity: .72; }
 .sb-foot { text-align: center; color: var(--gold); font-size: 18px; padding: 6px 12px 2px; }
 .board-pal { margin-bottom: 0; }
 @media (max-width: 520px) { .board-pal { display: none; } }
+
+/* ==================== client comparison ==================== */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.cmp { margin-top: 8px; }
+.cmp-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 520px; }
+.cmp-table th, .cmp-table td { padding: 12px 14px; text-align: center; border-bottom: 1px solid var(--line); }
+.cmp-table tbody th { text-align: left; font-weight: 600; color: var(--fg); }
+.cmp-table thead th { font: 400 22px var(--display); letter-spacing: .5px; color: var(--muted); vertical-align: bottom; border-bottom: 2px solid var(--line2); }
+.cmp-table thead th.us { color: var(--accent2); }
+.cmp-table thead th.us .plebio { display: block; margin: 0 auto 4px; }
+.cmp-table .us { background: var(--accent-soft); border-left: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+.cmp-table thead .us { border-top: 2px solid var(--accent); border-radius: 8px 8px 0 0; }
+.cmp-table tbody tr:last-child .us { border-bottom: 2px solid var(--accent); border-radius: 0 0 8px 8px; }
+.cmp-table tbody tr:hover th, .cmp-table tbody tr:hover td:not(.us) { background: rgba(255, 255, 255, .03); }
+.cmp-yes, .cmp-no { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; }
+.cmp-yes { background: rgba(63, 220, 140, .16); color: var(--good); }
+.cmp-no { background: rgba(255, 107, 107, .12); color: var(--bad); }
+.cmp-yes svg, .cmp-no svg { width: 16px; height: 16px; stroke-width: 2.6; }
+.cmp-part { color: var(--warn); font-weight: 600; font-size: 13px; }
+.cmp-text { color: var(--muted); font-size: 13px; }
+.cmp-edit { width: 100%; min-width: 640px; }
+.cmp-edit th, .cmp-edit td { padding: 4px; vertical-align: top; }
+.cmp-edit th input { font-weight: 700; }
+.cmp { min-width: 0; max-width: 100%; overflow: hidden; }
+.cmp .scroll { overflow-x: auto; max-width: 100%; }
+@media (max-width: 560px) { .cmp-table { min-width: 0; } .cmp-table th, .cmp-table td { padding: 10px 6px; } .cmp-table thead th { font-size: 16px; } .cmp-table tbody th { font-size: 13px; } }
+.cmp-table tbody th { white-space: normal; min-width: 120px; }
+.cmp .scroll { display: block; overflow-x: auto; }
+.cmp-edit th button { display: block; margin-top: 4px; }
+.cmp-edit td:first-child { min-width: 240px; }
