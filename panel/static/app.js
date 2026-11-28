@@ -2349,7 +2349,7 @@ async function siteView() {
   const fields = [
     text("badge", "News tag above the name (empty hides it)"), text("title1", "Tagline, first part", { max: 40 }), text("title2", "Tagline, second part (in color)", { max: 40 }),
     text("subtitle", "Text under the tagline", { rows: 3 }), text("serverIp", "Server address", { placeholder: "play.plebmc.top" }),
-    text("discordUrl", "Discord invite link (empty hides Discord)", { type: "url", max: 200, placeholder: "https://discord.gg/…" }),
+    text("discordUrl", "Discord link (empty hides Discord; an invite link is swapped for discord.plebmc.top)", { type: "url", max: 200, placeholder: "https://discord.plebmc.top" }),
     text("featuresTitle", "Features heading"), text("featuresText", "Features text", { rows: 2 }),
     text("voteText", "Note on the Vote page", { rows: 2 }), text("ctaTitle", "Bottom banner heading"), text("ctaText", "Bottom banner text", { rows: 2 }), text("footer", "Footer note", { max: 200 }),
   ];

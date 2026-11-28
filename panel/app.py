@@ -150,6 +150,23 @@ MAX_DESIGN_BYTES = 12 * 1024 * 1024
 MAX_THUMB_BYTES = 200 * 1024
 DESIGN_KINDS = ("hat", "cloak", "wings")
 
+# Every Discord invite the site shows goes through this one address (it forwards to the current invite),
+# so an invite that changes or runs out never leaves a dead link on the site.
+DISCORD_LINK = os.environ.get("PANEL_DISCORD_URL", "") or "https://discord.plebmc.top"
+DISCORD_INVITE = re.compile(r"(?:https?://)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com/invite)/[A-Za-z0-9-]+/?", re.I)
+
+
+def discord_links(value):
+    """The same value with every Discord invite link in it (in any text, at any depth) pointing at DISCORD_LINK."""
+    if isinstance(value, str):
+        return DISCORD_INVITE.sub(DISCORD_LINK, value) if "discord" in value.lower() else value
+    if isinstance(value, list):
+        return [discord_links(v) for v in value]
+    if isinstance(value, dict):
+        return {k: discord_links(v) for k, v in value.items()}
+    return value
+
+
 # The homepage: words, pictures and colors owners can change on the website (Admin > Site content).
 # An image is a path under /static/ (the built-in ones) or an uploaded picture at /api/site/img/<id>.
 MAX_SITE_IMAGE = 5 * 1024 * 1024
@@ -166,7 +183,7 @@ SITE_DEFAULTS = {
     "subtitle": "One network, three games and our own client. Play PlebMc PvP, PlebNite and PlebRPG in your browser or on "
                 "Windows, earn PlebMc Coins and show off your cosmetics.",
     "serverIp": "play.plebmc.top",
-    "discordUrl": "https://discord.plebmc.top",
+    "discordUrl": DISCORD_LINK,
     "featuresTitle": "Three games, one account",
     "featuresText": "Everything you earn follows you: your coins, cosmetics and stats work on every PlebMc game and every PlebClient.",
     "features": [
@@ -1509,7 +1526,7 @@ class Panel:
         st = self.server_status()
         return {"site": self.cfg.site_name, "openRegistration": self.cfg.open_registration,
                 "server": {"connected": st["connected"], "online": st["online"], "currency": st["currency"]},
-                "client": self.client_release(), "announcement": self.db.get_kv("announcement", None),
+                "client": self.client_release(), "announcement": discord_links(self.db.get_kv("announcement", None)),
                 "downloads": [d for d in self.downloads() if d["url"]], "content": self.site_content(),
                 "accounts": self.db.one("SELECT COUNT(*) n FROM accounts")["n"],
                 "latestPosts": self.db.all("SELECT id, title, tag, created_at AS at FROM posts ORDER BY pinned DESC, created_at DESC, id DESC LIMIT 3"),
@@ -1561,7 +1578,7 @@ class Panel:
         for k, v in saved.items():
             if k in out and v not in (None, ""):
                 out[k] = v
-        return out
+        return discord_links(out)
 
     def _site_image(self, v, default):
         v = str(v or "").strip()
@@ -1584,7 +1601,7 @@ class Panel:
         d = str(body.get("discordUrl") or "").strip()[:200]
         if d and not re.match(r"^https://\S+$", d):
             raise ApiError(400, "The Discord link must start with https://")
-        out["discordUrl"] = d
+        out["discordUrl"] = discord_links(d)
         feats = body.get("features") if isinstance(body.get("features"), list) else SITE_DEFAULTS["features"]
         out["features"] = []
         for f in feats[:6]:
@@ -1819,13 +1836,13 @@ class Panel:
         rows = self.db.all("SELECT id, title, tag, body, pinned, author, created_at AS at, updated_at AS editedAt FROM posts WHERE " + where
                            + " ORDER BY pinned DESC, created_at DESC, id DESC LIMIT ? OFFSET ?", *(args + [limit + 1, offset]))
         total = self.db.one("SELECT COUNT(*) AS n FROM posts WHERE " + where, *args)["n"]
-        return {"ok": True, "posts": [dict(r, pinned=bool(r["pinned"])) for r in rows[:limit]], "more": len(rows) > limit, "total": total}
+        return {"ok": True, "posts": discord_links([dict(r, pinned=bool(r["pinned"])) for r in rows[:limit]]), "more": len(rows) > limit, "total": total}
 
     def post(self, pid):
         r = self.db.one("SELECT id, title, tag, body, pinned, author, created_at AS at, updated_at AS editedAt FROM posts WHERE id=?", pid)
         if not r:
             raise ApiError(404, "That post is gone.")
-        return dict(r, pinned=bool(r["pinned"]))
+        return discord_links(dict(r, pinned=bool(r["pinned"])))
 
     def save_post(self, actor, body):
         title = str(body.get("title") or "").strip()[:120]
