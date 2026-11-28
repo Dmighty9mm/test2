@@ -238,4 +238,11 @@ final class Store {
 	List<UUID> ids() {
 		return new ArrayList<>(players.keySet());
 	}
+
+	/** Forgets a player (after their coins and cosmetics moved to another name). */
+	void remove(UUID id) {
+		if (players.remove(id) != null) {
+			changed();
+		}
+	}
 }

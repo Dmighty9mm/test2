@@ -116,10 +116,13 @@ nLogin sessions, so Eaglercraft players sharing the proxy's IP can't ride on eac
 | In game | What |
 | --- | --- |
 | `/account register <password> <password>` | Make an account for this name (with nLogin: after `/login`) |
-| `/account login <password>` | Sign in (any client) |
 | `/account code` | A code to make the account on the panel website instead |
 | `/account logout` | Sign out |
-| Right Shift > **Sign in** | Same on the PlebMc client; "Remember me" signs in by itself next time |
+| Right Shift > **Sign in** | Sign in on the PlebMc client (the only way: there is no `/account login`); "Remember me" signs in by itself next time |
+
+When a player changes their username on the panel website (or an admin does), the panel sends a
+`rename` and PlebioAPI moves their coins, cosmetics, streak, quest progress and LuckPerms ranks
+to the new name and kicks the old name if it is online.
 
 The PlebMc client itself can't be used without an account: it opens on a start screen
 (Sign in / Create account) that talks to the panel, and you then play under that account's

@@ -242,7 +242,7 @@ public final class BungeeShop extends Plugin implements Listener {
 
 	/** "Log in first" in the words of whichever login is in charge. */
 	private String loginFirst() {
-		return accountsOn() ? "Sign in first: /account login <password>" : "Log in first (/login <password>)";
+		return accountsOn() ? "Sign in first (PlebClient: Right Shift > Sign in)" : "Log in first (/login <password>)";
 	}
 
 	/** Logged in with nLogin this session; true when there's no nLogin; false (locked) if nLogin can't be asked. */
@@ -502,7 +502,7 @@ public final class BungeeShop extends Plugin implements Listener {
 		signin.configure(c, panelLink);
 		if (signin.enabled() && !was) {
 			getLogger().info("PlebMc accounts ON (panel " + panelLink.url + "): coins, shop and admin menu need"
-					+ " /account login (or the client's Sign in) first");
+					+ " the client's Sign in first");
 			for (ProxiedPlayer p : getProxy().getPlayers()) {
 				signin.joined(p.getUniqueId(), p.getName());
 			}
@@ -656,6 +656,30 @@ public final class BungeeShop extends Plugin implements Listener {
 		}
 		case "signout":
 			return signin.signOutName(target) ? "signed out in game" : "not online";
+		case "rename": {
+			if (args.isEmpty() || !args.get(0).matches("[A-Za-z0-9_]{3,16}")) {
+				return "!bad name";
+			}
+			String to = args.get(0);
+			ProxiedPlayer on = getProxy().getPlayer(target);
+			if (on != null && !on.getName().equals(to)) {
+				on.disconnect(TextComponent.fromLegacyText("\u00a7eYour PlebMc name is now \u00a7f" + to + "\u00a7e.\n\u00a77Sign in again with the new name."));
+			}
+			UUID[] moved = core.rename(target, to);
+			if (moved == null) {
+				return target + " never joined, nothing to carry over";
+			}
+			String out = "coins and cosmetics moved to " + to;
+			LuckPermsBridge lp = luckPerms();
+			if (lp != null) {
+				try {
+					out += ", " + lp.move(moved[0], moved[1], to);
+				} catch (Exception e) {
+					out += " (ranks did not move: " + e.getMessage() + ")";
+				}
+			}
+			return out;
+		}
 		case "coinsall": {
 			long n;
 			try {

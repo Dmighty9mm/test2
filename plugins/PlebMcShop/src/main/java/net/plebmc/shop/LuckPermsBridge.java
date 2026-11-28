@@ -270,6 +270,29 @@ final class LuckPermsBridge {
 		return out;
 	}
 
+	/** Carries a player's ranks and permissions over to their new name's player. */
+	String move(UUID from, UUID to, String toName) throws Exception {
+		User a = lp.getUserManager().loadUser(from).get(WAIT, TimeUnit.SECONDS);
+		User b = lp.getUserManager().loadUser(to, toName).get(WAIT, TimeUnit.SECONDS);
+		int n = 0;
+		for (Node node : a.data().toCollection()) {
+			b.data().add(node);
+			n++;
+		}
+		String primary = a.getPrimaryGroup();
+		if (primary != null && !primary.isEmpty()) {
+			b.setPrimaryGroup(primary);
+		}
+		a.data().clear();
+		lp.getUserManager().saveUser(b).get(WAIT, TimeUnit.SECONDS);
+		lp.getUserManager().saveUser(a).get(WAIT, TimeUnit.SECONDS);
+		lp.getMessagingService().ifPresent(m -> {
+			m.pushUserUpdate(a);
+			m.pushUserUpdate(b);
+		});
+		return n + " rank and permission entries";
+	}
+
 	/** Tells the other servers (through LuckPerms' messaging service) to reload. */
 	private void push() {
 		lp.getMessagingService().ifPresent(m -> m.pushUpdate());
