@@ -339,6 +339,10 @@ IDEA_SECTIONS = ("PlebMc", "PlebNite", "PlebRPG", "Other")
 IDEA_PRIORITIES = ("urgent", "high", "medium", "low")
 IDEA_STATUSES = ("idea", "planned", "doing", "done", "dropped")
 MAX_IDEA = 4000
+# /download -> /#downloads and friends (the site's pages live after the #)
+PAGE_LINKS = {"download": "downloads", "downloads": "downloads", "leaderboard": "leaderboard", "leaderboards": "leaderboard",
+              "stats": "stats", "shop": "shop", "news": "news", "vote": "vote", "login": "login", "register": "register",
+              "account": "me"}
 NEWS_NOTICE_DAYS = 7           # the homepage points at a news post this many days after it went up
 # LiteBans punishments, sent by PlebioAPI on the proxy
 PUNISH_KINDS = ("ban", "mute", "warn", "kick")
@@ -2545,6 +2549,15 @@ class Handler(BaseHTTPRequestHandler):
                 pass
 
     def static(self, path):
+        # short links people type or share: plebmc.top/download opens the Download page
+        page = PAGE_LINKS.get(path.strip("/").lower())
+        if page:
+            self.send_response(302)
+            self.send_header("Location", "/#" + page)
+            self.send_header("Content-Length", "0")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            return
         if path in ("/", "/index.html") or not path.startswith("/static/"):
             f = os.path.join(STATIC, "index.html")
         else:

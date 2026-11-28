@@ -1124,6 +1124,21 @@ class PanelHttp(unittest.TestCase):
                 self.assertEqual(r.status, 200, path)
                 self.assertIn("script-src 'self'", r.headers["Content-Security-Policy"])
 
+    def test_short_links_open_their_page(self):
+        import http.client
+        host, port = self.base[len("http://"):].split(":")
+        for path, to in (("/download", "/#downloads"), ("/Downloads/", "/#downloads"), ("/vote", "/#vote"), ("/leaderboards", "/#leaderboard"),
+                         ("/account", "/#me")):
+            c = http.client.HTTPConnection(host, int(port), timeout=5)
+            c.request("GET", path)
+            r = c.getresponse()
+            self.assertEqual((r.status, r.getheader("Location")), (302, to), path)
+            c.close()
+        c = http.client.HTTPConnection(host, int(port), timeout=5)
+        c.request("GET", "/something-else")
+        self.assertEqual(c.getresponse().status, 200)      # anything else is still the site itself
+        c.close()
+
     def test_static_and_headers(self):
         req = urllib.request.Request(self.base + "/")
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))

@@ -255,6 +255,11 @@ ranks over to the new name and kicks the old one if it is online. Whatever a gam
 under the old name (inventory, world progress) does not follow. A name with an account, or one
 somebody has already played under, can't be taken.
 
+## Short links
+
+`plebmc.top/download` opens the Download page (`/#downloads`). The same works for `/downloads`, `/shop`, `/news`,
+`/vote`, `/stats`, `/leaderboards`, `/login`, `/register` and `/account`.
+
 ## On a phone
 
 Every page fits a phone's width without scrolling sideways. The long admin lists (Players, Punishments, Admin log)
