@@ -42,6 +42,20 @@ final class TitleActions {
 			{ "language", "Language", "nav_language", "Change the game language" },
 			{ "logout", "Log out", "nav_logout", "Sign out of your PlebMc account on this client" } };
 
+	private static final String[] LOG_OUT = { "logout", "Log out", "nav_logout", "Sign out of your PlebMc account on this client" };
+	private static final String[] SIGN_IN = { "logout", "Sign in", "nav_lock",
+			"You're a guest: sign in for coins, quests, the shop and cosmetics" };
+
+	/** Guests get "Sign in" where "Log out" is. Call when the title screen opens. */
+	static void refresh() {
+		boolean guest = net.plebmc.client.cosmetics.ClientSession.guest();
+		for (int i = 0; i < ITEMS.length; i++) {
+			if ("logout".equals(ITEMS[i][0])) {
+				ITEMS[i] = guest ? SIGN_IN : LOG_OUT;
+			}
+		}
+	}
+
 	static void run(GuiScreen menu, String id) {
 		Minecraft mc = Minecraft.getMinecraft();
 		switch (id) {
@@ -49,7 +63,7 @@ final class TitleActions {
 			mc.displayGuiScreen(new ModsScreen(menu));
 			break;
 		case "quests":
-			mc.displayGuiScreen(new QuestsScreen(menu));
+			mc.displayGuiScreen(LoginGateScreen.orSignIn(menu, () -> new QuestsScreen(menu)));
 			break;
 		case "customize":
 			mc.displayGuiScreen(new SettingsScreen(menu, SettingsScreen.TITLE_SCREEN));
@@ -64,10 +78,10 @@ final class TitleActions {
 			mc.displayGuiScreen(new GuiMultiplayer(menu));
 			break;
 		case "shop":
-			mc.displayGuiScreen(new ShopScreen(menu));
+			mc.displayGuiScreen(LoginGateScreen.orSignIn(menu, () -> new ShopScreen(menu)));
 			break;
 		case "locker":
-			mc.displayGuiScreen(new ShopScreen(menu, true));
+			mc.displayGuiScreen(LoginGateScreen.orSignIn(menu, () -> new ShopScreen(menu, true)));
 			break;
 		case "options":
 			mc.displayGuiScreen(new GuiOptions(menu, mc.gameSettings));
@@ -82,6 +96,11 @@ final class TitleActions {
 			EagRuntime.openLink(net.plebmc.client.cosmetics.Cosmetics.voteUrl());
 			break;
 		case "logout":
+			if (net.plebmc.client.cosmetics.ClientSession.guest()) {
+				// a guest: this entry reads "Sign in"
+				mc.displayGuiScreen(new LoginGateScreen(menu));
+				break;
+			}
 			net.plebmc.client.cosmetics.ClientSession.signOut();
 			mc.displayGuiScreen(new LoginGateScreen(new net.minecraft.client.gui.GuiMainMenu()));
 			break;

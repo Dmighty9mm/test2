@@ -470,12 +470,12 @@ class PanelLogic(unittest.TestCase):
         owner = self.p.create_account("Owner", "password1", "owner")
         r = self.p.client_version("2.0", "web")
         self.assertFalse(r["outdated"] or r["required"])
-        self.p.set_client_release(owner, {"latest": "2.1", "minimum": "1.10", "url": "https://client.plebmc.top/dl",
+        self.p.set_client_release(owner, {"latest": "2.1", "minimum": "1.10", "url": "https://plebmc.top/dl",
                                           "message": "New cloaks"})
         r = self.p.client_version("2.0", "wasm")
         self.assertTrue(r["outdated"])
         self.assertFalse(r["required"])
-        self.assertEqual((r["latest"], r["url"], r["message"]), ("2.1", "https://client.plebmc.top/dl", "New cloaks"))
+        self.assertEqual((r["latest"], r["url"], r["message"]), ("2.1", "https://plebmc.top/dl", "New cloaks"))
         self.assertTrue(self.p.client_version("1.9", "forge")["required"])  # 1.9 < 1.10
         self.assertFalse(self.p.client_version("2.1", "web")["outdated"])
         self.assertFalse(self.p.client_version("10.0", "web")["outdated"])

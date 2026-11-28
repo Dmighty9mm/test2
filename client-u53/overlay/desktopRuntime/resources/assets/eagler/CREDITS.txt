@@ -5,7 +5,7 @@
  Server:         play.plebmc.top
  Website:        https://plebmc.top
  Store:          https://store.plebmc.top
- PlebClient:     https://client.plebmc.top
+ PlebClient:     https://plebmc.top
  Discord:        https://discord.gg/bR89zXFH9h
 
  PlebClient is made by Mighty for the PlebMc network.

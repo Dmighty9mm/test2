@@ -45,14 +45,17 @@ public final class LauncherScreen extends PlebScreen {
 	private void fillDoors() {
 		doors.clear();
 		doors.add(new Door("Mods", "nav_mods", "Turn mods on and off and change their settings", () -> new ModsScreen(this)));
-		doors.add(new Door("Shop", "nav_shop", "Buy hats, cloaks and wings with " + Cosmetics.currency(), () -> new ShopScreen(this)));
-		doors.add(new Door("Locker", "nav_locker", "Everything you own: pick what you wear", () -> new ShopScreen(this, true)));
-		doors.add(new Door("Quests", "nav_quests", "Daily and weekly quests for coins", () -> new QuestsScreen(this)));
+		doors.add(new Door("Shop", "nav_shop", "Buy hats, cloaks and wings with " + Cosmetics.currency(), () -> LoginGateScreen.orSignIn(this, () -> new ShopScreen(this))));
+		doors.add(new Door("Locker", "nav_locker", "Everything you own: pick what you wear",
+				() -> LoginGateScreen.orSignIn(this, () -> new ShopScreen(this, true))));
+		doors.add(new Door("Quests", "nav_quests", "Daily and weekly quests for coins",
+				() -> LoginGateScreen.orSignIn(this, () -> new QuestsScreen(this))));
 		doors.add(new Door("HUD", "nav_hud", "Move, resize and recolor your HUD", () -> new HudEditorScreen(this)));
 		doors.add(new Door("Video", "nav_video", "Render distance, graphics and performance", () -> new VideoOptionsScreen(this)));
 		signedInShown = ClientSession.signedIn();
 		doors.add(new Door(signedInShown ? "Account" : "Sign in", signedInShown ? "nav_profile" : "nav_lock",
-				"Your PlebMc account: sign in so nobody else can spend your coins", () -> new SignInScreen(this)));
+				signedInShown ? "Your PlebMc account: sign in so nobody else can spend your coins" : LoginGateScreen.GUEST_NOTE,
+				() -> LoginGateScreen.orSignIn(this, () -> new SignInScreen(this))));
 		doors.add(new Door("Settings", "nav_options", "Client preferences", () -> new SettingsScreen(this)));
 		if (ClientPrefs.get().developer) {
 			doors.add(new Door("Debug", "nav_debug", "Apollo diagnostics (developer)", () -> new ApolloDebugScreen(this)));
@@ -459,7 +462,7 @@ public final class LauncherScreen extends PlebScreen {
 		int iy = y + ch + S3;
 		boolean in = ClientSession.signedIn();
 		String role = Cosmetics.account().role;
-		String name = in ? ClientSession.name() : "Not signed in";
+		String name = in ? ClientSession.name() : ClientSession.guest() ? "Guest (mods only)" : "Not signed in";
 		String rank = in && !role.isEmpty() && !"player".equals(role) ? cap(role) : null;
 		long coinsN = Cosmetics.coins();
 		String coins = coinsN >= 0 ? Ui.num(coinsN) : null;
@@ -476,7 +479,8 @@ public final class LauncherScreen extends PlebScreen {
 		int ty = iy + (INFO_H - 8) / 2;
 
 		int sx = ix;
-		tooltipArea(sx, iy, segName, INFO_H, in ? "Signed in to your PlebMc account" : "Sign in from " + signInKey());
+		tooltipArea(sx, iy, segName, INFO_H, in ? "Signed in to your PlebMc account"
+				: ClientSession.guest() ? LoginGateScreen.GUEST_NOTE + " Sign in from " + signInKey() : "Sign in from " + signInKey());
 		Ui.round(sx, ty + 2, 4, 4, in ? Ui.GOOD : Ui.FAINT);
 		if (in) {
 			Ui.round(sx - 1, ty + 1, 6, 6, Ui.alpha(Ui.GOOD, 0x30));

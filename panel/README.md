@@ -96,7 +96,7 @@ picks up admin changes from the panel every 3 seconds.
 ## Put it on a VPS (Docker, about 10 minutes)
 
 You need a small Linux VPS (1 GB RAM is plenty) and a domain or subdomain, for example
-`client.plebmc.top`.
+`plebmc.top`.
 
 1. **Point the domain at the VPS.** At your DNS provider add an `A` record:
    `client` → the VPS's IP address. (Cloudflare: set it to "DNS only", grey cloud, the
@@ -124,7 +124,7 @@ You need a small Linux VPS (1 GB RAM is plenty) and a domain or subdomain, for e
    nano .env
    ```
 
-   Set `PANEL_DOMAIN=client.plebmc.top`, `PANEL_PUBLIC_URL=https://client.plebmc.top` and
+   Set `PANEL_DOMAIN=plebmc.top`, `PANEL_PUBLIC_URL=https://plebmc.top` and
    `PANEL_SERVER_KEY=` the key you just made. Save (Ctrl+O, Enter, Ctrl+X).
 
 5. **Open the firewall** for the website (if you use ufw): `ufw allow 80,443/tcp`
@@ -136,7 +136,7 @@ You need a small Linux VPS (1 GB RAM is plenty) and a domain or subdomain, for e
    docker compose logs -f        # Ctrl+C to stop watching
    ```
 
-   Caddy gets the HTTPS certificate by itself. Open `https://client.plebmc.top`: you should
+   Caddy gets the HTTPS certificate by itself. Open `https://plebmc.top`: you should
    see the sign-in page.
 
 7. **Connect the proxy.** In the BungeeCord proxy's `plugins/PlebioAPI/config.yml`:
@@ -144,7 +144,7 @@ You need a small Linux VPS (1 GB RAM is plenty) and a domain or subdomain, for e
    ```yaml
    accounts:
      enabled: true
-     url: 'https://client.plebmc.top'
+     url: 'https://plebmc.top'
      public-url: ''
      server-key: 'the same key as PANEL_SERVER_KEY'
      sign-in-seconds: 90
@@ -155,7 +155,7 @@ You need a small Linux VPS (1 GB RAM is plenty) and a domain or subdomain, for e
    panel's Admin page says "Proxy connected" and lists your players.
 
 8. **Make yourself owner.** Make your account first, either on the website
-   (`https://client.plebmc.top` > **Create account**, name + password, no code needed) or on
+   (`https://plebmc.top` > **Create account**, name + password, no code needed) or on
    the PlebClient's start screen (**Create account**). Use the exact name you play as. Then on
    the VPS:
 
@@ -172,7 +172,7 @@ You need a small Linux VPS (1 GB RAM is plenty) and a domain or subdomain, for e
 ### The client's start screen
 
 The PlebMc client opens on a **Sign in / Create account** screen and can't be used until the
-player signs in. It talks to `https://client.plebmc.top` (built into the client), so host the
+player signs in. It talks to `https://plebmc.top` (built into the client), so host the
 panel at that address, or tell us your domain and we change it in the client. Settings in `.env`:
 
 | Setting | Default | What |
@@ -187,14 +187,14 @@ until it's back.
 
 You can skip HTTPS between them: in `docker-compose.yml` add `ports: ["127.0.0.1:8080:8080"]`
 under `panel`, and set `url: 'http://127.0.0.1:8080'` and
-`public-url: 'https://client.plebmc.top'` in PlebioAPI's config.
+`public-url: 'https://plebmc.top'` in PlebioAPI's config.
 
 ### Pterodactyl / no Docker
 
 It's one Python file with no dependencies, so any host with Python 3.9+ works:
 
 ```sh
-PANEL_SERVER_KEY=... PANEL_PUBLIC_URL=https://client.plebmc.top PANEL_PORT=8080 python3 app.py
+PANEL_SERVER_KEY=... PANEL_PUBLIC_URL=https://plebmc.top PANEL_PORT=8080 python3 app.py
 ```
 
 Put it behind HTTPS (Caddy, nginx or Cloudflare Tunnel) and set `PANEL_TRUST_PROXY=1`

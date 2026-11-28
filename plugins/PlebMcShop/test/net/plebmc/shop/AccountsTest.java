@@ -165,7 +165,7 @@ public class AccountsTest {
     static void scenario(File dir, Logger log, Map<String, String> env) throws Exception {
         net = new AccNet();
         Cfg cfg = QuestsTest.config("accounts:\n  enabled: false", "accounts:\n  enabled: true",
-                "url: 'https://client.plebmc.top'", "url: '" + base + "'",
+                "url: 'https://plebmc.top'", "url: '" + base + "'",
                 "server-key: ''", "server-key: '" + KEY + "'",
                 "public-url: ''", "public-url: 'https://panel.example'");
         core = new ShopCore(net, new Store(new File(dir, "acc-players.yml"), log), cfg, log);

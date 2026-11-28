@@ -86,6 +86,7 @@ public final class TitleMenu {
 		pending = null;
 		pendingAt = 0;
 		keySel = -1;
+		TitleActions.refresh();
 		hover = new float[TitleActions.ITEMS.length];
 		ripples.clear();
 	}
@@ -620,8 +621,9 @@ public final class TitleMenu {
 	private static void coinsChip(int w, int mx, int my, int acc, float in) {
 		FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
 		long c = net.plebmc.client.cosmetics.Cosmetics.lastCoins();
-		String amount = c < 0 ? "--" : String.format("%,d", c);
-		String cur = shortCurrency(net.plebmc.client.cosmetics.Cosmetics.lastCurrency());
+		boolean guest = net.plebmc.client.cosmetics.ClientSession.guest();
+		String amount = guest ? "Guest" : c < 0 ? "--" : String.format("%,d", c);
+		String cur = guest ? "Sign in" : shortCurrency(net.plebmc.client.cosmetics.Cosmetics.lastCurrency());
 		int aw = font.getStringWidth(amount), cw = font.getStringWidth(cur);
 		coinW = 8 + 9 + 5 + aw + 5 + cw + 8;
 		coinH = 18;
@@ -642,7 +644,7 @@ public final class TitleMenu {
 		textShadow(font, amount, coinX + 22, coinY + 5, Ui.alpha(0xFFFFE07A, a));
 		textShadow(font, cur, coinX + 22 + aw + 5, coinY + 5, Ui.alpha(0xFFB9C4CD, a));
 		if (hv > 0.02f) {
-			String tip = c < 0 ? "Join PlebMc to load your coins" : "Open the shop";
+			String tip = guest ? "Guests earn no coins. Click to sign in" : c < 0 ? "Join PlebMc to load your coins" : "Open the shop";
 			int tw = font.getStringWidth(tip);
 			textShadow(font, tip, coinX + coinW - tw, coinY + coinH + 4, Ui.alpha(0xFFDCE4EA, Math.round(0xC0 * hv * in)));
 		}
