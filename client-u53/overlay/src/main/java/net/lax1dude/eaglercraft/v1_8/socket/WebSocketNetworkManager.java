@@ -47,6 +47,8 @@ public class WebSocketNetworkManager extends EaglercraftNetworkManager {
 	}
 
 	public void closeChannel(IChatComponent reason) {
+		plebDrain = true;
+		flushDelayed(); // PlebClient: send what the Ping Equalizer still holds
 		webSocketClient.close();
 		if(nethandler != null) {
 			nethandler.onDisconnect(reason);
@@ -62,18 +64,76 @@ public class WebSocketNetworkManager extends EaglercraftNetworkManager {
 		}
 		List<IWebSocketFrame> pkts = webSocketClient.getNextBinaryFrames();
 
-		if(pkts == null) {
+		// PlebClient (Ping Equalizer): frames can be held back a little before they
+		// are handled, always in the order they came in
+		long plebNow = net.lax1dude.eaglercraft.v1_8.EagRuntime.steadyTimeMillis();
+		int plebDelay = plebDrain ? 0 : net.plebmc.client.hud.PlebClient.netDelay();
+		flushDelayed();
+		if(plebDelay <= 0 && plebIn.isEmpty()) {
+			if(pkts == null) {
+				return;
+			}
+			for(int i = 0, l = pkts.size(); i < l; ++i) {
+				handleFrame(pkts.get(i));
+			}
 			return;
 		}
+		if(pkts != null) {
+			for(int i = 0, l = pkts.size(); i < l; ++i) {
+				plebInDue = Math.max(plebInDue, plebNow + plebDelay);
+				plebIn.add(pkts.get(i));
+				plebInAt.add(plebInDue);
+			}
+		}
+		while(!plebIn.isEmpty() && (plebDrain || plebInAt.get(0) <= plebNow)) {
+			plebInAt.remove(0);
+			handleFrame(plebIn.remove(0));
+		}
+	}
 
-		for(int i = 0, l = pkts.size(); i < l; ++i) {
-			IWebSocketFrame next = pkts.get(i);
+	private final java.util.ArrayList<IWebSocketFrame> plebIn = new java.util.ArrayList<>();
+	private final java.util.ArrayList<Long> plebInAt = new java.util.ArrayList<>();
+	private long plebInDue;
+	private final java.util.ArrayList<byte[]> plebOut = new java.util.ArrayList<>();
+	private final java.util.ArrayList<Long> plebOutAt = new java.util.ArrayList<>();
+	private long plebOutDue;
+	private boolean plebDrain;
+
+	/** PlebClient (Ping Equalizer): sends now, or a little later when a delay is on (order is kept). */
+	private void plebSend(byte[] bytes) {
+		int delay = net.plebmc.client.hud.PlebClient.netDelay();
+		if(delay <= 0 && plebOut.isEmpty()) {
+			webSocketClient.send(bytes);
+			return;
+		}
+		long now = net.lax1dude.eaglercraft.v1_8.EagRuntime.steadyTimeMillis();
+		plebOutDue = Math.max(plebOutDue, now + delay);
+		plebOut.add(bytes);
+		plebOutAt.add(plebOutDue);
+	}
+
+	/** PlebClient (Ping Equalizer): sends what has waited long enough. Called every frame and every tick. */
+	public void flushDelayed() {
+		if(plebOut.isEmpty()) {
+			return;
+		}
+		long now = net.lax1dude.eaglercraft.v1_8.EagRuntime.steadyTimeMillis();
+		while(!plebOut.isEmpty() && (plebDrain || plebOutAt.get(0) <= now)) {
+			plebOutAt.remove(0);
+			byte[] b = plebOut.remove(0);
+			if(!webSocketClient.isClosed()) {
+				webSocketClient.send(b);
+			}
+		}
+	}
+
+	private void handleFrame(IWebSocketFrame next) {
 			++debugPacketCounter;
 			try {
 				byte[] asByteArray = next.getByteArray();
 				
 				if(injectedController != null && injectedController.handlePacket(asByteArray, 0)) {
-					continue;
+					return;
 				}
 				
 				ByteBuf nettyBuffer = Unpooled.buffer(asByteArray, asByteArray.length);
@@ -109,7 +169,6 @@ public class WebSocketNetworkManager extends EaglercraftNetworkManager {
 				logger.error("Failed to process websocket frame {}! It'll be skipped for debug purposes.", debugPacketCounter);
 				logger.error(t);
 			}
-		}
 	}
 
 	public void sendPacket(Packet pkt) {
@@ -139,18 +198,19 @@ public class WebSocketNetworkManager extends EaglercraftNetworkManager {
 		byte[] bytes = new byte[len];
 		temporaryBuffer.getBytes(0, bytes);
 		
-		webSocketClient.send(bytes);
+		plebSend(bytes);
 	}
 
 	@Override
 	protected boolean sendRawBytes(byte[] bytes) {
-		webSocketClient.send(bytes);
+		plebSend(bytes);
 		return true;
 	}
 
 	public boolean checkDisconnected() {
 		if(webSocketClient.isClosed()) {
 			try {
+				plebDrain = true; // PlebClient: nothing held back is lost
 				processReceivedPackets(); // catch kick message
 			} catch (IOException e) {
 			}
@@ -167,7 +227,7 @@ public class WebSocketNetworkManager extends EaglercraftNetworkManager {
 			logger.error("Frame was injected on a closed connection");
 			return;
 		}
-		webSocketClient.send(data);
+		plebSend(data);
 	}
 
-}
+}

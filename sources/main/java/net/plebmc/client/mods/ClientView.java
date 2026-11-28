@@ -93,6 +93,11 @@ public interface ClientView {
                 return -1;
         }
 
+        /** Game ticks since you joined (20 a second), or -1 when the game doesn't say. */
+        default long gameTicks() {
+                return -1;
+        }
+
         /** True while you're in a world. */
         default boolean inWorld() {
                 return health() >= 0;

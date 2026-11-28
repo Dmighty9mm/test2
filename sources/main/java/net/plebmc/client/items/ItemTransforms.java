@@ -117,9 +117,15 @@ public final class ItemTransforms {
 			return hand(V18_HAND_FP, V19_HAND_FP, m19);
 		case "thirdperson":
 			return hand(V18_HAND_TP, V19_HAND_TP, m19);
-		case "gui":
+		case "gui": {
+			// 1.8 draws a slot icon as S(2) * M18 * S(0.5) too (the 40 and 64 in
+			// RenderItem.setupGuiTransform are twice 1.9's sizes, and renderItem halves
+			// the model), so the model's own translation counts double there: halve it,
+			// or a gun that is moved over in its slot ends up twice as far off-center.
+			double[] half = { 0.5, 0.5, 0.5 }, twice = { 2, 2, 2 };
 			c = model3d ? Mat.of19(V19_BLOCK_GUI).inverse() : Mat.identity();
-			break;
+			return Mat.scale(half).mul(c).mul(Mat.of19(m19)).mul(Mat.scale(twice)).to18();
+		}
 		case "ground":
 			c = Mat.of19(model3d ? V19_BLOCK_GROUND : V19_GEN_GROUND).inverse();
 			break;
@@ -133,6 +139,25 @@ public final class ItemTransforms {
 			c = Mat.identity();
 		}
 		return c.mul(Mat.of19(m19)).to18();
+	}
+
+	/**
+	 * Where a model point (pixels, 0..16) lands in an inventory slot on 1.8, in
+	 * slot pixels from the slot's middle (x right, y down), the way
+	 * RenderItem.setupGuiTransform and renderItem draw it.
+	 */
+	public static double[] guiPoint18(T t18, double[] p, boolean model3d) {
+		Mat m = model3d
+				? Mat.scale(new double[] { 20, 20, -20 }).mul(Mat.rot(0, 210)).mul(Mat.rot(1, -135))
+				: Mat.scale(new double[] { 32, 32, -32 }).mul(Mat.rot(0, 180));
+		m = m.mul(Mat.of18(t18)).mul(Mat.scale(new double[] { 0.5, 0.5, 0.5 })).mul(Mat.trans(new double[] { -8, -8, -8 }));
+		return m.apply(p);
+	}
+
+	/** The same on 1.9+ (ItemRenderer.renderGuiItem), which is what a pack was made for. */
+	public static double[] guiPoint19(T t19, double[] p) {
+		Mat m = Mat.scale(new double[] { 16, -16, 16 }).mul(Mat.of19(t19)).mul(Mat.trans(new double[] { -8, -8, -8 }));
+		return m.apply(p);
 	}
 
 	/**
@@ -333,6 +358,15 @@ public final class ItemTransforms {
 		/** 1.8: T * Ry * Rx * Rz * S. */
 		static Mat of18(T t) {
 			return trans(t.t).mul(rot(1, t.r[1])).mul(rot(0, t.r[0])).mul(rot(2, t.r[2])).mul(scale(t.s));
+		}
+
+		/** This matrix applied to a point given in pixels. */
+		double[] apply(double[] px) {
+			double[] o = new double[3];
+			for (int i = 0; i < 3; i++) {
+				o[i] = m[i * 4] * px[0] / 16 + m[i * 4 + 1] * px[1] / 16 + m[i * 4 + 2] * px[2] / 16 + m[i * 4 + 3];
+			}
+			return o;
 		}
 
 		Mat mul(Mat o) {

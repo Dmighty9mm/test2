@@ -76,8 +76,11 @@ public final class ModsScreen extends PlebScreen {
 			t.tip = on + " of " + total + " on";
 			ry += 20;
 		}
-		// your hats and cloaks, one click from Right Shift
-		Button cos = button("Cosmetics", rx, Math.max(ry + 6, wy + wh - 8 - 20), rw, 20,
+		// move and resize what's on screen, then your hats and cloaks, one click from Right Shift
+		int cosY = Math.max(ry + 6 + 24, wy + wh - 8 - 20);
+		Button hud = button("HUD editor", rx, cosY - 24, rw, 20, () -> this.mc.displayGuiScreen(new HudEditorScreen(this)));
+		hud.icon("hud").tip = "Move, resize and recolor what's on your screen";
+		Button cos = button("Cosmetics", rx, cosY, rw, 20,
 				() -> this.mc.displayGuiScreen(LoginGateScreen.orSignIn(this, () -> new ShopScreen(this))));
 		cos.style(Style.PRIMARY).icon("shop").tip = "Wear and try on your hats and cloaks";
 

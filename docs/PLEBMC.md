@@ -172,10 +172,10 @@ storage, `config/plebmc/` on Forge).
 | Ping | `ping` | off | From the tab list latency |
 | Clock | `clock` | off | Local time |
 | Toggle Sprint | `toggle-sneak` | off | Tap to sprint; servers can block it (`toggle-sprint=false`) |
-| Zoom | `zoom` | on | Hold **C**; options for zoom level, scroll to adjust and smooth camera; servers can block it |
+| Zoom | `zoom` | on | Hold **C**; options for zoom level, scroll to adjust and **Cinematic camera** (the smooth, gliding camera while zoomed); servers can block it |
 | Fullbright | `lighting` | off | Full brightness; servers can block it (`full-bright=false`) |
 | FPS Boost | `fps-boost` | off | See [FPS Boost and resolution](#fps-boost-and-resolution) |
-| Speed | `speed` | off | How fast you're moving |
+| Speed | `speed` | off | How fast you're moving, measured every game tick |
 | Day Counter | `day-counter` | off | The in-game day and time |
 | Biome | `biome` | off | The biome you're in |
 | Server Address | `server-address` | off | The server you're on |
@@ -190,9 +190,29 @@ storage, `config/plebmc/` on Forge).
 | Clear Weather | `clear-weather` | off | Hides rain and snow (and optionally splashes and rain sound) |
 | Overlays | `overlays` | off | Hide the pumpkin blur and vignette, lower or hide the fire overlay |
 | Death Coordinates | `death-coords` | on | Prints where you died in chat |
+| Playtime Counter | `stopwatch` | on | The server's timer (Apollo stopwatch: match time, playtime) as a normal HUD mod: toggle it, move it in the HUD editor, optional icon and hundredths |
+| Ping Equalizer | `ping-equalizer` | off | Holds every packet back a little, both ways, so your ping sits at the target you pick (50 to 300 ms). It can only add delay, never remove it. Servers can block it (`ping-equalizer.enabled=false`) |
+| Password Hider | `password-hider` | on | What you type after `/login`, `/l`, `/register` or `/reg` shows as stars in the chat box and stays out of the up-arrow history |
+| Password Manager | `password-manager` | on | Remembers one password per server (see below) |
 
 The mods from Speed down to Death Coordinates came with PR #8. Every HUD mod's text color
 can also be the accent color or Chroma (a moving rainbow).
+
+**HUD mods update every frame.** The web client keeps the game's own HUD in a buffer that it
+only redraws about ten times a second, which made the compass turn in steps and Speed,
+Keystrokes and CPS lag. PlebClient's HUD mods and Apollo overlays are now drawn straight to
+the screen on every frame, on top of that buffer.
+
+**Password Manager.** After you send `/login <password>` (or `/l`, `/register`, `/reg`) on a
+server, a chat line asks whether to save it, with **[Save]** and **[No]** buttons. Once saved,
+open chat and type `/login`: a hint appears above the chat box and **Tab** fills the password
+in (`/register` and `/reg` fill it in twice). `/plebpass forget` removes the password for the
+server you're on and `/plebpass forget all` removes every one; those commands never leave the
+client. Passwords are kept only on your device, per server address, and are never part of a
+settings export. They are scrambled so they aren't readable at a glance, but that is not
+encryption: someone with access to your browser profile or config folder could recover them.
+
+**The mod menu** has a **HUD editor** button at the bottom, right above Cosmetics.
 
 ## PlebNite mods
 
@@ -209,6 +229,10 @@ The PlebNite category in Mods holds everything made for PlebNite matches:
 | Storm Tracker | `storm` | **off** | Distance to the storm edge (red "IN THE STORM" with the way back), closing/opening timer, optional safe-zone size. Read from the world border, hidden when there is none |
 
 **Storm Tracker is off by default** since PR #6; players turn it on in Mods > PlebNite.
+
+**Pings light up the block.** When you ping, the block you aimed at gets the same highlight a
+waypoint's block has, at once and for 8 seconds, without waiting for the server. Ping markers
+the server sends that float in the air above a block highlight that block too.
 
 **Teammates through walls.** PlebNite marks teammates with Apollo's team and glow modules.
 The client draws a colored chevron above each teammate through walls (with name and distance
@@ -466,6 +490,8 @@ PlebClient (browser and Windows) now draws them:
 - It reads the 1.14+ `overrides` with `custom_model_data` (and `damage` / `damaged`) from
   resource packs, converts each model to 1.8 once on resource reload, and swaps it in for the
   hand, GUI, dropped items and item frames. A model that fails falls back to the normal item.
+- Inventory icons sit where 1.16 puts them: a pack's `gui` transform is converted with its
+  offset intact (it used to come out doubled, which pushed guns out of the middle of the slot).
 - It accepts the server's newer-format pack (with no or a bad SHA-1) without breaking vanilla
   1.8 models.
 - **Built-in pack.** The QualityArmory pack (sounds removed) is bundled at
@@ -529,6 +555,8 @@ on GitHub Pages:
 
 ## Known limits
 
+- The Ping Equalizer, the server-switch reset (below) and the Forge chat hooks compile and
+  pass the unit tests but haven't been run against a live server.
 - **WASM isn't possible on u35.** The u35 base in this repository only builds to JavaScript.
   The WASM-GC version of Eaglercraft needs u38 or newer (its own platform layer and a custom
   TeaVM). PR #8's u53 port adds it: `sh client-u53/setup.sh "" wasm`. Older browsers without
@@ -655,7 +683,14 @@ Every hook calls `net.plebmc.client.hud.PlebClient` or `PlebEntities`:
 | `Minecraft.loadWorld(null)` | `PlebClient.onLeave` | reset every module on disconnect |
 | `S01PacketJoinGame.processPacket` | `PlebClient.onJoin` | send `REGISTER` + Apollo handshake |
 | `S3FPacketCustomPayload.processPacket` | `PlebClient.onPayload` | incoming plugin messages |
-| `GuiIngame.renderGameOverlay` | `PlebClient.renderHud` | HUD mods + Apollo overlays |
+| `GuiIngame.renderGameOverlay` | `PlebClient.renderHud` | per-HUD-redraw housekeeping; draws the HUD itself only where the HUD isn't buffered (Forge) |
+| `EntityRenderer.func_181560_a` (web) | `PlebClient.frame`, `renderHudFrame` | every frame: release delayed packets, then draw HUD mods + Apollo overlays over the buffered game HUD |
+| `Minecraft.runTick` / Forge client tick | `PlebClient.tick` / `gameTick` | tick counter for Speed, cinematic zoom camera, Ping Equalizer controller |
+| `GuiChat.keyTyped` / `drawScreen` | `PlebChat.tab`, `drawInput` | Password Manager Tab fill and hint, Password Hider stars |
+| `GuiScreen.sendChatMessage` | `PlebChat.outgoing` | `/plebpass` commands, the offer to save a password |
+| `GuiNewChat.addToSentMessages` | `PlebChat.keepInHistory` | login commands stay out of the chat history |
+| `WebSocketNetworkManager` (web) / `PingDelay` netty handler (Forge) | `PlebClient.netDelay` | Ping Equalizer: delays frames/packets in both directions, in order |
+| `MC\|Brand` payload | `PlebClient.onBrand` | a brand for a new player object = the proxy moved you to another server: `Apollo.serverSwitched()` drops waypoints, nametags, teams and the rest, then sends the handshake again |
 | `EntityRenderer.getFOVModifier` | `PlebClient.zoomAllowed` | the built-in C zoom follows the Zoom mod / server block |
 | `EntityRenderer.updateLightmap` | `PlebClient.gamma` | fullbright + server brightness rule |
 | `EntityRenderer.renderWorldPass` | `PlebEntities.renderGlow` | glow outlines |

@@ -881,6 +881,7 @@ public class EntityRenderer implements IResourceManagerReloadListener {
 	}
 
 	public void func_181560_a(float parFloat1, long parLong1) {
+		net.plebmc.client.hud.PlebClient.frame(); // PlebClient: once a frame (Ping Equalizer sends what is due)
 		if (!initializedOF) {
 			Config.frameInitHook();
 			initializedOF = true;
@@ -984,6 +985,8 @@ public class EntityRenderer implements IResourceManagerReloadListener {
 					GlStateManager.depthMask(true);
 					GlStateManager.enableDepth();
 					GlStateManager.disableBlend();
+					// PlebClient: its own HUD (mods, overlays) is drawn fresh every frame, over the buffered one
+					net.plebmc.client.hud.PlebClient.renderHudFrame(l, i1, parFloat1);
 					if (this.mc.gameSettings.hudPlayer) { // give the player model HUD good fps
 						this.mc.ingameGUI.drawEaglerPlayerOverlay(l - 3,
 								3 + this.mc.ingameGUI.overlayDebug.playerOffset, parFloat1);

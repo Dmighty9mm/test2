@@ -56,6 +56,10 @@ public final class ModRegistry {
         public final MoreMods.DeathCoords deathCoords = add(new MoreMods.DeathCoords());
         public final MoreMods.OwnNametag ownNametag = add(new MoreMods.OwnNametag());
         public final MoreMods.Waypoints waypoints = add(new MoreMods.Waypoints());
+        public final MoreMods.ServerTimer serverTimer = add(new MoreMods.ServerTimer());
+        public final MoreMods.PingEqualizer pingEqualizer = add(new MoreMods.PingEqualizer());
+        public final MoreMods.PasswordHider passwordHider = add(new MoreMods.PasswordHider());
+        public final MoreMods.PasswordManager passwordManager = add(new MoreMods.PasswordManager());
 
         private <T extends Mod> T add(T m) {
                 mods.add(m);

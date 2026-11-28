@@ -56,6 +56,7 @@ public final class ForgeHooks {
 			return;
 		}
 		Zoom.tick(mc);
+		PlebClient.gameTick();
 		// Toggle Sprint: hold the sprint key for the player while it's toggled on
 		if (mc.thePlayer != null && mc.currentScreen == null && PlebClient.sprintHeld()) {
 			net.minecraft.client.settings.KeyBinding.setKeyBindState(mc.gameSettings.keyBindSprint.getKeyCode(), true);

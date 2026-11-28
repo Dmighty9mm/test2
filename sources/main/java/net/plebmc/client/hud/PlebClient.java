@@ -159,6 +159,7 @@ public final class PlebClient {
 			net.plebmc.client.mods.FpsLarp.INSTANCE.load(STORE);
 			ClientPrefs.get().load(STORE);
 			net.plebmc.client.mods.OwnWaypoints.load(STORE);
+			net.plebmc.client.mods.Passwords.load(STORE);
 			net.plebmc.client.cosmetics.Cosmetics.loadSeen(STORE.get(QUESTS_SEEN_KEY));
 			net.plebmc.client.cosmetics.Cosmetics.loadLook(STORE.get(LOOK_KEY));
 			savedLook = net.plebmc.client.cosmetics.Cosmetics.lookVersion();
@@ -285,6 +286,62 @@ public final class PlebClient {
 	/** Every game tick (also on menus): finishes account-panel requests on builds that poll them. */
 	public static void tick() {
 		net.lax1dude.eaglercraft.v1_8.internal.PlatformPlebHttp.poll();
+		gameTick();
+	}
+
+	/** EntityRenderer, once a frame: packets the Ping Equalizer held back go out when their time is up. */
+	public static void frame() {
+		try {
+			if (mc == null || mc.theWorld == null) {
+				return;
+			}
+			NetHandlerPlayClient nh = mc.getNetHandler();
+			if (nh != null && nh.getNetworkManager() instanceof net.lax1dude.eaglercraft.v1_8.socket.WebSocketNetworkManager) {
+				((net.lax1dude.eaglercraft.v1_8.socket.WebSocketNetworkManager) nh.getNetworkManager()).flushDelayed();
+			}
+		} catch (Throwable t) {
+			// never break a frame
+		}
+	}
+
+	/** Counts game ticks while in a world (the Speed mod measures per tick). */
+	static long gameTicks;
+
+	/** The parts of a game tick that are the same on every build. */
+	static void gameTick() {
+		if (mc == null) {
+			return;
+		}
+		try {
+			if (mc.theWorld == null || mc.thePlayer == null) {
+				gameTicks = 0;
+				mods.pingEqualizer.reset();
+				return;
+			}
+			gameTicks++;
+			// the zoom key is read once a tick, so the cinematic camera follows it here
+			// (it used to wait for the HUD's next redraw, and never came with the HUD hidden)
+			syncZoomCamera();
+			mods.pingEqualizer.update(mc.isSingleplayer() ? -1 : view.pingMs(), System.currentTimeMillis());
+		} catch (Throwable t) {
+			// a tick must never break on this
+		}
+	}
+
+	/**
+	 * Ping Equalizer: how long (ms) the connection holds each packet back, in
+	 * each direction. 0 when the mod is off, blocked by the server, or outside
+	 * a multiplayer world.
+	 */
+	public static int netDelay() {
+		try {
+			if (mc == null || mc.theWorld == null || mc.thePlayer == null || mc.isSingleplayer()) {
+				return 0;
+			}
+			return mods.pingEqualizer.delayEachWay();
+		} catch (Throwable t) {
+			return 0;
+		}
 	}
 
 	public static void saveSettings() {
@@ -293,6 +350,7 @@ public final class PlebClient {
 			net.plebmc.client.mods.FpsLarp.INSTANCE.save(STORE);
 			ClientPrefs.get().save(STORE);
 			net.plebmc.client.mods.OwnWaypoints.save(STORE);
+			net.plebmc.client.mods.Passwords.save(STORE);
 		} catch (Throwable t) {
 			LOG.warn("could not save mod settings: " + t);
 		}
@@ -305,6 +363,9 @@ public final class PlebClient {
 		if (mc == null) {
 			return;
 		}
+		brandPlayer = mc.thePlayer; // the brand that follows a join is for this player
+		localPing = null;
+		mods.pingEqualizer.reset();
 		PluginChannels.reset();
 		PluginChannels.attach(new PluginChannels.Sender() {
 			@Override
@@ -328,6 +389,9 @@ public final class PlebClient {
 			return;
 		}
 		try {
+			if ("MC|Brand".equals(channel)) {
+				onBrand();
+			}
 			int start = data.readerIndex();
 			byte[] bytes = new byte[data.readableBytes()];
 			data.getBytes(start, bytes);
@@ -337,9 +401,44 @@ public final class PlebClient {
 		}
 	}
 
+	/** The player the last server brand came for (a proxy gives you a new one on every server). */
+	private static Object brandPlayer;
+
+	/**
+	 * Every server says its brand once when you arrive on it. A proxy (BungeeCord,
+	 * Velocity) moves you between its servers without a new join: the client only
+	 * sees a respawn, which makes a new player, and then the new server's brand.
+	 * So a brand for a different player than the last brand's means "moved to
+	 * another server", and everything the old server set up (waypoints, nametags,
+	 * teams, glow, timers, blocked mods...) is dropped, the way a fresh join does.
+	 * It used to stay until you relogged (PlebRPG waypoints and class tags in the hub).
+	 */
+	static void onBrand() {
+		EntityPlayerSP p = mc.thePlayer;
+		if (p == null) {
+			return;
+		}
+		if (brandPlayer != null && brandPlayer != p) {
+			serverSwitched();
+		}
+		brandPlayer = p;
+	}
+
+	static void serverSwitched() {
+		LOG.info("moved to another server: clearing what the last one set up");
+		localPing = null;
+		try {
+			Apollo.serverSwitched();
+		} catch (Throwable t) {
+			LOG.warn("server switch reset failed: " + t);
+		}
+	}
+
 	/** Disconnect or world unload: drop all per-connection state. */
 	public static void onLeave() {
 		rgbServer = false;
+		brandPlayer = null;
+		localPing = null;
 		ItemNbtWatch.reset();
 		if (mc != null && PluginChannels.isJoined()) {
 			PluginChannels.reset();
@@ -400,10 +499,33 @@ public final class PlebClient {
 		// action 6, block position 0/0/0 (packed long), face 0 (down): what a 1.9+ client sends
 		byte[] body = { 6, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 		try {
-			return nh.getNetworkManager().sendRawPacket(0x07, body);
+			boolean sent = nh.getNetworkManager().sendRawPacket(0x07, body);
+			if (sent) {
+				markPing(now);
+			}
+			return sent;
 		} catch (Throwable t) {
 			LOG.warn("squad ping failed: " + t);
 			return false;
+		}
+	}
+
+	/** The block you just pinged {x, y, z} and when its highlight ends (ms), or null. */
+	static long[] localPing;
+	static final long PING_MS = 8000L;
+
+	/** Lights up the block you pinged at once, like one of your own waypoints (the server's marker follows). */
+	private static void markPing(long now) {
+		try {
+			Entity cam = mc.getRenderViewEntity();
+			net.minecraft.util.MovingObjectPosition hit = cam == null ? null : cam.rayTrace(160.0, framePartialTicks);
+			if (hit != null && hit.typeOfHit == net.minecraft.util.MovingObjectPosition.MovingObjectType.BLOCK
+					&& hit.getBlockPos() != null) {
+				net.minecraft.util.BlockPos b = hit.getBlockPos();
+				localPing = new long[] { b.getX(), b.getY(), b.getZ(), now + PING_MS };
+			}
+		} catch (Throwable t) {
+			localPing = null;
 		}
 	}
 
@@ -533,8 +655,8 @@ public final class PlebClient {
 	static float framePartialTicks = 1f;
 
 	/**
-	 * EntityRenderer, every frame after the world: the markers that follow the
-	 * world (the HUD itself is only redrawn a few times a second on the web client).
+	 * EntityRenderer, every frame after the world and under the game's HUD: the
+	 * markers that follow the world.
 	 */
 	public static void renderWorldMarkers(int guiW, int guiH, float partialTicks) {
 		if (mc == null || mc.theWorld == null) {
@@ -567,17 +689,48 @@ public final class PlebClient {
 		} catch (Throwable t) {
 			LOG.warn("death check failed: " + t);
 		}
-		int guiW = res.getScaledWidth();
-		int guiH = res.getScaledHeight();
 		try {
 			FpsBoost.sync(mc, mods.fpsBoost.isActive());
-			syncZoomCamera();
 		} catch (Throwable t) {
 			LOG.warn("FPS boost failed: " + t);
 		}
 		ItemNbtWatch.tick(mc);
 		try {
 			Apollo.tick();
+		} catch (Throwable t) {
+			LOG.warn("Apollo tick failed: " + t);
+		}
+		if (!GlCompat.hudIsBuffered()) {
+			drawHud(res.getScaledWidth(), res.getScaledHeight(), partialTicks);
+		}
+	}
+
+	/**
+	 * EntityRenderer, every frame, right after the game's own HUD has been laid
+	 * over the world. The web client only redraws that HUD a few times a second
+	 * (it keeps it in a buffer), which made every mod lag behind: the compass
+	 * turned in steps, Speed and Keystrokes were late. PlebClient's HUD is drawn
+	 * here instead, straight to the screen, so it is new on every frame.
+	 */
+	public static void renderHudFrame(int guiW, int guiH, float partialTicks) {
+		if (mc == null || mc.theWorld == null || mc.thePlayer == null || !GlCompat.hudIsBuffered()) {
+			return;
+		}
+		framePartialTicks = partialTicks;
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.enableBlend();
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.enableAlpha();
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.color(1f, 1f, 1f, 1f);
+		drawHud(guiW, guiH, partialTicks);
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.color(1f, 1f, 1f, 1f);
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.disableLighting();
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.enableAlpha();
+		net.lax1dude.eaglercraft.v1_8.opengl.GlStateManager.disableBlend();
+	}
+
+	/** The Apollo overlays, the HUD mods and the secret mods, for the frame being drawn. */
+	private static void drawHud(int guiW, int guiH, float partialTicks) {
+		try {
 			long now = Apollo.now();
 			Entity cam = mc.getRenderViewEntity();
 			boolean have = cam != null && mc.gameSettings.thirdPersonView == 0;

@@ -68,6 +68,55 @@ final class PlebWaypoints {
 		return out;
 	}
 
+	/** The color of the highlight on a block you just pinged. */
+	static final int PING_ARGB = 0xFFFFE14F;
+
+	/**
+	 * The blocks to light up, as {x, y, z, argb}: one per waypoint, plus the
+	 * block you just pinged. A server marker that floats in the air right over
+	 * a block (a squad ping is placed on top of what was pinged) lights up that
+	 * block instead of the air; your own waypoints stay where you made them.
+	 */
+	static List<int[]> markBlocks(WaypointModule wm) {
+		List<int[]> out = new ArrayList<>();
+		Minecraft mc = Minecraft.getMinecraft();
+		if (wm != null && wm.isEnabled()) {
+			for (WaypointModule.Waypoint wp : wm.visible("")) {
+				int x = (int) Math.floor(wp.pos.x), y = (int) Math.floor(wp.pos.y), z = (int) Math.floor(wp.pos.z);
+				try {
+					if (mc.theWorld != null && y > 0 && mc.theWorld.isAirBlock(new net.minecraft.util.BlockPos(x, y, z))
+							&& !mc.theWorld.isAirBlock(new net.minecraft.util.BlockPos(x, y - 1, z))) {
+						y--;
+					}
+				} catch (Throwable t) {
+					// an unloaded chunk: keep the marker's own block
+				}
+				out.add(new int[] { x, y, z, wp.argb });
+			}
+		}
+		List<WaypointModule.Waypoint> own = new ArrayList<>();
+		addOwn(own);
+		for (WaypointModule.Waypoint wp : own) {
+			out.add(new int[] { (int) Math.floor(wp.pos.x), (int) Math.floor(wp.pos.y), (int) Math.floor(wp.pos.z), wp.argb });
+		}
+		long[] ping = PlebClient.localPing;
+		if (ping != null) {
+			if (System.currentTimeMillis() > ping[3]) {
+				PlebClient.localPing = null;
+			} else {
+				boolean have = false;
+				for (int[] b : out) {
+					have |= b[0] == ping[0] && b[1] == ping[1] && b[2] == ping[2];
+				}
+				if (!have) {
+					// the server's own marker takes over (in its color) once it arrives
+					out.add(new int[] { (int) ping[0], (int) ping[1], (int) ping[2], PING_ARGB });
+				}
+			}
+		}
+		return out;
+	}
+
 	/** Every waypoint that gets a sky beam (the player's own only when that option is on). */
 	static List<WaypointModule.Waypoint> beams(WaypointModule wm) {
 		List<WaypointModule.Waypoint> out = new ArrayList<>();

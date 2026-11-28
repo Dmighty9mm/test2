@@ -28,6 +28,14 @@ public abstract class MixinGuiScreen {
 		}
 	}
 
+	/** Password Manager: the client's own password commands never go to the server. */
+	@Inject(method = "sendChatMessage(Ljava/lang/String;Z)V", at = @At("HEAD"), cancellable = true)
+	private void plebmc$outgoing(String msg, boolean addToChat, CallbackInfo ci) {
+		if (net.plebmc.client.hud.PlebChat.outgoing(msg)) {
+			ci.cancel();
+		}
+	}
+
 	/** The pause menu shows the client's name and logo above its buttons. */
 	@Inject(method = "drawScreen", at = @At("HEAD"))
 	private void plebmc$pauseBrand(int mouseX, int mouseY, float partialTicks, CallbackInfo ci) {

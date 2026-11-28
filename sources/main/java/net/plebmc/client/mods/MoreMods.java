@@ -15,7 +15,7 @@ public final class MoreMods {
 
 	// ==================== info HUDs ====================
 
-	/** How fast you move, from your position over the last quarter second. */
+	/** How fast you move: the distance covered in the last game tick (20 a second), so it follows you at once. */
 	public static final class Speed extends Mods.TextMod {
 		public Speed() {
 			super("speed", "Speed", "How fast you're moving", false, 0.005f, 0.30f);
@@ -28,9 +28,36 @@ public final class MoreMods {
 		private final Setting unit, vertical, label;
 		private double lx, ly, lz = Double.NaN;
 		private long lt;
+		private long ltick = -1;
 		private double speed;
 
-		/** Blocks per second, updated from positions (time in ms). */
+		/**
+		 * Blocks per second. With the game's tick count it is the move of the last
+		 * tick; without one ({@code tick} below 0) it is measured over the time
+		 * since the last call ({@code now} in ms).
+		 */
+		public double sample(double x, double y, double z, long now, long tick) {
+			if (tick < 0) {
+				return sample(x, y, z, now);
+			}
+			if (Double.isNaN(lz) || tick < ltick || tick - ltick > 40) {
+				speed = 0;
+			} else if (tick == ltick) {
+				return speed;
+			} else {
+				double dx = x - lx, dy = vertical.on() ? y - ly : 0, dz = z - lz;
+				double s = Math.sqrt(dx * dx + dy * dy + dz * dz) * 20.0 / (tick - ltick);
+				speed = s > 200 ? speed : s; // a teleport is not speed
+			}
+			lx = x;
+			ly = y;
+			lz = z;
+			ltick = tick;
+			lt = now;
+			return speed;
+		}
+
+		/** Blocks per second from positions and wall-clock time only (ms). */
 		public double sample(double x, double y, double z, long now) {
 			if (Double.isNaN(lz) || now < lt || now - lt > 2000) {
 				lx = x;
@@ -41,7 +68,7 @@ public final class MoreMods {
 				return speed;
 			}
 			long dt = now - lt;
-			if (dt >= 250) {
+			if (dt >= 50) {
 				double dx = x - lx, dy = vertical.on() ? y - ly : 0, dz = z - lz;
 				double s = Math.sqrt(dx * dx + dy * dy + dz * dz) * 1000.0 / dt;
 				speed = s > 200 ? speed : s; // a teleport is not speed
@@ -58,7 +85,7 @@ public final class MoreMods {
 			if (!v.inWorld()) {
 				return new ArrayList<String>();
 			}
-			double s = sample(v.x(), v.y(), v.z(), System.currentTimeMillis());
+			double s = sample(v.x(), v.y(), v.z(), System.currentTimeMillis(), v.gameTicks());
 			return one(label.text() + format(s, unit.get()));
 		}
 
@@ -458,6 +485,195 @@ public final class MoreMods {
 
 		public boolean beams() {
 			return beams.on();
+		}
+	}
+
+	/**
+	 * The timer a server runs for you (a match clock, a playtime counter): a HUD
+	 * element like any other, so it can be turned off, moved, resized and recolored.
+	 */
+	public static final class ServerTimer extends Mod {
+		public ServerTimer() {
+			super("stopwatch", "Playtime Counter", "The server's timer (playtime, match time): turn it off or move it", true, 0.5f, 0.18f);
+			hudLook(true);
+			icon = setting("icon", "Clock icon", "The little stopwatch before the time", OFF_ON, 1);
+			hundredths = setting("hundredths", "Hundredths", "Show hundredths of a second", OFF_ON, 1);
+		}
+
+		private final Setting icon, hundredths;
+
+		@Override
+		public boolean hasHud() {
+			return true;
+		}
+
+		@Override
+		public boolean centerAnchored() {
+			return true;
+		}
+
+		@Override
+		public HudBox layout(ClientView v, HudBox.Measure m) {
+			net.plebmc.client.apollo.module.StopwatchModule sw = net.plebmc.client.apollo.Apollo
+					.module(net.plebmc.client.apollo.module.StopwatchModule.class);
+			if (sw == null || !sw.isEnabled() || !sw.isShown()) {
+				return null;
+			}
+			return box(sw.elapsedMs(net.plebmc.client.apollo.Apollo.now()), sw.isRunning(), m);
+		}
+
+		@Override
+		public HudBox preview(ClientView v, HudBox.Measure m) {
+			HudBox b = layout(v, m);
+			return b != null ? b : box(754320, true, m);
+		}
+
+		public String text(long ms) {
+			String s = net.plebmc.client.apollo.module.StopwatchModule.format(ms);
+			return hundredths.on() ? s : s.substring(0, s.length() - 3);
+		}
+
+		HudBox box(long ms, boolean running, HudBox.Measure m) {
+			String s = text(ms);
+			int left = icon.on() ? 12 : 4;
+			HudBox b = new HudBox();
+			b.rect(0, 0, left + m.width(s) + 3, 13, HudBox.BG);
+			// a paused timer is yellow; a running one takes the Text color option
+			int c = running ? HudBox.TEXT : 0xFFFFFF55;
+			if (icon.on()) {
+				b.rect(3, 4, 6, 6, 0xFF555555);
+				b.rect(4, 5, 4, 4, c == HudBox.TEXT ? 0xFFFFFFFF : c);
+				b.rect(5, 2, 2, 2, 0xFF555555);
+				b.rect(6, 6, 1, 2, 0xFF000000);
+			}
+			b.text(s, left, 3, c, false);
+			return b;
+		}
+	}
+
+	/** Stars instead of your password while you type /login, /l, /register or /reg in chat. */
+	public static final class PasswordHider extends Mod {
+		public PasswordHider() {
+			super("password-hider", "Password Hider", "Shows stars instead of your password when you type /login or /register", true, 0f, 0f);
+			category(GAMEPLAY);
+			history = setting("history", "Keep out of history", "Login commands aren't kept in the chat's up-arrow history", OFF_ON, 1);
+		}
+
+		private final Setting history;
+
+		public boolean skipHistory() {
+			return isActive() && history.on();
+		}
+	}
+
+	/** Remembers one password per server and fills it in after /login or /register when you press Tab. */
+	public static final class PasswordManager extends Mod {
+		public PasswordManager() {
+			super("password-manager", "Password Manager", "Saves your password for a server; type /login and press Tab to fill it in", true, 0f, 0f);
+			category(GAMEPLAY);
+			ask = setting("ask", "Offer to save", "After you log in, ask in chat whether to save that password", OFF_ON, 1);
+		}
+
+		private final Setting ask;
+
+		public boolean asks() {
+			return isActive() && ask.on();
+		}
+	}
+
+	/**
+	 * Ping Equalizer: holds everything you send and receive back a little, so
+	 * your ping comes out at the chosen number (when it is lower to begin
+	 * with). The whole connection is delayed the same way a slower line would
+	 * be; nothing is hidden from the server, and a server can turn it off.
+	 */
+	public static final class PingEqualizer extends Mod {
+		public static final int[] TARGETS = { 50, 75, 100, 125, 150, 200, 250, 300 };
+		public static final String[] TARGET_NAMES = { "50 ms", "75 ms", "100 ms", "125 ms", "150 ms", "200 ms", "250 ms",
+				"300 ms" };
+		/** The most this ever adds, both ways together. */
+		public static final int MAX_ADDED = 400;
+		static final long STEP_MS = 1000L;
+		static final long SETTLE_MS = 15000L;
+		static final long WARMUP_MS = 12000L;
+
+		public PingEqualizer() {
+			super("ping-equalizer", "Ping Equalizer", "Adds delay so your ping sits at the number you pick (never lowers it)", false, 0f, 0f);
+			category(GAMEPLAY);
+			target = setting("target", "Target ping", "The ping to bring a faster connection up to", TARGET_NAMES, 2);
+		}
+
+		private final Setting target;
+		private double added;
+		private long steppedAt;
+		private long holdUntil;
+		private long since;
+		private int lastTarget = -1;
+
+		public int targetMs() {
+			return TARGETS[target.get()];
+		}
+
+		/**
+		 * Call often with the ping the server reports (tab list, -1 when unknown)
+		 * and the time in ms. The reported ping already includes the delay added
+		 * so far and follows it slowly, so the delay is nudged toward the target a
+		 * step at a time instead of being set in one go.
+		 */
+		public void update(int reportedPing, long now) {
+			if (!isActive()) {
+				reset();
+				return;
+			}
+			if (since == 0) {
+				since = now;
+			}
+			if (reportedPing == 0 && now - since < WARMUP_MS && now >= since) {
+				return; // just joined: the server hasn't measured the ping yet
+			}
+			if (lastTarget != targetMs()) {
+				// a new target: start from the delay that would be right if the ping shown is settled
+				lastTarget = targetMs();
+				if (reportedPing >= 0) {
+					added = clamp(added + (lastTarget - reportedPing));
+				}
+				// the server's number takes a while to follow: leave it alone until it has
+				holdUntil = now + SETTLE_MS;
+				steppedAt = now;
+				return;
+			}
+			if (reportedPing < 0 || now < holdUntil && holdUntil - now <= SETTLE_MS
+					|| now - steppedAt < STEP_MS && now >= steppedAt) {
+				return;
+			}
+			steppedAt = now;
+			double err = targetMs() - reportedPing;
+			if (Math.abs(err) >= 2) {
+				added = clamp(added + err * 0.08);
+			}
+		}
+
+		private static double clamp(double v) {
+			return Math.max(0, Math.min(MAX_ADDED, v));
+		}
+
+		/** The delay for each direction right now, in ms (0 when off or blocked). */
+		public int delayEachWay() {
+			return isActive() ? (int) Math.round(added / 2) : 0;
+		}
+
+		/** The delay both ways together, in ms. */
+		public int addedMs() {
+			return isActive() ? (int) Math.round(added) : 0;
+		}
+
+		/** A new connection: start over. */
+		public void reset() {
+			added = 0;
+			steppedAt = 0;
+			holdUntil = 0;
+			since = 0;
+			lastTarget = -1;
 		}
 	}
 

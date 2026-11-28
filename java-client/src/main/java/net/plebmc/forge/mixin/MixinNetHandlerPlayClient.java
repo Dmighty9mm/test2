@@ -16,5 +16,6 @@ public abstract class MixinNetHandlerPlayClient {
 	@Inject(method = "handleJoinGame", at = @At("RETURN"))
 	private void plebmc$join(S01PacketJoinGame packet, CallbackInfo ci) {
 		PlebClient.onJoin();
+		net.plebmc.forge.PingDelay.install(((NetHandlerPlayClient) (Object) this).getNetworkManager());
 	}
 }
